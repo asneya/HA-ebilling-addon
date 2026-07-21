@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>eBilling · Simulador de factura de luz</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon">⚡</span>
+      <div>
+        <h1>eBilling</h1>
+        <p class="subtitle">Simulación en tiempo real de tu factura de luz</p>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="dashboard">Simulación</button>
+      <button class="tab" data-view="tariffs">Tarifas</button>
+      <button class="tab" data-view="settings">Ajustes</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ================= DASHBOARD ================= -->
+    <section id="view-dashboard" class="view active">
+      <div class="toolbar">
+        <div class="period-nav">
+          <button id="prev-cycle" class="icon-btn" title="Ciclo anterior">‹</button>
+          <div id="period-label" class="period-label">—</div>
+          <button id="next-cycle" class="icon-btn" title="Ciclo siguiente">›</button>
+        </div>
+        <div class="toolbar-right">
+          <label class="switch">
+            <input type="checkbox" id="projection-toggle">
+            <span>Proyección fin de ciclo</span>
+          </label>
+          <button id="refresh-btn" class="btn ghost">↻ Actualizar</button>
+        </div>
+      </div>
+
+      <div id="error-banner" class="banner hidden"></div>
+      <div id="demo-banner" class="banner info hidden">
+        Estás viendo <strong>datos de demostración</strong>. Configura tu fuente de
+        datos real en <a href="#" id="goto-settings">Ajustes</a>.
+      </div>
+
+      <div class="stats-row" id="stats-row"></div>
+
+      <h2 class="section-title">Comparativa de tarifas</h2>
+      <div id="bills-grid" class="bills-grid"></div>
+
+      <h2 class="section-title">Consumo diario por periodo</h2>
+      <div class="card chart-card">
+        <div class="legend">
+          <span><i class="dot punta"></i> Punta</span>
+          <span><i class="dot llano"></i> Llano</span>
+          <span><i class="dot valle"></i> Valle</span>
+        </div>
+        <div id="daily-chart" class="chart"></div>
+      </div>
+    </section>
+
+    <!-- ================= TARIFAS ================= -->
+    <section id="view-tariffs" class="view">
+      <div class="toolbar">
+        <h2 class="section-title">Tarifas configuradas</h2>
+        <button id="add-tariff-btn" class="btn primary">+ Nueva tarifa</button>
+      </div>
+      <div id="tariffs-list" class="tariffs-list"></div>
+    </section>
+
+    <!-- ================= AJUSTES ================= -->
+    <section id="view-settings" class="view">
+      <h2 class="section-title">Fuente de datos de consumo</h2>
+      <div class="card form-card">
+        <div class="field">
+          <label>Fuente</label>
+          <select id="s-source">
+            <option value="demo">Demostración (datos sintéticos)</option>
+            <option value="homeassistant">Home Assistant (estadísticas de energía)</option>
+            <option value="influxdb">InfluxDB</option>
+          </select>
+        </div>
+
+        <div id="ha-fields" class="subform hidden">
+          <div class="field">
+            <label>Sensor de energía (kWh acumulados)</label>
+            <div class="row">
+              <select id="s-ha-entity"></select>
+              <button id="load-entities-btn" class="btn ghost">Buscar sensores</button>
+            </div>
+            <p class="hint">Debe ser un sensor de energía acumulada (p. ej. el que usas en el panel de Energía).</p>
+          </div>
+          <div id="ha-external" class="hidden">
+            <div class="field"><label>URL de Home Assistant</label><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></div>
+            <div class="field"><label>Token de acceso de larga duración</label><input id="s-ha-token" type="password"></div>
+          </div>
+        </div>
+
+        <div id="influx-fields" class="subform hidden">
+          <div class="grid2">
+            <div class="field"><label>Versión</label>
+              <select id="s-ifx-version"><option value="1">InfluxDB 1.x</option><option value="2">InfluxDB 2.x</option></select>
+            </div>
+            <div class="field"><label>URL</label><input id="s-ifx-url" placeholder="http://a0d7b954-influxdb:8086"></div>
+            <div class="field"><label>Base de datos / Bucket</label><input id="s-ifx-db"></div>
+            <div class="field"><label>Measurement</label><input id="s-ifx-measurement" placeholder="kWh"></div>
+            <div class="field"><label>entity_id (tag)</label><input id="s-ifx-entity" placeholder="sensor.energia_total"></div>
+            <div class="field ifx-v2"><label>Organización</label><input id="s-ifx-org"></div>
+            <div class="field ifx-v2"><label>Token</label><input id="s-ifx-token" type="password"></div>
+            <div class="field ifx-v1"><label>Usuario</label><input id="s-ifx-user"></div>
+            <div class="field ifx-v1"><label>Contraseña</label><input id="s-ifx-pass" type="password"></div>
+          </div>
+        </div>
+      </div>
+
+      <h2 class="section-title">Contrato</h2>
+      <div class="card form-card">
+        <div class="grid2">
+          <div class="field"><label>Potencia contratada punta P1 (kW)</label><input id="s-p1" type="number" step="0.1" min="0"></div>
+          <div class="field"><label>Potencia contratada valle P2 (kW)</label><input id="s-p2" type="number" step="0.1" min="0"></div>
+          <div class="field"><label>Día de inicio del ciclo de facturación</label><input id="s-billing-day" type="number" min="1" max="28"></div>
+          <div class="field"><label>Zona horaria</label><input id="s-timezone" placeholder="Europe/Madrid"></div>
+        </div>
+        <div class="field">
+          <label>Festivos nacionales (MM-DD, separados por comas)</label>
+          <input id="s-holidays" placeholder="01-01, 01-06, 05-01...">
+          <p class="hint">Los festivos cuentan como periodo valle todo el día (2.0TD).</p>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <span id="settings-status" class="hint"></span>
+        <button id="save-settings-btn" class="btn primary">Guardar ajustes</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= MODAL EDITOR DE TARIFA ================= -->
+  <div id="tariff-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="tariff-modal-title">Nueva tarifa</h3>
+        <button class="icon-btn" id="close-tariff-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid2">
+          <div class="field"><label>Nombre</label><input id="t-name" placeholder="Plan Estable"></div>
+          <div class="field"><label>Compañía</label><input id="t-company" placeholder="Iberdrola"></div>
+          <div class="field"><label>Color</label><input id="t-color" type="color" value="#4a6cf7"></div>
+        </div>
+
+        <h4>Término de potencia (€/kW·día)</h4>
+        <div class="grid2">
+          <div class="field"><label>Punta P1</label><input id="t-power-p1" type="number" step="0.000001" min="0"></div>
+          <div class="field"><label>Valle P2</label><input id="t-power-p2" type="number" step="0.000001" min="0"></div>
+        </div>
+
+        <h4>Término de energía (€/kWh)</h4>
+        <div class="grid3">
+          <div class="field"><label>Punta</label><input id="t-energy-punta" type="number" step="0.000001" min="0"></div>
+          <div class="field"><label>Llano</label><input id="t-energy-llano" type="number" step="0.000001" min="0"></div>
+          <div class="field"><label>Valle</label><input id="t-energy-valle" type="number" step="0.000001" min="0"></div>
+        </div>
+        <p class="hint">Para una tarifa de precio fijo, pon el mismo precio en los tres periodos.</p>
+
+        <h4>Cargos y otros conceptos</h4>
+        <div class="grid2">
+          <div class="field"><label>Financiación bono social (€/día)</label><input id="t-bono" type="number" step="0.000001" min="0"></div>
+          <div class="field"><label>Alquiler contador (€/día)</label><input id="t-meter" type="number" step="0.00001" min="0"></div>
+          <div class="field"><label>Servicios adicionales (€/mes)</label><input id="t-services" type="number" step="0.01" min="0"></div>
+          <div class="field"><label>Nombre del servicio</label><input id="t-services-name" placeholder="Mantenimiento"></div>
+        </div>
+
+        <h4>Impuestos</h4>
+        <div class="grid3">
+          <div class="field"><label>Impuesto electricidad (%)</label><input id="t-elec-tax" type="number" step="0.0000001" min="0"></div>
+          <div class="field"><label>IVA energía (%)</label><input id="t-vat-energy" type="number" step="0.1" min="0"></div>
+          <div class="field"><label>IVA servicios (%)</label><input id="t-vat-services" type="number" step="0.1" min="0"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" id="cancel-tariff-btn">Cancelar</button>
+        <button class="btn primary" id="save-tariff-btn">Guardar tarifa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL DETALLE FACTURA ================= -->
+  <div id="bill-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="bill-modal-title">Detalle de factura</h3>
+        <button class="icon-btn" id="close-bill-modal">✕</button>
+      </div>
+      <div class="modal-body" id="bill-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="static/app.js"></script>
+</body>
+</html>
