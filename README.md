@@ -82,6 +82,14 @@ Con los sensores activados (Ajustes), por cada tarifa se publican
 `_proyeccion`, más los globales `sensor.ebilling_mejor_tarifa` y
 `sensor.ebilling_ahorro_potencial`. Ver [`ebilling/DOCS.md`](ebilling/DOCS.md).
 
+## Tarjeta Lovelace
+
+En [`lovelace/`](lovelace/) tienes una tarjeta personalizada
+`custom:ebilling-card` que muestra la comparativa de tarifas en tu panel
+(mejor tarifa, ahorro, coste y proyección por tarifa, precio actual y
+excedentes), con tema claro/oscuro y conmutador acumulado/fin de ciclo.
+Instrucciones de instalación en [`lovelace/README.md`](lovelace/README.md).
+
 ## Estructura del repositorio
 
 ```

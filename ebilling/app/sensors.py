@@ -65,6 +65,7 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                 **common,
                 "tarifa": item["name"],
                 "compania": item["company"],
+                "color": item.get("color"),
                 "ciclo_inicio": payload["cycle_start"],
                 "ciclo_fin": payload["cycle_end"],
             }

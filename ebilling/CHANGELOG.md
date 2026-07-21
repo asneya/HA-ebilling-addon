@@ -2,6 +2,18 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.3.0
+
+### Nuevo
+
+- **Tarjeta Lovelace** `custom:ebilling-card` (en la carpeta `lovelace/` del
+  repositorio): comparativa visual de tarifas con mejor tarifa, ahorro
+  potencial, coste acumulado y proyección, precio actual y excedentes.
+  Descubre los sensores automáticamente, respeta el tema claro/oscuro y usa
+  el color de cada tarifa. Incluye conmutador acumulado/fin de ciclo.
+- Los sensores de tarifa incluyen ahora el atributo `color`, para que la
+  tarjeta (y otras integraciones) usen el color de cada tarifa.
+
 ## 0.2.0
 
 ### Nuevo

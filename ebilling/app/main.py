@@ -376,6 +376,7 @@ async def _sensor_payload() -> dict | None:
                 "slug": tariffs_mod.slugify(tariff["name"]),
                 "name": tariff["name"],
                 "company": tariff["company"],
+                "color": tariff.get("color"),
                 "price": price,
                 "period": period_name,
                 "surplus_price": billing.surplus_price_now(tariff, now, holidays),
