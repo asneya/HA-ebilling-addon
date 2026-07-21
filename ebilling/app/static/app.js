@@ -61,6 +61,14 @@ function renderDashboard() {
 
   $("#demo-banner").classList.toggle("hidden", sim.source !== "demo");
 
+  const banner = $("#error-banner");
+  if (sim.errors && sim.errors.length) {
+    banner.innerHTML = sim.errors
+      .map((e) => `<div><strong>${esc(e.tariff)}</strong>: ${esc(e.error)}</div>`)
+      .join("");
+    banner.classList.remove("hidden");
+  }
+
   // Se formatea solo la parte de fecha del ISO para no desplazar el día
   // cuando la zona horaria del navegador difiere de la del contrato.
   const fmtDay = (iso) => {
@@ -87,6 +95,9 @@ function renderStats(sim) {
     { label: "Llano", value: `${fmtNum.format(c.kwh.llano)} kWh`, sub: pct(c.kwh.llano, c.total), cls: "llano" },
     { label: "Valle", value: `${fmtNum.format(c.kwh.valle)} kWh`, sub: pct(c.kwh.valle, c.total), cls: "valle" },
   ];
+  if (c.export_total > 0) {
+    cards.push({ label: "Excedentes vertidos", value: `${fmtNum.format(c.export_total)} kWh`, sub: "energía compensable", cls: "valle" });
+  }
   $("#stats-row").innerHTML = cards
     .map((s) => `<div class="card stat ${s.cls}"><div class="label">${s.label}</div><div class="value">${s.value}</div><div class="sub">${s.sub}</div></div>`)
     .join("");
@@ -102,7 +113,11 @@ function renderBills(sim) {
   const projected = state.projection;
   const bills = [...sim.bills];
   if (projected) bills.sort((a, b) => a.projected_total - b.projected_total);
-  const cheapest = bills.length ? (projected ? bills[0].projected_total : bills[0].total) : 0;
+  if (!bills.length) {
+    grid.innerHTML = `<p class="hint">No hay tarifas válidas que simular.</p>`;
+    return;
+  }
+  const cheapest = projected ? bills[0].projected_total : bills[0].total;
 
   grid.innerHTML = bills
     .map((bill, idx) => {
@@ -111,9 +126,14 @@ function renderBills(sim) {
       const badge = idx === 0
         ? `<span class="badge best">✓ Más barata</span>`
         : `<span class="badge extra">+${fmtEUR.format(extra)}</span>`;
+      const typeBadge = bill.energy_type === "pvpc" ? `<span class="badge">PVPC</span>` : "";
       const sub = bill.subtotals;
       const segTotal = sub.power + sub.energy + sub.charges + sub.services || 1;
-      const seg = (v, color) => `<i style="width:${(v / segTotal) * 100}%;background:${color}"></i>`;
+      const seg = (v, color) => `<i style="width:${(Math.max(v, 0) / segTotal) * 100}%;background:${color}"></i>`;
+      const surplusChip = bill.surplus_credit > 0
+        ? `<span>Excedentes −${fmtEUR.format(bill.surplus_credit)}</span>`
+        : "";
+      const warning = bill.warning ? `<div class="hint">⚠ ${esc(bill.warning)}</div>` : "";
       return `
       <div class="card bill-card">
         <span class="stripe" style="background:${bill.color || "#4a6cf7"}"></span>
@@ -122,7 +142,7 @@ function renderBills(sim) {
             <div class="bill-company">${esc(bill.company || "")}</div>
             <div class="bill-name">${esc(bill.name || "Tarifa")}</div>
           </div>
-          ${badge}
+          <div class="badges">${typeBadge}${badge}</div>
         </div>
         <div class="bill-total">${fmtEUR.format(total)} <small>${projected ? "proyección ciclo completo" : "acumulado"}</small></div>
         <div class="bill-sub">${projected ? `Acumulado hasta hoy: ${fmtEUR.format(bill.total)}` : `Proyección fin de ciclo: ${fmtEUR.format(bill.projected_total)}`}</div>
@@ -134,7 +154,9 @@ function renderBills(sim) {
           <span>Energía ${fmtEUR.format(sub.energy)}</span>
           <span>Cargos ${fmtEUR.format(sub.charges)}</span>
           <span>Impuestos ${fmtEUR.format(sub.taxes)}</span>
+          ${surplusChip}
         </div>
+        ${warning}
         <div class="bill-actions">
           <button class="btn ghost" data-bill-detail="${esc(bill.tariff_id)}">Ver factura detallada</button>
         </div>
@@ -189,7 +211,6 @@ function renderDailyChart(daily) {
   const scale = (height - padT - padB) / max;
 
   let svg = "";
-  // Rejilla y eje Y
   const steps = 4;
   for (let i = 0; i <= steps; i++) {
     const val = (max / steps) * i;
@@ -213,17 +234,37 @@ function renderDailyChart(daily) {
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
 }
 
-/* ============================= Tarifas ============================= */
+/* ============================= Tarifas: listado ============================= */
+
+function describeTariff(t) {
+  const e = t.energy || {};
+  if (e.type === "pvpc") {
+    const margin = Number(e.pvpc_margin || 0);
+    return `PVPC indexada${margin ? ` + ${num6(margin)} €/kWh` : ""}`;
+  }
+  const n = (e.periods || []).length;
+  return n === 1 ? "Precio único" : `${n} tramos`;
+}
 
 function renderTariffsList() {
   const list = $("#tariffs-list");
   const tariffs = state.config?.tariffs || [];
   if (!tariffs.length) {
-    list.innerHTML = `<p class="hint">No hay tarifas. Crea la primera con «Nueva tarifa».</p>`;
+    list.innerHTML = `<p class="hint">No hay tarifas. Crea la primera con «Nueva tarifa» o importa un CSV.</p>`;
     return;
   }
   list.innerHTML = tariffs
-    .map((t) => `
+    .map((t) => {
+      const e = t.energy || {};
+      const chips = e.type === "pvpc"
+        ? `<div class="price-chip"><div class="p-label">Energía</div><div class="p-value">PVPC horario</div></div>`
+        : (e.periods || [])
+            .map((p) => `<div class="price-chip"><div class="p-label">${esc(p.name)}</div><div class="p-value">${num6(p.price)} €/kWh</div></div>`)
+            .join("");
+      const surplus = t.surplus && t.surplus.type !== "none"
+        ? `<span>☀ Excedentes ${t.surplus.type === "flat" ? `${num6(t.surplus.price)} €/kWh` : "por tramos"}</span>`
+        : "";
+      return `
       <div class="card bill-card tariff-card">
         <span class="stripe" style="background:${t.color || "#4a6cf7"}"></span>
         <div class="bill-head">
@@ -231,23 +272,23 @@ function renderTariffsList() {
             <div class="bill-company">${esc(t.company || "")}</div>
             <div class="bill-name">${esc(t.name || "Tarifa")}</div>
           </div>
+          <span class="badge">${esc(describeTariff(t))}</span>
         </div>
-        <div class="prices">
-          <div class="price-chip"><div class="p-label">Punta</div><div class="p-value">${num6(t.energy_prices?.punta)} €/kWh</div></div>
-          <div class="price-chip"><div class="p-label">Llano</div><div class="p-value">${num6(t.energy_prices?.llano)} €/kWh</div></div>
-          <div class="price-chip"><div class="p-label">Valle</div><div class="p-value">${num6(t.energy_prices?.valle)} €/kWh</div></div>
-        </div>
+        <div class="prices">${chips}</div>
         <div class="bill-breakdown">
           <span>P1 ${num6(t.power_prices?.p1)} €/kW·día</span>
           <span>P2 ${num6(t.power_prices?.p2)} €/kW·día</span>
           <span>IVA ${t.vat_energy_pct ?? 21}%</span>
+          ${surplus}
         </div>
         <div class="bill-actions">
           <button class="btn ghost" data-edit="${esc(t.id)}">Editar</button>
           <button class="btn ghost" data-clone="${esc(t.id)}">Duplicar</button>
+          <a class="btn ghost" href="api/tariffs/${esc(t.id)}/export.csv" download>CSV</a>
           <button class="btn ghost danger" data-del="${esc(t.id)}">Eliminar</button>
         </div>
-      </div>`)
+      </div>`;
+    })
     .join("");
 
   list.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openTariffModal(b.dataset.edit)));
@@ -259,18 +300,75 @@ function num6(v) {
   return v === undefined || v === null ? "—" : Number(v).toLocaleString("es-ES", { maximumFractionDigits: 6 });
 }
 
+/* ============================= Tarifas: editor ============================= */
+
+function periodRow(container, period = {}) {
+  const row = document.createElement("div");
+  row.className = "period-row";
+  row.innerHTML = `
+    <input class="pr-name" placeholder="Nombre" value="${esc(period.name || "")}">
+    <input class="pr-price" type="number" step="0.000001" min="0" placeholder="€/kWh" value="${period.price ?? ""}">
+    <input class="pr-schedule" placeholder="Horario, p. ej. L-V 10-14,18-22 (vacío = resto)" value="${esc(period.schedule || "")}">
+    <button class="icon-btn pr-del" title="Quitar tramo">✕</button>`;
+  row.querySelector(".pr-del").addEventListener("click", () => row.remove());
+  container.appendChild(row);
+}
+
+function readPeriodRows(container) {
+  return Array.from(container.querySelectorAll(".period-row")).map((row, idx) => ({
+    name: row.querySelector(".pr-name").value.trim() || `P${idx + 1}`,
+    price: parseFloat(row.querySelector(".pr-price").value) || 0,
+    schedule: row.querySelector(".pr-schedule").value.trim(),
+  }));
+}
+
+function updateEditorVisibility() {
+  const etype = $("#t-etype").value;
+  $("#t-etype-td3").classList.toggle("hidden", etype !== "td3");
+  $("#t-etype-custom").classList.toggle("hidden", etype !== "custom");
+  $("#t-etype-pvpc").classList.toggle("hidden", etype !== "pvpc");
+  const stype = $("#t-surplus-type").value;
+  $("#t-surplus-flat").classList.toggle("hidden", stype !== "flat");
+  $("#t-surplus-custom").classList.toggle("hidden", stype !== "schedule");
+}
+
 function openTariffModal(tariffId = null) {
   state.editingTariffId = tariffId;
   const t = tariffId ? state.config.tariffs.find((x) => x.id === tariffId) : null;
   $("#tariff-modal-title").textContent = t ? `Editar · ${t.name}` : "Nueva tarifa";
+  $("#tariff-error").textContent = "";
   $("#t-name").value = t?.name || "";
   $("#t-company").value = t?.company || "";
   $("#t-color").value = t?.color || "#4a6cf7";
+
+  const energy = t?.energy || { type: "schedule", preset: "td3", periods: [], pvpc_margin: 0 };
+  let etype = "custom";
+  if (energy.type === "pvpc") etype = "pvpc";
+  else if (energy.preset === "td3" || !t) etype = "td3";
+  $("#t-etype").value = etype;
+
+  const byName = {};
+  (energy.periods || []).forEach((p) => { byName[p.name.toLowerCase()] = p.price; });
+  $("#t-td3-punta").value = byName.punta ?? "";
+  $("#t-td3-llano").value = byName.llano ?? "";
+  $("#t-td3-valle").value = byName.valle ?? "";
+
+  const periodsBox = $("#t-periods");
+  periodsBox.innerHTML = "";
+  (energy.type === "schedule" && energy.periods?.length ? energy.periods : [{}]).forEach(
+    (p) => periodRow(periodsBox, p)
+  );
+  $("#t-pvpc-margin").value = energy.pvpc_margin ?? 0;
+
+  const surplus = t?.surplus || { type: "none", price: 0, periods: [] };
+  $("#t-surplus-type").value = surplus.type || "none";
+  $("#t-surplus-price").value = surplus.price ?? "";
+  const surplusBox = $("#t-surplus-periods");
+  surplusBox.innerHTML = "";
+  (surplus.periods?.length ? surplus.periods : [{}]).forEach((p) => periodRow(surplusBox, p));
+
   $("#t-power-p1").value = t?.power_prices?.p1 ?? "";
   $("#t-power-p2").value = t?.power_prices?.p2 ?? "";
-  $("#t-energy-punta").value = t?.energy_prices?.punta ?? "";
-  $("#t-energy-llano").value = t?.energy_prices?.llano ?? "";
-  $("#t-energy-valle").value = t?.energy_prices?.valle ?? "";
   $("#t-bono").value = t?.fixed_daily?.[0]?.price ?? 0.019121;
   $("#t-meter").value = t?.meter_rental_daily ?? 0.02663;
   $("#t-services").value = t?.services_monthly?.[0]?.price ?? "";
@@ -278,6 +376,8 @@ function openTariffModal(tariffId = null) {
   $("#t-elec-tax").value = t?.electricity_tax_pct ?? 0.5;
   $("#t-vat-energy").value = t?.vat_energy_pct ?? 10;
   $("#t-vat-services").value = t?.vat_services_pct ?? 21;
+
+  updateEditorVisibility();
   $("#tariff-modal").classList.remove("hidden");
 }
 
@@ -286,17 +386,38 @@ function tariffFromForm() {
     const v = parseFloat($(sel).value);
     return Number.isFinite(v) ? v : def;
   };
+  const etype = $("#t-etype").value;
+  let energy;
+  if (etype === "pvpc") {
+    energy = { type: "pvpc", preset: null, periods: [], pvpc_margin: num("#t-pvpc-margin") };
+  } else if (etype === "td3") {
+    energy = {
+      type: "schedule",
+      preset: "td3",
+      periods: [
+        { name: "Punta", price: num("#t-td3-punta"), schedule: "L-V 10-14,18-22" },
+        { name: "Llano", price: num("#t-td3-llano"), schedule: "L-V 8-10,14-18,22-24" },
+        { name: "Valle", price: num("#t-td3-valle"), schedule: "" },
+      ],
+      pvpc_margin: 0,
+    };
+  } else {
+    energy = { type: "schedule", preset: null, periods: readPeriodRows($("#t-periods")), pvpc_margin: 0 };
+  }
+  const stype = $("#t-surplus-type").value;
+  const surplus = {
+    type: stype,
+    price: num("#t-surplus-price"),
+    periods: stype === "schedule" ? readPeriodRows($("#t-surplus-periods")) : [],
+  };
   const servicesPrice = num("#t-services", 0);
   return {
     name: $("#t-name").value.trim() || "Tarifa sin nombre",
     company: $("#t-company").value.trim(),
     color: $("#t-color").value,
+    energy,
+    surplus,
     power_prices: { p1: num("#t-power-p1"), p2: num("#t-power-p2") },
-    energy_prices: {
-      punta: num("#t-energy-punta"),
-      llano: num("#t-energy-llano"),
-      valle: num("#t-energy-valle"),
-    },
     fixed_daily: num("#t-bono") > 0
       ? [{ name: "Financiación bono social", price: num("#t-bono") }]
       : [],
@@ -312,6 +433,7 @@ function tariffFromForm() {
 
 async function saveTariff() {
   const tariff = tariffFromForm();
+  $("#tariff-error").textContent = "";
   try {
     if (state.editingTariffId) {
       await api(`tariffs/${state.editingTariffId}`, { method: "PUT", body: JSON.stringify(tariff) });
@@ -323,7 +445,7 @@ async function saveTariff() {
     renderTariffsList();
     loadSimulation();
   } catch (err) {
-    alert(err.message);
+    $("#tariff-error").textContent = err.message;
   }
 }
 
@@ -348,7 +470,38 @@ async function deleteTariff(tariffId) {
   loadSimulation();
 }
 
+async function importCsv(file) {
+  const status = $("#import-status");
+  status.textContent = `Importando ${file.name}…`;
+  try {
+    const text = await file.text();
+    const resp = await fetch("api/tariffs/import", {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: text,
+    });
+    if (!resp.ok) {
+      let detail = `Error ${resp.status}`;
+      try { detail = (await resp.json()).detail || detail; } catch (_) { /* noop */ }
+      throw new Error(detail);
+    }
+    const tariff = await resp.json();
+    status.textContent = `✓ Tarifa «${tariff.name}» importada correctamente.`;
+    await reloadConfig();
+    renderTariffsList();
+    loadSimulation();
+  } catch (err) {
+    status.textContent = `✗ Error al importar: ${err.message}`;
+  }
+}
+
 /* ============================= Ajustes ============================= */
+
+function entityOptions(selected) {
+  return selected
+    ? `<option value="${esc(selected)}">${esc(selected)}</option>`
+    : `<option value="">— pulsa «Buscar sensores» —</option>`;
+}
 
 function fillSettingsForm() {
   const s = state.config?.settings;
@@ -361,21 +514,24 @@ function fillSettingsForm() {
   $("#s-billing-day").value = s.billing_day ?? 1;
   $("#s-timezone").value = s.timezone || "Europe/Madrid";
   $("#s-holidays").value = (s.holidays || []).join(", ");
+  $("#s-export-sensors").checked = s.export_sensors !== false;
+  $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
   $("#s-ifx-url").value = ifx.url || "";
   $("#s-ifx-db").value = ifx.database || "";
   $("#s-ifx-measurement").value = ifx.measurement || "kWh";
   $("#s-ifx-entity").value = ifx.entity_id || "";
+  $("#s-ifx-entity-export").value = ifx.entity_id_export || "";
   $("#s-ifx-org").value = ifx.org || "";
   $("#s-ifx-token").value = ifx.token || "";
   $("#s-ifx-user").value = ifx.username || "";
   $("#s-ifx-pass").value = ifx.password || "";
 
-  const entitySelect = $("#s-ha-entity");
-  entitySelect.innerHTML = s.ha_entity
-    ? `<option value="${esc(s.ha_entity)}">${esc(s.ha_entity)}</option>`
-    : `<option value="">— pulsa «Buscar sensores» —</option>`;
+  $("#s-ha-entity").innerHTML = entityOptions(s.ha_entity);
+  $("#s-ha-entity-export").innerHTML =
+    `<option value="">— ninguno —</option>` +
+    (s.ha_entity_export ? `<option value="${esc(s.ha_entity_export)}" selected>${esc(s.ha_entity_export)}</option>` : "");
   updateSourceVisibility();
 }
 
@@ -397,11 +553,14 @@ async function loadEntities() {
     // Guarda antes URL/token por si se usa HA externo.
     await saveSettings(true);
     const entities = await api("entities");
-    const select = $("#s-ha-entity");
     const current = state.config?.settings?.ha_entity || "";
-    select.innerHTML = entities
-      .map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === current ? "selected" : ""}>${esc(e.name)} (${esc(e.entity_id)})</option>`)
-      .join("") || `<option value="">No se encontraron sensores de energía</option>`;
+    const currentExport = state.config?.settings?.ha_entity_export || "";
+    const opts = (sel) => entities
+      .map((e) => `<option value="${esc(e.entity_id)}" ${e.entity_id === sel ? "selected" : ""}>${esc(e.name)} (${esc(e.entity_id)})</option>`)
+      .join("");
+    $("#s-ha-entity").innerHTML =
+      opts(current) || `<option value="">No se encontraron sensores de energía</option>`;
+    $("#s-ha-entity-export").innerHTML = `<option value="">— ninguno —</option>` + opts(currentExport);
   } catch (err) {
     alert(err.message);
   } finally {
@@ -414,6 +573,7 @@ function settingsFromForm() {
   return {
     source: $("#s-source").value,
     ha_entity: $("#s-ha-entity").value,
+    ha_entity_export: $("#s-ha-entity-export").value,
     ha_url: $("#s-ha-url").value.trim(),
     ha_token: $("#s-ha-token").value,
     contracted_power: {
@@ -423,12 +583,15 @@ function settingsFromForm() {
     billing_day: parseInt($("#s-billing-day").value, 10) || 1,
     timezone: $("#s-timezone").value.trim() || "Europe/Madrid",
     holidays: $("#s-holidays").value.split(",").map((x) => x.trim()).filter(Boolean),
+    export_sensors: $("#s-export-sensors").checked,
+    sensor_update_minutes: parseInt($("#s-sensor-minutes").value, 10) || 5,
     influx: {
       version: parseInt($("#s-ifx-version").value, 10) || 2,
       url: $("#s-ifx-url").value.trim(),
       database: $("#s-ifx-db").value.trim(),
       measurement: $("#s-ifx-measurement").value.trim() || "kWh",
       entity_id: $("#s-ifx-entity").value.trim(),
+      entity_id_export: $("#s-ifx-entity-export").value.trim(),
       org: $("#s-ifx-org").value.trim(),
       token: $("#s-ifx-token").value,
       username: $("#s-ifx-user").value.trim(),
@@ -486,6 +649,17 @@ $("#close-bill-modal").addEventListener("click", () => $("#bill-modal").classLis
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => {
   if (e.target === m) m.classList.add("hidden");
 }));
+
+$("#t-etype").addEventListener("change", updateEditorVisibility);
+$("#t-surplus-type").addEventListener("change", updateEditorVisibility);
+$("#t-add-period").addEventListener("click", () => periodRow($("#t-periods")));
+$("#t-add-surplus-period").addEventListener("click", () => periodRow($("#t-surplus-periods")));
+
+$("#import-csv-btn").addEventListener("click", () => $("#import-csv-input").click());
+$("#import-csv-input").addEventListener("change", (e) => {
+  if (e.target.files.length) importCsv(e.target.files[0]);
+  e.target.value = "";
+});
 
 $("#s-source").addEventListener("change", updateSourceVisibility);
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);

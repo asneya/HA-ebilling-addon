@@ -78,14 +78,13 @@ async def ha_list_energy_entities(settings: dict[str, Any]) -> list[dict[str, An
 
 
 async def ha_hourly_consumption(
-    settings: dict[str, Any], start: datetime, end: datetime, tz
+    settings: dict[str, Any], start: datetime, end: datetime, tz, entity: str
 ) -> list[dict[str, Any]]:
     """Consumo horario desde las estadísticas de largo plazo de HA.
 
     Usa el comando websocket ``recorder/statistics_during_period`` con
     periodo horario y el campo ``change`` (delta de energía por hora).
     """
-    entity = settings.get("ha_entity")
     if not entity:
         raise SourceError("Selecciona un sensor de energía en Ajustes.")
     _, ws_url, token = _ha_endpoints(settings)
@@ -142,9 +141,10 @@ async def ha_hourly_consumption(
 
 
 async def influx_hourly_consumption(
-    settings: dict[str, Any], start: datetime, end: datetime, tz
+    settings: dict[str, Any], start: datetime, end: datetime, tz, entity: str
 ) -> list[dict[str, Any]]:
-    influx = settings.get("influx") or {}
+    influx = dict(settings.get("influx") or {})
+    influx["entity_id"] = entity
     version = int(influx.get("version") or 2)
     if version == 1:
         cumulative = await _influx_v1_hourly(influx, start, end)
@@ -265,21 +265,27 @@ def _diff_cumulative(values: list[tuple[str, float]], tz) -> list[dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-def demo_hourly_consumption(start: datetime, end: datetime, tz) -> list[dict[str, Any]]:
+def demo_hourly_consumption(
+    start: datetime, end: datetime, tz, kind: str = "import"
+) -> list[dict[str, Any]]:
     series: list[dict[str, Any]] = []
     current = start.astimezone(tz).replace(minute=0, second=0, microsecond=0)
     end = end.astimezone(tz)
     while current < end:
         h = current.hour
-        base = 0.12
-        # Picos de mañana y noche, más consumo en fin de semana a mediodía.
-        base += 0.35 * math.exp(-((h - 9) ** 2) / 6.0)
-        base += 0.55 * math.exp(-((h - 21) ** 2) / 5.0)
-        if current.weekday() >= 5:
-            base += 0.25 * math.exp(-((h - 14) ** 2) / 8.0)
-        # Ruido determinista para que la serie sea estable entre peticiones.
-        seed = hashlib.md5(current.strftime("%Y%m%d%H").encode()).digest()[0] / 255.0
-        kwh = base * (0.75 + 0.5 * seed)
+        seed = hashlib.md5(current.strftime(f"%Y%m%d%H{kind}").encode()).digest()[0] / 255.0
+        if kind == "export":
+            # Vertido solar: campana centrada a mediodía.
+            base = 0.9 * math.exp(-((h - 13) ** 2) / 7.0)
+            kwh = base * (0.6 + 0.8 * seed) if 8 <= h <= 20 else 0.0
+        else:
+            base = 0.12
+            # Picos de mañana y noche, más consumo en fin de semana a mediodía.
+            base += 0.35 * math.exp(-((h - 9) ** 2) / 6.0)
+            base += 0.55 * math.exp(-((h - 21) ** 2) / 5.0)
+            if current.weekday() >= 5:
+                base += 0.25 * math.exp(-((h - 14) ** 2) / 8.0)
+            kwh = base * (0.75 + 0.5 * seed)
         series.append({"start": current, "kwh": round(kwh, 3)})
         current += timedelta(hours=1)
     return series
@@ -291,11 +297,27 @@ def demo_hourly_consumption(start: datetime, end: datetime, tz) -> list[dict[str
 
 
 async def get_hourly_consumption(
-    settings: dict[str, Any], start: datetime, end: datetime, tz
+    settings: dict[str, Any],
+    start: datetime,
+    end: datetime,
+    tz,
+    kind: str = "import",
 ) -> list[dict[str, Any]]:
+    """Serie horaria de energía importada (kind="import") o vertida ("export").
+
+    Para "export", si no hay sensor configurado se devuelve una lista vacía
+    (no es un error: simplemente no hay excedentes que compensar).
+    """
     source = settings.get("source") or "demo"
     if source == "homeassistant":
-        return await ha_hourly_consumption(settings, start, end, tz)
+        entity = settings.get("ha_entity_export" if kind == "export" else "ha_entity") or ""
+        if kind == "export" and not entity:
+            return []
+        return await ha_hourly_consumption(settings, start, end, tz, entity)
     if source == "influxdb":
-        return await influx_hourly_consumption(settings, start, end, tz)
-    return demo_hourly_consumption(start, end, tz)
+        influx = settings.get("influx") or {}
+        entity = influx.get("entity_id_export" if kind == "export" else "entity_id") or ""
+        if kind == "export" and not entity:
+            return []
+        return await influx_hourly_consumption(settings, start, end, tz, entity)
+    return demo_hourly_consumption(start, end, tz, kind)

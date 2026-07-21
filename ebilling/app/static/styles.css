@@ -187,7 +187,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
 
 /* ---------- Tariffs list ---------- */
 .tariffs-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-.tariff-card .prices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0; }
+.tariff-card .prices { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 8px; margin: 12px 0; }
 .price-chip { background: var(--bg); border-radius: 10px; padding: 8px 10px; text-align: center; }
 .price-chip .p-label { font-size: 11px; color: var(--muted); }
 .price-chip .p-value { font-weight: 700; font-size: 13.5px; }
@@ -211,6 +211,33 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .row { display: flex; gap: 8px; }
 .row select { flex: 1; }
+
+/* ---------- Period rows (editor de tramos) ---------- */
+.period-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.period-row {
+  display: grid;
+  grid-template-columns: 110px 110px 1fr 34px;
+  gap: 8px;
+  align-items: center;
+}
+.period-row input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13.5px;
+  width: 100%;
+}
+.period-row input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+@media (max-width: 640px) {
+  .period-row { grid-template-columns: 1fr 1fr; }
+  .period-row .pr-schedule { grid-column: 1 / -1; }
+}
+.badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: end; }
+.error-text { color: var(--danger); margin-right: auto; }
+.modal-foot { align-items: center; }
+a.btn { text-decoration: none; display: inline-block; }
 
 /* ---------- Modal ---------- */
 .modal {

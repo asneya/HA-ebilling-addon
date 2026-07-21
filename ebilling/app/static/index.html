@@ -52,7 +52,7 @@
       <h2 class="section-title">Comparativa de tarifas</h2>
       <div id="bills-grid" class="bills-grid"></div>
 
-      <h2 class="section-title">Consumo diario por periodo</h2>
+      <h2 class="section-title">Consumo diario por periodo (calendario 2.0TD)</h2>
       <div class="card chart-card">
         <div class="legend">
           <span><i class="dot punta"></i> Punta</span>
@@ -67,8 +67,14 @@
     <section id="view-tariffs" class="view">
       <div class="toolbar">
         <h2 class="section-title">Tarifas configuradas</h2>
-        <button id="add-tariff-btn" class="btn primary">+ Nueva tarifa</button>
+        <div class="toolbar-right">
+          <a class="btn ghost" href="api/tariffs/template.csv" download>⬇ Plantilla CSV</a>
+          <button id="import-csv-btn" class="btn ghost">⬆ Importar CSV</button>
+          <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden">
+          <button id="add-tariff-btn" class="btn primary">+ Nueva tarifa</button>
+        </div>
       </div>
+      <div id="import-status" class="hint"></div>
       <div id="tariffs-list" class="tariffs-list"></div>
     </section>
 
@@ -87,12 +93,17 @@
 
         <div id="ha-fields" class="subform hidden">
           <div class="field">
-            <label>Sensor de energía (kWh acumulados)</label>
+            <label>Sensor de energía consumida (kWh acumulados)</label>
             <div class="row">
               <select id="s-ha-entity"></select>
               <button id="load-entities-btn" class="btn ghost">Buscar sensores</button>
             </div>
             <p class="hint">Debe ser un sensor de energía acumulada (p. ej. el que usas en el panel de Energía).</p>
+          </div>
+          <div class="field">
+            <label>Sensor de energía vertida / excedentes (opcional)</label>
+            <select id="s-ha-entity-export"></select>
+            <p class="hint">Necesario solo si alguna tarifa compensa excedentes (autoconsumo solar).</p>
           </div>
           <div id="ha-external" class="hidden">
             <div class="field"><label>URL de Home Assistant</label><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></div>
@@ -108,7 +119,8 @@
             <div class="field"><label>URL</label><input id="s-ifx-url" placeholder="http://a0d7b954-influxdb:8086"></div>
             <div class="field"><label>Base de datos / Bucket</label><input id="s-ifx-db"></div>
             <div class="field"><label>Measurement</label><input id="s-ifx-measurement" placeholder="kWh"></div>
-            <div class="field"><label>entity_id (tag)</label><input id="s-ifx-entity" placeholder="sensor.energia_total"></div>
+            <div class="field"><label>entity_id consumo (tag)</label><input id="s-ifx-entity" placeholder="sensor.energia_total"></div>
+            <div class="field"><label>entity_id excedentes (tag, opcional)</label><input id="s-ifx-entity-export" placeholder="sensor.energia_vertida"></div>
             <div class="field ifx-v2"><label>Organización</label><input id="s-ifx-org"></div>
             <div class="field ifx-v2"><label>Token</label><input id="s-ifx-token" type="password"></div>
             <div class="field ifx-v1"><label>Usuario</label><input id="s-ifx-user"></div>
@@ -128,8 +140,24 @@
         <div class="field">
           <label>Festivos nacionales (MM-DD, separados por comas)</label>
           <input id="s-holidays" placeholder="01-01, 01-06, 05-01...">
-          <p class="hint">Los festivos cuentan como periodo valle todo el día (2.0TD).</p>
+          <p class="hint">Las tarifas pueden usarlos con el día «F» en sus horarios (en 2.0TD son valle todo el día).</p>
         </div>
+      </div>
+
+      <h2 class="section-title">Sensores en Home Assistant</h2>
+      <div class="card form-card">
+        <label class="switch">
+          <input type="checkbox" id="s-export-sensors">
+          <span>Publicar sensores en Home Assistant (precio actual, coste del ciclo, proyección y mejor tarifa)</span>
+        </label>
+        <div class="field" style="max-width:280px">
+          <label>Intervalo de actualización (minutos)</label>
+          <input id="s-sensor-minutes" type="number" min="1" max="60">
+        </div>
+        <p class="hint">
+          Crea entidades <code>sensor.ebilling_*</code> vía la API de estados. Se
+          actualizan mientras el add-on está en marcha.
+        </p>
       </div>
 
       <div class="toolbar">
@@ -153,19 +181,69 @@
           <div class="field"><label>Color</label><input id="t-color" type="color" value="#4a6cf7"></div>
         </div>
 
+        <h4>Término de energía</h4>
+        <div class="field">
+          <label>Estructura de la tarifa</label>
+          <select id="t-etype">
+            <option value="td3">3 tramos 2.0TD estándar (punta/llano/valle)</option>
+            <option value="custom">Tramos personalizados (1 a 6, horario libre)</option>
+            <option value="pvpc">PVPC — precio horario indexado (ESIOS)</option>
+          </select>
+        </div>
+
+        <div id="t-etype-td3">
+          <div class="grid3">
+            <div class="field"><label>Punta (€/kWh)</label><input id="t-td3-punta" type="number" step="0.000001" min="0"></div>
+            <div class="field"><label>Llano (€/kWh)</label><input id="t-td3-llano" type="number" step="0.000001" min="0"></div>
+            <div class="field"><label>Valle (€/kWh)</label><input id="t-td3-valle" type="number" step="0.000001" min="0"></div>
+          </div>
+        </div>
+
+        <div id="t-etype-custom" class="hidden">
+          <div id="t-periods" class="period-rows"></div>
+          <button class="btn ghost" id="t-add-period">+ Añadir tramo</button>
+          <p class="hint">
+            Horario: reglas «DÍAS HORAS» separadas por «|». Días: L M X J V S D y
+            F (festivo), con rangos (L-V). Horas con fin exclusivo: 10-14,18-22.
+            Deja el horario vacío en el tramo comodín (resto de horas). Para una
+            tarifa de precio único crea un solo tramo sin horario.
+          </p>
+        </div>
+
+        <div id="t-etype-pvpc" class="hidden">
+          <div class="field" style="max-width:280px">
+            <label>Margen sobre PVPC (€/kWh)</label>
+            <input id="t-pvpc-margin" type="number" step="0.0001" value="0">
+          </div>
+          <p class="hint">Los precios horarios se descargan de ESIOS (REE) y se cachean.</p>
+        </div>
+
+        <h4>Compensación de excedentes</h4>
+        <div class="field">
+          <label>Tipo</label>
+          <select id="t-surplus-type">
+            <option value="none">Sin compensación</option>
+            <option value="flat">Precio fijo (€/kWh)</option>
+            <option value="schedule">Por tramos horarios</option>
+          </select>
+        </div>
+        <div id="t-surplus-flat" class="hidden">
+          <div class="field" style="max-width:280px">
+            <label>Precio de compensación (€/kWh)</label>
+            <input id="t-surplus-price" type="number" step="0.0001" min="0">
+          </div>
+        </div>
+        <div id="t-surplus-custom" class="hidden">
+          <div id="t-surplus-periods" class="period-rows"></div>
+          <button class="btn ghost" id="t-add-surplus-period">+ Añadir tramo de excedentes</button>
+        </div>
+        <p class="hint">El abono se limita al importe del término de energía (compensación simplificada).</p>
+
         <h4>Término de potencia (€/kW·día)</h4>
         <div class="grid2">
           <div class="field"><label>Punta P1</label><input id="t-power-p1" type="number" step="0.000001" min="0"></div>
           <div class="field"><label>Valle P2</label><input id="t-power-p2" type="number" step="0.000001" min="0"></div>
         </div>
-
-        <h4>Término de energía (€/kWh)</h4>
-        <div class="grid3">
-          <div class="field"><label>Punta</label><input id="t-energy-punta" type="number" step="0.000001" min="0"></div>
-          <div class="field"><label>Llano</label><input id="t-energy-llano" type="number" step="0.000001" min="0"></div>
-          <div class="field"><label>Valle</label><input id="t-energy-valle" type="number" step="0.000001" min="0"></div>
-        </div>
-        <p class="hint">Para una tarifa de precio fijo, pon el mismo precio en los tres periodos.</p>
 
         <h4>Cargos y otros conceptos</h4>
         <div class="grid2">
@@ -183,6 +261,7 @@
         </div>
       </div>
       <div class="modal-foot">
+        <span id="tariff-error" class="hint error-text"></span>
         <button class="btn ghost" id="cancel-tariff-btn">Cancelar</button>
         <button class="btn primary" id="save-tariff-btn">Guardar tarifa</button>
       </div>

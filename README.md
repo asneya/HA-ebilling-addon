@@ -47,28 +47,55 @@ barra lateral (**eBilling**) — funciona vía Ingress, sin abrir puertos.
 - **Fuentes de datos**: estadísticas de energía de Home Assistant (websocket,
   el mismo dato del panel de Energía), InfluxDB 1.x/2.x, o modo demo con datos
   sintéticos para probar la interfaz.
-- **Tarifas en paralelo**: crea todas las tarifas que quieras (precios de
-  potencia y energía por periodo, cargos, servicios, impuestos) y compáralas
-  sobre tu consumo real. La más barata se marca automáticamente y el resto
-  muestran el sobrecoste.
+- **Tarifas con cualquier estructura**: 1 a 6 tramos con horario libre por día
+  y hora, precio único, tarifa indexada **PVPC** (precios horarios de ESIOS) y
+  **compensación de excedentes** (plana o por tramos) para autoconsumo solar.
+- **Tarifas en paralelo**: crea todas las que quieras y compáralas sobre tu
+  consumo real. La más barata se marca automáticamente y el resto muestran el
+  sobrecoste.
+- **Importación/exportación CSV** de tarifas, con plantilla de ejemplo
+  descargable desde la interfaz.
 - **Factura detallada**: cada tarifa genera una factura simulada línea a
   línea, con la misma estructura que la factura real de tu comercializadora.
+- **Sensores en Home Assistant**: precio actual €/kWh, coste del ciclo,
+  proyección y mejor tarifa, para automatizaciones y paneles.
 - **Proyección fin de ciclo**: además del acumulado, estima el total de la
   factura al cierre del ciclo.
 - **Ciclo de facturación configurable**: día de inicio, zona horaria y
-  festivos nacionales (valle todo el día en 2.0TD).
+  festivos nacionales.
 - Interfaz moderna, responsive y con modo oscuro automático.
+
+## Actualizaciones
+
+Home Assistant detecta automáticamente las nuevas versiones comparando la
+versión publicada en este repositorio con la instalada. Cuando publiques o
+recibas una versión superior, aparecerá el aviso de actualización en el
+add-on (puedes forzar la comprobación con **⋮ → Buscar actualizaciones** en la
+tienda de complementos). El detalle de cada versión está en
+[`ebilling/CHANGELOG.md`](ebilling/CHANGELOG.md) y HA lo muestra en el diálogo
+de actualización.
+
+## Sensores expuestos
+
+Con los sensores activados (Ajustes), por cada tarifa se publican
+`sensor.ebilling_<tarifa>_precio`, `_precio_excedente`, `_coste_ciclo` y
+`_proyeccion`, más los globales `sensor.ebilling_mejor_tarifa` y
+`sensor.ebilling_ahorro_potencial`. Ver [`ebilling/DOCS.md`](ebilling/DOCS.md).
 
 ## Estructura del repositorio
 
 ```
 repository.yaml        Metadatos del repositorio de add-ons
 ebilling/              El add-on
-  config.yaml          Configuración del add-on (ingress, puertos, permisos)
+  config.yaml          Configuración del add-on (version, ingress, permisos)
+  CHANGELOG.md         Historial de versiones (mostrado por HA al actualizar)
   Dockerfile           Imagen (Python 3.12 sobre base Alpine de HA)
   app/                 Backend FastAPI + frontend estático
-    billing.py         Motor de facturación (2.0TD, impuestos, IVA)
+    billing.py         Motor de facturación (tramos, PVPC, excedentes, IVA)
+    tariffs.py         Modelo de tarifas, horarios y CSV
+    pvpc.py            Descarga y caché de precios PVPC (ESIOS)
     datasources.py     Conectores HA / InfluxDB / demo
+    sensors.py         Publicación de sensores en Home Assistant
     storage.py         Persistencia de tarifas y ajustes en /data
     main.py            API REST
     static/            Interfaz web
