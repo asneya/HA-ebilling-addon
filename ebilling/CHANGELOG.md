@@ -2,6 +2,25 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.4.1
+
+### Corregido
+
+- **Consumo de HA no cuadraba con el sensor**: las estadísticas horarias van
+  por detrás del estado en vivo (la hora en curso no está consolidada). Ahora
+  el add-on añade esa «cola» leyendo el estado actual del sensor, de modo que
+  el total del ciclo coincide con lo que muestra Home Assistant. Solo se
+  aplica al ciclo actual, no al consultar ciclos pasados.
+- **Unidades**: se lee la unidad real de la estadística y se convierte a kWh
+  (sensores en Wh/MWh daban totales erróneos).
+- **La tarjeta mostraba tarifas ya borradas**: los sensores de tarifas
+  eliminadas quedaban huérfanos en Home Assistant. Ahora el add-on los elimina
+  automáticamente en cada actualización de sensores.
+
+### Otros
+
+- Corregido el enlace de instalación por HACS del README (categoría `plugin`).
+
 ## 0.4.0
 
 ### Nuevo

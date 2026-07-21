@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 node_modules/
+
+# artefactos de prueba
+*.pid
+fakeha.py

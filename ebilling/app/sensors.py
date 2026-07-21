@@ -152,3 +152,43 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                     "icon": "mdi:piggy-bank-outline",
                 },
             )
+
+        # Borra de HA los sensores de tarifas que ya no existen (evita que
+        # queden entidades huérfanas visibles, p. ej. en la tarjeta).
+        expected = {"sensor.ebilling_mejor_tarifa", "sensor.ebilling_ahorro_potencial"}
+        for item in payload["tariffs"]:
+            slug = item["slug"]
+            for suffix in ("precio", "precio_excedente", "coste_ciclo", "proyeccion"):
+                expected.add(f"sensor.ebilling_{slug}_{suffix}")
+        await _cleanup_stale(session, base, expected)
+
+
+async def _cleanup_stale(
+    session: aiohttp.ClientSession,
+    base: str,
+    expected: set[str],
+) -> None:
+    """Elimina las entidades sensor.ebilling_* que ya no correspondan."""
+    try:
+        async with session.get(
+            f"{base}/states", timeout=aiohttp.ClientTimeout(total=15)
+        ) as resp:
+            if resp.status != 200:
+                return
+            states = await resp.json()
+    except (aiohttp.ClientError, ValueError):
+        return
+    for state in states:
+        entity_id = state.get("entity_id", "")
+        if entity_id.startswith("sensor.ebilling_") and entity_id not in expected:
+            try:
+                async with session.delete(
+                    f"{base}/states/{entity_id}",
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status not in (200, 404):
+                        _LOGGER.debug("No se pudo borrar %s (HTTP %s)", entity_id, resp.status)
+                    else:
+                        _LOGGER.info("Sensor huérfano eliminado: %s", entity_id)
+            except aiohttp.ClientError:
+                _LOGGER.debug("Error borrando %s", entity_id, exc_info=True)

@@ -6,6 +6,7 @@ Todas devuelven una serie horaria: lista de {"start": datetime local tz-aware,
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -87,7 +88,7 @@ async def ha_hourly_consumption(
     """
     if not entity:
         raise SourceError("Selecciona un sensor de energía en Ajustes.")
-    _, ws_url, token = _ha_endpoints(settings)
+    base, ws_url, token = _ha_endpoints(settings)
 
     payload = {
         "id": 1,
@@ -96,7 +97,7 @@ async def ha_hourly_consumption(
         "end_time": end.isoformat(),
         "statistic_ids": [entity],
         "period": "hour",
-        "types": ["change"],
+        "types": ["change", "state"],
     }
 
     result: dict[str, Any] = {}
@@ -142,17 +143,61 @@ async def ha_hourly_consumption(
 
     rows = result.get(entity) or []
     series: list[dict[str, Any]] = []
+    last_state: float | None = None
     for row in rows:
         raw_start = row.get("start")
         if isinstance(raw_start, (int, float)):
             dt = datetime.fromtimestamp(raw_start / 1000.0, tz)
         else:
             dt = datetime.fromisoformat(str(raw_start)).astimezone(tz)
+        if row.get("state") is not None:
+            last_state = float(row["state"])
         change = row.get("change")
         if change is None:
             continue
         series.append({"start": dt, "kwh": max(0.0, float(change) * unit_factor)})
+
+    # Las estadísticas horarias van por detrás del estado en vivo del sensor
+    # (la hora en curso aún no está consolidada). Añadimos esa "cola" leyendo
+    # el estado actual, para que el total cuadre con lo que se ve en HA.
+    # Solo aplica al ciclo actual: si se consulta un periodo pasado, el estado
+    # en vivo no corresponde a ese tramo y no debe sumarse.
+    now_local = datetime.now(tz)
+    if end.astimezone(tz) >= now_local - timedelta(hours=1):
+        tail = await _ha_live_tail(base, token, entity, last_state, unit_factor)
+        if tail > 0:
+            hour = now_local.replace(minute=0, second=0, microsecond=0)
+            series.append({"start": hour, "kwh": tail})
     return series
+
+
+async def _ha_live_tail(
+    base: str, token: str, entity: str, last_state: float | None, unit_factor: float
+) -> float:
+    """kWh consumidos desde la última hora consolidada hasta el estado actual.
+
+    Devuelve 0 si no se puede leer el estado, si el sensor se reinició
+    (delta negativo) o si no hay estadística previa con la que comparar.
+    """
+    if last_state is None:
+        return 0.0
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(
+                f"{base}/states/{entity}", timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status != 200:
+                    return 0.0
+                state = (await resp.json()).get("state")
+        live = float(state)
+    except (aiohttp.ClientError, ValueError, TypeError, asyncio.TimeoutError):
+        return 0.0
+    delta = (live - last_state) * unit_factor
+    # Descarta reinicios de contador o saltos absurdos (> 100 kWh/hora).
+    if delta <= 0 or delta > 100:
+        return 0.0
+    return delta
 
 
 # ---------------------------------------------------------------------------
