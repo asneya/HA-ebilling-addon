@@ -92,7 +92,7 @@ de ciclo.
 A diferencia del add-on, **la tarjeta sí se instala por HACS** (categoría
 *Dashboard*), añadiendo este repositorio como repositorio personalizado:
 
-[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=dashboard)
+[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=plugin)
 
 El archivo se sirve desde [`dist/ebilling-card.js`](dist/ebilling-card.js) y
 también puede instalarse manualmente. Instrucciones completas (HACS y manual)

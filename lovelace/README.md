@@ -20,7 +20,7 @@ sensores en Home Assistant**. La tarjeta lee esas entidades
 Este repositorio es compatible con HACS como plugin de panel. Como no está en
 la tienda por defecto, se añade como **repositorio personalizado**:
 
-[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=dashboard)
+[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=plugin)
 
 1. HACS → menú **⋮ → Repositorios personalizados**.
 2. **Repositorio**: `https://github.com/asneya/HA-ebilling-addon` ·

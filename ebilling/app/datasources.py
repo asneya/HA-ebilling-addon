@@ -99,6 +99,8 @@ async def ha_hourly_consumption(
         "types": ["change"],
     }
 
+    result: dict[str, Any] = {}
+    stat_ids: list[dict[str, Any]] = []
     async with aiohttp.ClientSession() as session:
         async with session.ws_connect(ws_url, timeout=aiohttp.ClientTimeout(total=20)) as ws:
             msg = await ws.receive_json()  # auth_required
@@ -108,19 +110,37 @@ async def ha_hourly_consumption(
                 if msg.get("type") != "auth_ok":
                     raise SourceError("Autenticación websocket rechazada por Home Assistant.")
             await ws.send_json(payload)
-            while True:
+            # Pedimos también la unidad de la estadística para convertir a kWh.
+            await ws.send_json({"id": 2, "type": "recorder/list_statistic_ids"})
+            pending = {1, 2}
+            while pending:
                 msg = await ws.receive_json()
-                if msg.get("id") == 1 and msg.get("type") == "result":
+                mid = msg.get("id")
+                if mid not in pending or msg.get("type") != "result":
+                    continue
+                if mid == 1:
                     if not msg.get("success"):
                         raise SourceError(
                             f"Error de Home Assistant: {msg.get('error', {}).get('message')}"
                         )
                     result = msg.get("result") or {}
-                    break
+                elif mid == 2 and msg.get("success"):
+                    stat_ids = msg.get("result") or []
+                pending.discard(mid)
+
+    # Factor de conversión a kWh según la unidad real de la estadística.
+    unit = ""
+    for item in stat_ids:
+        if item.get("statistic_id") == entity:
+            unit = (
+                item.get("statistics_unit_of_measurement")
+                or item.get("unit_of_measurement")
+                or ""
+            )
+            break
+    unit_factor = {"Wh": 0.001, "MWh": 1000.0}.get(unit, 1.0)
 
     rows = result.get(entity) or []
-    unit_factor = 1.0
-    # Las estadísticas se devuelven en la unidad del sensor; Wh → kWh.
     series: list[dict[str, Any]] = []
     for row in rows:
         raw_start = row.get("start")
