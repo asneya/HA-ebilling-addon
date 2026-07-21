@@ -236,6 +236,25 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
 }
 .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: end; }
 .error-text { color: var(--danger); margin-right: auto; }
+
+/* ---------- Importar CSV ---------- */
+.import-actions { display: flex; gap: 8px; margin: 4px 0 10px; flex-wrap: wrap; }
+.csv-textarea {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+.csv-textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
 .modal-foot { align-items: center; }
 a.btn { text-decoration: none; display: inline-block; }
 

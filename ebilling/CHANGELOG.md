@@ -2,6 +2,15 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.4.0
+
+### Nuevo
+
+- **Importar tarifa pegando un CSV**: el botón «Importar CSV» abre un diálogo
+  donde puedes pegar directamente el contenido del CSV en un cuadro de texto,
+  además de cargar un archivo (que se vuelca al cuadro para revisarlo antes de
+  importar). Ambas vías usan el mismo importador y muestran errores claros.
+
 ## 0.3.0
 
 ### Nuevo

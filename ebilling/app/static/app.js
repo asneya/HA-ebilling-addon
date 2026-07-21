@@ -470,11 +470,34 @@ async function deleteTariff(tariffId) {
   loadSimulation();
 }
 
-async function importCsv(file) {
-  const status = $("#import-status");
-  status.textContent = `Importando ${file.name}…`;
+function openImportModal() {
+  $("#import-textarea").value = "";
+  $("#import-error").textContent = "";
+  $("#import-modal").classList.remove("hidden");
+  setTimeout(() => $("#import-textarea").focus(), 50);
+}
+
+async function loadFileIntoTextarea(file) {
+  $("#import-error").textContent = "";
   try {
-    const text = await file.text();
+    // Lee como texto respetando BOM/UTF-8; el backend tolera latin-1 también.
+    $("#import-textarea").value = await file.text();
+  } catch (err) {
+    $("#import-error").textContent = `No se pudo leer el archivo: ${err.message}`;
+  }
+}
+
+async function doImport() {
+  const text = $("#import-textarea").value.trim();
+  const error = $("#import-error");
+  error.textContent = "";
+  if (!text) {
+    error.textContent = "Pega el contenido del CSV o carga un archivo.";
+    return;
+  }
+  const btn = $("#do-import-btn");
+  btn.disabled = true;
+  try {
     const resp = await fetch("api/tariffs/import", {
       method: "POST",
       headers: { "Content-Type": "text/csv" },
@@ -486,12 +509,15 @@ async function importCsv(file) {
       throw new Error(detail);
     }
     const tariff = await resp.json();
-    status.textContent = `✓ Tarifa «${tariff.name}» importada correctamente.`;
+    $("#import-modal").classList.add("hidden");
+    $("#import-status").textContent = `✓ Tarifa «${tariff.name}» importada correctamente.`;
     await reloadConfig();
     renderTariffsList();
     loadSimulation();
   } catch (err) {
-    status.textContent = `✗ Error al importar: ${err.message}`;
+    error.textContent = `✗ ${err.message}`;
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -655,9 +681,18 @@ $("#t-surplus-type").addEventListener("change", updateEditorVisibility);
 $("#t-add-period").addEventListener("click", () => periodRow($("#t-periods")));
 $("#t-add-surplus-period").addEventListener("click", () => periodRow($("#t-surplus-periods")));
 
-$("#import-csv-btn").addEventListener("click", () => $("#import-csv-input").click());
+$("#import-csv-btn").addEventListener("click", openImportModal);
+$("#close-import-modal").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
+$("#cancel-import-btn").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
+$("#do-import-btn").addEventListener("click", doImport);
+$("#import-clear").addEventListener("click", () => {
+  $("#import-textarea").value = "";
+  $("#import-error").textContent = "";
+  $("#import-textarea").focus();
+});
+$("#import-load-file").addEventListener("click", () => $("#import-csv-input").click());
 $("#import-csv-input").addEventListener("change", (e) => {
-  if (e.target.files.length) importCsv(e.target.files[0]);
+  if (e.target.files.length) loadFileIntoTextarea(e.target.files[0]);
   e.target.value = "";
 });
 

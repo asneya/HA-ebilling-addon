@@ -114,8 +114,10 @@ elimínalas.
 Desde la pestaña **Tarifas**:
 
 - **Plantilla CSV**: descarga un CSV comentado con todos los campos.
-- **Importar CSV**: crea una tarifa a partir de un CSV (separador `;` o `,`,
-  decimales con `.` o `,`).
+- **Importar CSV**: abre un diálogo donde puedes **pegar** el contenido del
+  CSV en un cuadro de texto o **cargar un archivo** (que se vuelca al cuadro
+  para revisarlo antes de importar). Separador `;` o `,`, decimales con `.`
+  o `,`.
 - **CSV** (en cada tarifa): exporta esa tarifa para editarla o compartirla.
 
 ## Discriminación horaria 2.0TD
