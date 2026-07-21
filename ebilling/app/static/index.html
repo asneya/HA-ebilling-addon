@@ -70,7 +70,6 @@
         <div class="toolbar-right">
           <a class="btn ghost" href="api/tariffs/template.csv" download>⬇ Plantilla CSV</a>
           <button id="import-csv-btn" class="btn ghost">⬆ Importar CSV</button>
-          <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden">
           <button id="add-tariff-btn" class="btn primary">+ Nueva tarifa</button>
         </div>
       </div>
@@ -276,6 +275,35 @@
         <button class="icon-btn" id="close-bill-modal">✕</button>
       </div>
       <div class="modal-body" id="bill-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL IMPORTAR CSV ================= -->
+  <div id="import-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Importar tarifa desde CSV</h3>
+        <button class="icon-btn" id="close-import-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">
+          Pega el contenido de un CSV de tarifa o carga un archivo. Puedes
+          partir de la <a href="api/tariffs/template.csv" download>plantilla</a>
+          (separador <code>;</code> o <code>,</code>).
+        </p>
+        <div class="import-actions">
+          <button class="btn ghost" id="import-load-file">📄 Cargar archivo…</button>
+          <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden">
+          <button class="btn ghost" id="import-clear">Limpiar</button>
+        </div>
+        <textarea id="import-textarea" class="csv-textarea" spellcheck="false"
+          placeholder="campo;valor&#10;nombre;Mi tarifa&#10;tipo_energia;tramos&#10;tramo_1_nombre;Punta&#10;tramo_1_precio;0.20&#10;tramo_1_horario;L-V 10-14,18-22&#10;..."></textarea>
+      </div>
+      <div class="modal-foot">
+        <span id="import-error" class="hint error-text"></span>
+        <button class="btn ghost" id="cancel-import-btn">Cancelar</button>
+        <button class="btn primary" id="do-import-btn">Importar</button>
+      </div>
     </div>
   </div>
 
