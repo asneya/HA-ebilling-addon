@@ -8,8 +8,23 @@ especial sobre la electricidad, alquiler de contador, servicios adicionales e
 IVA por grupos.
 
 ![Peaje 2.0TD](https://img.shields.io/badge/peaje-2.0TD-blue)
+![Arquitecturas](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-lightgrey)
 
 ## Instalación
+
+Pulsa este botón para añadir el repositorio a tu tienda de complementos:
+
+[![Añadir repositorio de add-ons a mi Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fasneya%2FHA-ebilling-addon)
+
+Y este otro para abrir directamente la página del add-on e instalarlo:
+
+[![Abrir el add-on eBilling en mi Home Assistant](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=6c61fa46_ebilling&repository_url=https%3A%2F%2Fgithub.com%2Fasneya%2FHA-ebilling-addon)
+
+Después pulsa **Instalar**, arranca el add-on y abre la interfaz desde la
+barra lateral (**eBilling**) — funciona vía Ingress, sin abrir puertos.
+
+<details>
+<summary>Instalación manual (sin botones)</summary>
 
 1. En Home Assistant ve a **Ajustes → Complementos → Tienda de complementos**.
 2. Menú ⋮ → **Repositorios** y añade:
@@ -19,8 +34,13 @@ IVA por grupos.
    ```
 
 3. Instala el add-on **eBilling** y arráncalo.
-4. Abre la interfaz desde la barra lateral (**eBilling**) — funciona vía
-   Ingress, sin abrir puertos.
+
+</details>
+
+> **Nota sobre HACS**: HACS distribuye integraciones personalizadas, tarjetas
+> Lovelace y temas, pero **no add-ons**. Los add-ons se instalan siempre desde
+> la tienda de complementos del Supervisor; los botones de arriba automatizan
+> ese proceso en un clic (requiere Home Assistant OS o Supervised).
 
 ## Características
 
