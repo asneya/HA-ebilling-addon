@@ -82,18 +82,29 @@ Con los sensores activados (Ajustes), por cada tarifa se publican
 `_proyeccion`, más los globales `sensor.ebilling_mejor_tarifa` y
 `sensor.ebilling_ahorro_potencial`. Ver [`ebilling/DOCS.md`](ebilling/DOCS.md).
 
-## Tarjeta Lovelace
+## Tarjeta Lovelace (instalable vía HACS)
 
-En [`lovelace/`](lovelace/) tienes una tarjeta personalizada
-`custom:ebilling-card` que muestra la comparativa de tarifas en tu panel
-(mejor tarifa, ahorro, coste y proyección por tarifa, precio actual y
-excedentes), con tema claro/oscuro y conmutador acumulado/fin de ciclo.
-Instrucciones de instalación en [`lovelace/README.md`](lovelace/README.md).
+La tarjeta personalizada `custom:ebilling-card` muestra la comparativa de
+tarifas en tu panel (mejor tarifa, ahorro, coste y proyección por tarifa,
+precio actual y excedentes), con tema claro/oscuro y conmutador acumulado/fin
+de ciclo.
+
+A diferencia del add-on, **la tarjeta sí se instala por HACS** (categoría
+*Dashboard*), añadiendo este repositorio como repositorio personalizado:
+
+[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=dashboard)
+
+El archivo se sirve desde [`dist/ebilling-card.js`](dist/ebilling-card.js) y
+también puede instalarse manualmente. Instrucciones completas (HACS y manual)
+en [`lovelace/README.md`](lovelace/README.md).
 
 ## Estructura del repositorio
 
 ```
-repository.yaml        Metadatos del repositorio de add-ons
+repository.yaml        Metadatos del repositorio de add-ons (Supervisor)
+hacs.json              Metadatos del plugin de panel (HACS)
+dist/ebilling-card.js  Tarjeta Lovelace servida por HACS
+lovelace/README.md     Instrucciones de instalación y uso de la tarjeta
 ebilling/              El add-on
   config.yaml          Configuración del add-on (version, ingress, permisos)
   CHANGELOG.md         Historial de versiones (mostrado por HA al actualizar)

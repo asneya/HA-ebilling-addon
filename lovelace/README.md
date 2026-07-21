@@ -15,10 +15,26 @@ En el add-on eBilling, ve a **Ajustes → Sensores** y activa **Publicar
 sensores en Home Assistant**. La tarjeta lee esas entidades
 (`sensor.ebilling_*`).
 
-## Instalación
+## Instalación con HACS (recomendada)
 
-1. Copia [`ebilling-card.js`](ebilling-card.js) a la carpeta `www` de tu
-   configuración: `/config/www/ebilling-card.js`.
+Este repositorio es compatible con HACS como plugin de panel. Como no está en
+la tienda por defecto, se añade como **repositorio personalizado**:
+
+[![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=dashboard)
+
+1. HACS → menú **⋮ → Repositorios personalizados**.
+2. **Repositorio**: `https://github.com/asneya/HA-ebilling-addon` ·
+   **Tipo/Categoría**: `Dashboard` (o *Lovelace/Plugin*).
+3. Añade, abre *eBilling Card* y pulsa **Descargar**.
+4. HACS registra el recurso automáticamente. Recarga el navegador
+   (Ctrl/Cmd + Shift + R) y añade la tarjeta a tu panel.
+
+> El botón de arriba abre directamente el diálogo de repositorio en tu HACS.
+
+## Instalación manual (sin HACS)
+
+1. Copia [`dist/ebilling-card.js`](../dist/ebilling-card.js) a la carpeta
+   `www` de tu configuración: `/config/www/ebilling-card.js`.
    (Puedes usar el complemento *File editor* o *Samba/SSH*.)
 2. Ve a **Ajustes → Paneles**, menú **⋮ → Recursos → Añadir recurso**:
    - **URL**: `/local/ebilling-card.js`
