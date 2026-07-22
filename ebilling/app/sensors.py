@@ -123,6 +123,20 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                     "icon": "mdi:chart-line",
                 },
             )
+            if item.get("virtual_wallet"):
+                await _post_state(
+                    session,
+                    base,
+                    f"sensor.ebilling_{slug}_monedero",
+                    item.get("wallet_credit", 0.0),
+                    {
+                        **base_attrs,
+                        "friendly_name": f"eBilling {item['name']} monedero virtual",
+                        "unit_of_measurement": "EUR",
+                        "device_class": "monetary",
+                        "icon": "mdi:wallet-outline",
+                    },
+                )
 
         best = payload.get("best")
         if best:
@@ -160,6 +174,8 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
             slug = item["slug"]
             for suffix in ("precio", "precio_excedente", "coste_ciclo", "proyeccion"):
                 expected.add(f"sensor.ebilling_{slug}_{suffix}")
+            if item.get("virtual_wallet"):
+                expected.add(f"sensor.ebilling_{slug}_monedero")
         await _cleanup_stale(session, base, expected)
 
 

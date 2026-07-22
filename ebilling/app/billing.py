@@ -275,10 +275,16 @@ def compute_bill(
     # --- Compensación de excedentes ------------------------------------------
     # Tope legal (compensación simplificada): el abono no puede superar el
     # importe del término de energía del periodo.
+    # ``surplus_excess`` es el valor económico de los excedentes que supera el
+    # tope legal (el importe del término de energía). Se computa aparte: si la
+    # tarifa tiene monedero/batería virtual se acumula como saldo recuperable;
+    # si no, es energía vertida no compensada (se pierde).
     surplus_credit = 0.0
+    surplus_excess = 0.0
     if surplus_bd is not None and surplus_bd.total_kwh > 0:
         raw_credit = surplus_bd.total_cost
         surplus_credit = min(raw_credit, energy_total)
+        surplus_excess = max(raw_credit - energy_total, 0.0)
         capped = raw_credit > energy_total + 1e-9
         for item in surplus_bd.items:
             share = item["cost"] / raw_credit if raw_credit else 0.0
@@ -298,6 +304,10 @@ def compute_bill(
                 }
             )
     energy_after_surplus = energy_total - surplus_credit
+
+    virtual_wallet = bool((tariff.get("surplus") or {}).get("virtual_wallet"))
+    wallet_credit = surplus_excess if virtual_wallet else 0.0
+    surplus_lost = 0.0 if virtual_wallet else surplus_excess
 
     # --- Cargos y conceptos fijos diarios ------------------------------------
     fixed_total = 0.0
@@ -397,6 +407,10 @@ def compute_bill(
         ],
         "surplus_kwh": round(surplus_bd.total_kwh, 2) if surplus_bd else 0.0,
         "surplus_credit": _round2(surplus_credit),
+        "surplus_excess": _round2(surplus_excess),
+        "virtual_wallet": virtual_wallet,
+        "wallet_credit": _round2(wallet_credit),
+        "surplus_lost": _round2(surplus_lost),
         "lines": lines,
         "subtotals": {
             "power": _round2(power_total),
