@@ -2,6 +2,16 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.4.3
+
+### Nuevo
+
+- En la pestaña **Detalle**, gráficos de **evolución acumulada** (totalizada)
+  de la energía importada y exportada: uno a lo largo del ciclo (por días) y
+  otro a lo largo del día seleccionado (por horas). Reproduce la curva
+  creciente del sensor, útil para comparar de un vistazo con su historial en
+  Home Assistant.
+
 ## 0.4.2
 
 ### Nuevo
