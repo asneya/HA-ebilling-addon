@@ -150,13 +150,19 @@ intervalo de actualización es configurable (por defecto 5 minutos). Con estos
 sensores puedes crear automatizaciones (p. ej. avisar cuando el precio PVPC
 esté por debajo de un umbral) o tarjetas en tu panel.
 
-## Simulación
+## Detalle (drill-down)
 
-- **Acumulado**: coste desde el inicio del ciclo hasta ahora.
-- **Proyección fin de ciclo**: extrapola el consumo por periodo al ciclo
-  completo y aplica los términos fijos sobre todos los días del ciclo.
-- Puedes navegar a ciclos anteriores con las flechas ‹ › y la vista se
-  actualiza sola cada 5 minutos.
+La pestaña **Detalle** muestra el desglose del consumo del ciclo:
+
+- **Totales de energía importada y exportada** del periodo, pensados para
+  comparar directamente con tus sensores de Home Assistant.
+- **Gráfico diario** con la energía importada apilada por periodo 2.0TD
+  (punta/llano/valle) y la exportada en una barra aparte.
+- **Drill-down por horas**: pulsa un día para ver el desglose de sus 24 horas
+  (gráfico + tabla con importada, exportada y periodo de cada hora).
+
+Es también útil para diagnosticar diferencias: si un total no cuadra, el
+detalle por día/hora deja ver exactamente dónde.
 
 ## Simulación
 

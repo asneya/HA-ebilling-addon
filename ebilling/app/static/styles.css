@@ -148,6 +148,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
 .stat.punta .value { color: var(--punta); }
 .stat.llano .value { color: #d9a406; }
 .stat.valle .value { color: var(--valle); }
+.stat.export .value { color: var(--warning); }
+
+.table-card { margin-top: 12px; overflow-x: auto; padding: 6px 14px; }
 
 /* ---------- Bills grid ---------- */
 .bills-grid {

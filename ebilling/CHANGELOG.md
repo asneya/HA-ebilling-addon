@@ -2,6 +2,16 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.4.2
+
+### Nuevo
+
+- **Pestaña «Detalle»** con desglose y drill-down: totales de energía
+  importada y exportada del ciclo (para comparar con tus sensores de HA),
+  gráfico de consumo diario por periodo 2.0TD con la exportada aparte, y al
+  pulsar un día, el desglose de sus 24 horas (gráfico + tabla). Sirve también
+  para localizar dónde difiere un total respecto a Home Assistant.
+
 ## 0.4.1
 
 ### Corregido

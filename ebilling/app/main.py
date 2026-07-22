@@ -336,6 +336,123 @@ async def simulate(
     return await _run_simulation(cycles_back=cycles_back, start=start, end=end)
 
 
+async def _run_detail(
+    cycles_back: int = 0, start: str | None = None, end: str | None = None
+) -> dict:
+    """Desglose detallado de consumo (importada) y vertido (exportada).
+
+    Devuelve totales, serie diaria por periodo 2.0TD y la serie horaria
+    completa, para el gráfico de detalle y su drill-down por día/hora.
+    """
+    config = storage.load()
+    settings = config["settings"]
+    tz = _tz(settings)
+    now = datetime.now(tz)
+
+    if start and end:
+        try:
+            cycle_start = datetime.fromisoformat(start).replace(tzinfo=tz)
+            cycle_end = datetime.fromisoformat(end).replace(tzinfo=tz)
+        except ValueError as err:
+            raise HTTPException(400, f"Fechas no válidas: {err}") from err
+    else:
+        cycle_start, cycle_end = _cycle_bounds(settings, now)
+        for _ in range(cycles_back):
+            cycle_end = cycle_start
+            cycle_start, _unused = _cycle_bounds(settings, cycle_start - timedelta(days=1))
+
+    fetch_end = min(cycle_end, now)
+    if fetch_end <= cycle_start:
+        raise HTTPException(400, "El periodo pedido está en el futuro.")
+
+    try:
+        imp = await _consumption(settings, cycle_start, fetch_end, tz, "import")
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except HTTPException:
+        raise
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.exception("Error consultando la fuente de datos")
+        raise HTTPException(502, f"Error consultando la fuente de datos: {err}") from err
+
+    exp: list = []
+    try:
+        exp = await _consumption(settings, cycle_start, fetch_end, tz, "export")
+    except Exception:
+        _LOGGER.warning("No se pudo obtener la serie de excedentes", exc_info=True)
+
+    holidays = set(settings.get("holidays") or [])
+    by_hour: dict[str, dict] = {}
+
+    def _bucket(dt) -> dict:
+        ts = dt.isoformat()
+        item = by_hour.get(ts)
+        if item is None:
+            item = {
+                "ts": ts,
+                "date": dt.strftime("%Y-%m-%d"),
+                "hour": dt.hour,
+                "kwh": 0.0,
+                "export": 0.0,
+                "period": billing.classify_hour(dt, holidays),
+            }
+            by_hour[ts] = item
+        return item
+
+    for point in imp:
+        _bucket(point["start"])["kwh"] += float(point["kwh"] or 0.0)
+    for point in exp:
+        _bucket(point["start"])["export"] += float(point["kwh"] or 0.0)
+
+    hours = []
+    for ts in sorted(by_hour):
+        h = by_hour[ts]
+        hours.append({**h, "kwh": round(h["kwh"], 3), "export": round(h["export"], 3)})
+
+    days: dict[str, dict] = {}
+    tot = {"punta": 0.0, "llano": 0.0, "valle": 0.0, "import": 0.0, "export": 0.0}
+    for h in by_hour.values():
+        d = days.setdefault(
+            h["date"],
+            {"date": h["date"], "punta": 0.0, "llano": 0.0, "valle": 0.0, "import": 0.0, "export": 0.0},
+        )
+        d[h["period"]] += h["kwh"]
+        d["import"] += h["kwh"]
+        d["export"] += h["export"]
+        tot[h["period"]] += h["kwh"]
+        tot["import"] += h["kwh"]
+        tot["export"] += h["export"]
+
+    daily = [
+        {k: (v if k == "date" else round(v, 3)) for k, v in days[d].items()}
+        for d in sorted(days)
+    ]
+
+    return {
+        "period": {
+            "start": cycle_start.isoformat(),
+            "end": cycle_end.isoformat(),
+            "elapsed_days": round(max((fetch_end - cycle_start).total_seconds() / 86400.0, 1 / 24), 2),
+            "cycle_days": round((cycle_end - cycle_start).total_seconds() / 86400.0, 2),
+            "is_current": not (start and end) and cycles_back == 0,
+        },
+        "totals": {k: round(v, 2) for k, v in tot.items()},
+        "days": daily,
+        "hours": hours,
+        "source": settings.get("source"),
+        "has_export": bool(exp),
+    }
+
+
+@app.get("/api/detail")
+async def detail(
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    cycles_back: int = Query(0, ge=0, le=24),
+):
+    return await _run_detail(cycles_back=cycles_back, start=start, end=end)
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True}

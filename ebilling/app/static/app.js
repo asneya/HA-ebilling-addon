@@ -7,6 +7,9 @@ const state = {
   cyclesBack: 0,
   projection: false,
   editingTariffId: null,
+  detail: null,
+  detailCyclesBack: 0,
+  selectedDay: null,
 };
 
 const fmtEUR = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -37,6 +40,7 @@ $$(".tab").forEach((tab) => {
 function showView(name) {
   $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
+  if (name === "detail" && !state.detail) loadDetail();
   if (name === "tariffs") renderTariffsList();
   if (name === "settings") fillSettingsForm();
 }
@@ -232,6 +236,166 @@ function renderDailyChart(daily) {
     }
   });
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+}
+
+/* ============================= Detalle (drill-down) ============================= */
+
+const PCOLOR = { punta: "#ef476f", llano: "#ffd166", valle: "#06d6a0" };
+const ECOLOR = "#f59f00";
+
+async function loadDetail() {
+  const banner = $("#d-error");
+  banner.classList.add("hidden");
+  try {
+    state.detail = await api(`detail?cycles_back=${state.detailCyclesBack}`);
+    renderDetail();
+  } catch (err) {
+    banner.textContent = err.message;
+    banner.classList.remove("hidden");
+  }
+}
+
+function periodLabelISO(startISO, endISO) {
+  const f = (iso) => {
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("es-ES", {
+      day: "numeric", month: "short", timeZone: "UTC",
+    });
+  };
+  return `${f(startISO)} → ${f(endISO)}`;
+}
+
+function dayLabel(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
+  });
+}
+
+function renderDetail() {
+  const d = state.detail;
+  if (!d) return;
+  $("#d-demo").classList.toggle("hidden", d.source !== "demo");
+  $("#d-period").textContent =
+    periodLabelISO(d.period.start, d.period.end) + (d.period.is_current ? " · ciclo actual" : "");
+  $("#d-next").disabled = state.detailCyclesBack === 0;
+
+  const t = d.totals;
+  const tile = (label, value, sub, cls) =>
+    `<div class="card stat ${cls}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+  const cards = [
+    tile("Energía importada", `${fmtNum.format(t.import)} kWh`, "compara con tu sensor de importación", ""),
+  ];
+  if (d.has_export || t.export > 0) {
+    cards.push(tile("Energía exportada", `${fmtNum.format(t.export)} kWh`, "compara con tu sensor de exportación", "export"));
+  }
+  cards.push(
+    tile("Punta", `${fmtNum.format(t.punta)} kWh`, pct(t.punta, t.import), "punta"),
+    tile("Llano", `${fmtNum.format(t.llano)} kWh`, pct(t.llano, t.import), "llano"),
+    tile("Valle", `${fmtNum.format(t.valle)} kWh`, pct(t.valle, t.import), "valle"),
+  );
+  $("#d-stats").innerHTML = cards.join("");
+
+  renderDailyDetail(d.days);
+  if (state.selectedDay && d.days.some((x) => x.date === state.selectedDay)) {
+    renderHourly(state.selectedDay);
+  } else {
+    state.selectedDay = null;
+    $("#d-hourly-wrap").classList.add("hidden");
+  }
+}
+
+function gridAxis(max, padL, padB, padT, width, height) {
+  let svg = "";
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const val = (max / steps) * i;
+    const y = height - padB - (val / max) * (height - padT - padB);
+    svg += `<line x1="${padL}" y1="${y}" x2="${width}" y2="${y}" stroke="currentColor" opacity="0.12"/>`;
+    svg += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="currentColor" opacity="0.6">${val.toFixed(1)}</text>`;
+  }
+  return svg;
+}
+
+function renderDailyDetail(days) {
+  const c = $("#d-daily");
+  if (!days || !days.length) {
+    c.innerHTML = `<p class="hint">Sin datos de consumo en este periodo.</p>`;
+    return;
+  }
+  const groupW = 30, gap = 12, padL = 44, padB = 28, padT = 10, height = 240;
+  const width = padL + days.length * (groupW + gap) + 10;
+  const max = Math.max(...days.map((d) => Math.max(d.import, d.export)), 0.1);
+  const scale = (height - padT - padB) / max;
+  const impW = 17, expW = 9;
+
+  let svg = gridAxis(max, padL, padB, padT, width, height);
+  days.forEach((d, i) => {
+    const x = padL + i * (groupW + gap);
+    if (state.selectedDay === d.date) {
+      svg += `<rect x="${x - gap / 2}" y="${padT}" width="${groupW + gap}" height="${height - padT - padB}" fill="currentColor" opacity="0.06" rx="4"/>`;
+    }
+    let y = height - padB;
+    for (const p of ["valle", "llano", "punta"]) {
+      const h = d[p] * scale;
+      y -= h;
+      svg += `<rect class="bar-seg" data-day="${d.date}" x="${x}" y="${y}" width="${impW}" height="${Math.max(h, 0)}" rx="2" fill="${PCOLOR[p]}" style="cursor:pointer"><title>${d.date} · ${p}: ${fmtNum.format(d[p])} kWh</title></rect>`;
+    }
+    const eh = d.export * scale;
+    svg += `<rect class="bar-seg" data-day="${d.date}" x="${x + impW + 2}" y="${height - padB - eh}" width="${expW}" height="${Math.max(eh, 0)}" rx="2" fill="${ECOLOR}" style="cursor:pointer"><title>${d.date} · exportada: ${fmtNum.format(d.export)} kWh</title></rect>`;
+    if (days.length <= 31 || i % 2 === 0) {
+      svg += `<text x="${x + groupW / 2}" y="${height - 8}" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">${d.date.slice(8)}</text>`;
+    }
+  });
+  c.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+  c.querySelectorAll("[data-day]").forEach((el) =>
+    el.addEventListener("click", () => selectDay(el.getAttribute("data-day")))
+  );
+}
+
+function selectDay(date) {
+  state.selectedDay = date;
+  renderDailyDetail(state.detail.days);
+  renderHourly(date);
+  $("#d-hourly-wrap").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderHourly(date) {
+  const d = state.detail;
+  const map = {};
+  d.hours.filter((h) => h.date === date).forEach((h) => (map[h.hour] = h));
+  const hours = Array.from({ length: 24 }, (_, hh) =>
+    map[hh] || { hour: hh, kwh: 0, export: 0, period: null }
+  );
+
+  $("#d-hourly-wrap").classList.remove("hidden");
+  $("#d-hourly-title").textContent = `Desglose por horas · ${dayLabel(date)}`;
+
+  const barW = 15, gap = 6, group = 2 * barW + 3, padL = 44, padB = 26, padT = 10, height = 200;
+  const width = padL + 24 * (group + gap) + 10;
+  const max = Math.max(...hours.map((h) => Math.max(h.kwh, h.export)), 0.1);
+  const scale = (height - padT - padB) / max;
+
+  let svg = gridAxis(max, padL, padB, padT, width, height);
+  hours.forEach((h, i) => {
+    const x = padL + i * (group + gap);
+    const ih = h.kwh * scale;
+    const fill = h.period ? PCOLOR[h.period] : "#94a3b8";
+    svg += `<rect class="bar-seg" x="${x}" y="${height - padB - ih}" width="${barW}" height="${Math.max(ih, 0)}" rx="2" fill="${fill}"><title>${String(h.hour).padStart(2, "0")}:00 · ${h.period || "—"} · ${fmtNum.format(h.kwh)} kWh</title></rect>`;
+    const eh = h.export * scale;
+    svg += `<rect class="bar-seg" x="${x + barW + 3}" y="${height - padB - eh}" width="${barW}" height="${Math.max(eh, 0)}" rx="2" fill="${ECOLOR}"><title>${String(h.hour).padStart(2, "0")}:00 · exportada ${fmtNum.format(h.export)} kWh</title></rect>`;
+    if (i % 2 === 0) {
+      svg += `<text x="${x + group / 2}" y="${height - 8}" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.6">${h.hour}</text>`;
+    }
+  });
+  $("#d-hourly").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "—");
+  let rows = `<tr class="group-row"><td>Hora</td><td>Periodo</td><td>Importada</td><td>Exportada</td></tr>`;
+  rows += hours
+    .map((h) => `<tr><td>${String(h.hour).padStart(2, "0")}:00</td><td>${cap(h.period)}</td><td>${fmtNum.format(h.kwh)} kWh</td><td>${fmtNum.format(h.export)} kWh</td></tr>`)
+    .join("");
+  $("#d-hourly-table").innerHTML = rows;
 }
 
 /* ============================= Tarifas: listado ============================= */
@@ -666,6 +830,13 @@ $("#projection-toggle").addEventListener("change", (e) => {
   renderBills(state.simulation);
 });
 $("#goto-settings").addEventListener("click", (e) => { e.preventDefault(); showView("settings"); });
+
+$("#d-prev").addEventListener("click", () => { state.detailCyclesBack += 1; state.selectedDay = null; loadDetail(); });
+$("#d-next").addEventListener("click", () => {
+  if (state.detailCyclesBack > 0) { state.detailCyclesBack -= 1; state.selectedDay = null; loadDetail(); }
+});
+$("#d-refresh").addEventListener("click", loadDetail);
+$("#d-goto-settings").addEventListener("click", (e) => { e.preventDefault(); showView("settings"); });
 
 $("#add-tariff-btn").addEventListener("click", () => openTariffModal(null));
 $("#save-tariff-btn").addEventListener("click", saveTariff);
