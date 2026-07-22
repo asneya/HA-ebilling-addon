@@ -96,3 +96,55 @@ cards:
       yellow: 5
       red: 15
 ```
+
+---
+
+# eBilling Power Flow (flujo de energía)
+
+Segunda tarjeta del repositorio: `custom:ebilling-power-flow`. Muestra de
+forma **animada** la potencia instantánea que viaja entre **solar, red,
+batería y casa**, con la potencia de cada nodo y el sentido de cada flujo.
+No depende del add-on: funciona con tus propios sensores de potencia (W/kW).
+
+## Instalación del segundo recurso
+
+La tarjeta vive en un archivo aparte, así que hay que añadir **un recurso
+más** (HACS solo registra automáticamente el primero):
+
+- **Con HACS** (tras descargar el repositorio como en la tarjeta anterior):
+  **Ajustes → Paneles → ⋮ → Recursos → Añadir recurso**
+  - **URL**: `/hacsfiles/HA-ebilling-addon/ebilling-power-flow.js`
+  - **Tipo**: `Módulo de JavaScript`
+- **Manual**: copia [`dist/ebilling-power-flow.js`](../dist/ebilling-power-flow.js)
+  a `/config/www/` y añade el recurso `/local/ebilling-power-flow.js`.
+
+Recarga el navegador (Ctrl/Cmd + Shift + R) después.
+
+## Uso
+
+Puedes configurarla con el **editor visual** de la tarjeta (dropdowns para
+cada sensor) o por YAML:
+
+```yaml
+type: custom:ebilling-power-flow
+title: Flujo de energía
+entities:
+  pv: sensor.produccion_solar          # producción fotovoltaica
+  grid_import: sensor.importacion_red   # potencia importada de la red
+  grid_export: sensor.exportacion_red   # potencia exportada a la red
+  battery_charge: sensor.carga_bateria  # potencia de carga de batería
+  battery_discharge: sensor.descarga_bateria  # potencia de descarga
+  home: sensor.consumo_casa             # opcional (si falta, se calcula)
+  battery_soc: sensor.bateria_soc       # opcional (muestra el % de batería)
+```
+
+Notas:
+
+- Los sensores son de **potencia instantánea** (unidad `W` o `kW`; se detecta
+  y se muestra en kW/W automáticamente).
+- Si no tienes batería, deja `battery_charge`/`battery_discharge` sin asignar
+  y esos flujos no aparecen. Igual con la exportación si no viertes a la red.
+- El **consumo de la casa** se calcula a partir del balance
+  (solar + importada + descarga − exportada − carga) si no defines `home`.
+- La animación respeta `prefers-reduced-motion` (se detiene si el sistema
+  pide reducir el movimiento).

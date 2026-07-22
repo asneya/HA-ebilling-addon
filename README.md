@@ -98,13 +98,20 @@ El archivo se sirve desde [`dist/ebilling-card.js`](dist/ebilling-card.js) y
 también puede instalarse manualmente. Instrucciones completas (HACS y manual)
 en [`lovelace/README.md`](lovelace/README.md).
 
+Además, [`dist/ebilling-power-flow.js`](dist/ebilling-power-flow.js) aporta la
+tarjeta `custom:ebilling-power-flow`: un diagrama **animado** del flujo de
+potencia entre **solar, red, batería y casa** (con editor visual de sensores).
+No depende del add-on; usa tus propios sensores de potencia. Requiere añadir su
+recurso aparte — ver [`lovelace/README.md`](lovelace/README.md).
+
 ## Estructura del repositorio
 
 ```
 repository.yaml        Metadatos del repositorio de add-ons (Supervisor)
 hacs.json              Metadatos del plugin de panel (HACS)
-dist/ebilling-card.js  Tarjeta Lovelace servida por HACS
-lovelace/README.md     Instrucciones de instalación y uso de la tarjeta
+dist/ebilling-card.js       Tarjeta Lovelace: comparativa de tarifas
+dist/ebilling-power-flow.js Tarjeta Lovelace: flujo de energía animado
+lovelace/README.md          Instalación y uso de las tarjetas
 ebilling/              El add-on
   config.yaml          Configuración del add-on (version, ingress, permisos)
   CHANGELOG.md         Historial de versiones (mostrado por HA al actualizar)
