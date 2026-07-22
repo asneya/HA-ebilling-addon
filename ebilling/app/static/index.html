@@ -18,6 +18,7 @@
     </div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="dashboard">Simulación</button>
+      <button class="tab" data-view="detail">Detalle</button>
       <button class="tab" data-view="tariffs">Tarifas</button>
       <button class="tab" data-view="settings">Ajustes</button>
     </nav>
@@ -60,6 +61,49 @@
           <span><i class="dot valle"></i> Valle</span>
         </div>
         <div id="daily-chart" class="chart"></div>
+      </div>
+    </section>
+
+    <!-- ================= DETALLE ================= -->
+    <section id="view-detail" class="view">
+      <div class="toolbar">
+        <div class="period-nav">
+          <button id="d-prev" class="icon-btn" title="Ciclo anterior">‹</button>
+          <div id="d-period" class="period-label">—</div>
+          <button id="d-next" class="icon-btn" title="Ciclo siguiente">›</button>
+        </div>
+        <button id="d-refresh" class="btn ghost">↻ Actualizar</button>
+      </div>
+      <div id="d-error" class="banner hidden"></div>
+      <div id="d-demo" class="banner info hidden">
+        Datos de <strong>demostración</strong>. Configura tu fuente real en
+        <a href="#" id="d-goto-settings">Ajustes</a>.
+      </div>
+
+      <div class="stats-row" id="d-stats"></div>
+
+      <h2 class="section-title">
+        Consumo diario
+        <span class="hint" style="font-weight:400">· pulsa un día para ver el desglose por horas</span>
+      </h2>
+      <div class="card chart-card">
+        <div class="legend">
+          <span><i class="dot punta"></i> Punta</span>
+          <span><i class="dot llano"></i> Llano</span>
+          <span><i class="dot valle"></i> Valle</span>
+          <span><i class="dot" style="background:#f59f00"></i> Exportada</span>
+        </div>
+        <div id="d-daily" class="chart"></div>
+      </div>
+
+      <div id="d-hourly-wrap" class="hidden">
+        <h2 class="section-title" id="d-hourly-title">Desglose por horas</h2>
+        <div class="card chart-card">
+          <div id="d-hourly" class="chart"></div>
+        </div>
+        <div class="card table-card">
+          <table class="bill-table" id="d-hourly-table"></table>
+        </div>
       </div>
     </section>
 
