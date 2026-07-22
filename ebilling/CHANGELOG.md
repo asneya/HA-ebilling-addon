@@ -2,6 +2,18 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.5.0
+
+### Nuevo
+
+- **Nueva tarjeta Lovelace `custom:ebilling-power-flow`** (en
+  `dist/ebilling-power-flow.js`): diagrama **animado** del flujo de potencia
+  instantánea entre **solar, red, batería y casa**, con el sentido de cada
+  flujo y editor visual para asignar los sensores (producción PV, importación
+  y exportación de red, carga y descarga de batería, consumo de la casa y,
+  opcional, el % de batería). No depende del add-on; usa tus sensores de
+  potencia. Requiere añadir su recurso Lovelace aparte (ver `lovelace/README.md`).
+
 ## 0.4.3
 
 ### Nuevo
