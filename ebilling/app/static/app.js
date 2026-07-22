@@ -297,6 +297,7 @@ function renderDetail() {
   $("#d-stats").innerHTML = cards.join("");
 
   renderDailyDetail(d.days);
+  renderMonthlyCumulative(d.days);
   if (state.selectedDay && d.days.some((x) => x.date === state.selectedDay)) {
     renderHourly(state.selectedDay);
   } else {
@@ -353,6 +354,58 @@ function renderDailyDetail(days) {
   );
 }
 
+function cumulativeChart(container, points, step) {
+  if (!points || !points.length) {
+    container.innerHTML = `<p class="hint">Sin datos.</p>`;
+    return;
+  }
+  const height = 220, padL = 44, padB = 26, padT = 14, padR = 48;
+  const width = padL + (points.length - 1) * step + padR;
+  const last = points[points.length - 1];
+  const maxExp = last.export;
+  const max = Math.max(last.import, maxExp, 0.1);
+  const X = (i) => padL + i * step;
+  const Y = (v) => height - padB - (v / max) * (height - padT - padB);
+
+  let svg = gridAxis(max, padL, padB, padT, width, height);
+  const line = (key, color) => {
+    let path = "";
+    points.forEach((p, i) => { path += `${i ? "L" : "M"}${X(i)},${Y(p[key])} `; });
+    let s = `<path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+    points.forEach((p, i) => {
+      s += `<circle cx="${X(i)}" cy="${Y(p[key])}" r="2.5" fill="${color}"><title>${p.label} · ${fmtNum.format(p[key])} kWh</title></circle>`;
+    });
+    s += `<text x="${X(points.length - 1) + 6}" y="${Y(last[key]) + 4}" font-size="10" fill="${color}" font-weight="700">${fmtNum.format(last[key])}</text>`;
+    return s;
+  };
+  svg += line("import", "#4a6cf7");
+  if (maxExp > 0) svg += line("export", "#f59f00");
+  points.forEach((p, i) => {
+    if (points.length <= 31 || i % 2 === 0) {
+      svg += `<text x="${X(i)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">${p.label}</text>`;
+    }
+  });
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+}
+
+function renderMonthlyCumulative(days) {
+  let ci = 0, ce = 0;
+  const pts = days.map((d) => {
+    ci += d.import; ce += d.export;
+    return { label: d.date.slice(8), import: ci, export: ce };
+  });
+  cumulativeChart($("#d-cum-month"), pts, 42);
+}
+
+function renderDailyCumulative(hours) {
+  let ci = 0, ce = 0;
+  const pts = hours.map((h) => {
+    ci += h.kwh; ce += h.export;
+    return { label: String(h.hour), import: ci, export: ce };
+  });
+  cumulativeChart($("#d-cum-day"), pts, 34);
+}
+
 function selectDay(date) {
   state.selectedDay = date;
   renderDailyDetail(state.detail.days);
@@ -389,6 +442,8 @@ function renderHourly(date) {
     }
   });
   $("#d-hourly").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+
+  renderDailyCumulative(hours);
 
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "—");
   let rows = `<tr class="group-row"><td>Hora</td><td>Periodo</td><td>Importada</td><td>Exportada</td></tr>`;
