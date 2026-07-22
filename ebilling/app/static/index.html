@@ -297,6 +297,17 @@
           <button class="btn ghost" id="t-add-surplus-period">+ Añadir tramo de excedentes</button>
         </div>
         <p class="hint">El abono se limita al importe del término de energía (compensación simplificada).</p>
+        <div id="t-wallet-wrap" class="hidden">
+          <label class="switch" style="margin-top:4px">
+            <input type="checkbox" id="t-virtual-wallet">
+            <span>Monedero / batería virtual</span>
+          </label>
+          <p class="hint">
+            Acumula como saldo el valor de los excedentes que superan el tope
+            legal (la energía consumida de la red) en lugar de perderlo. Se
+            computa aparte y no reduce el importe de esta factura.
+          </p>
+        </div>
 
         <h4>Término de potencia (€/kW·día)</h4>
         <div class="grid2">

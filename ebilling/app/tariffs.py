@@ -203,6 +203,7 @@ def normalize_tariff(raw: dict[str, Any]) -> dict[str, Any]:
     surplus = tariff.get("surplus") or {"type": "none"}
     surplus.setdefault("type", "none")
     surplus["price"] = _num(surplus.get("price"))
+    surplus["virtual_wallet"] = bool(surplus.get("virtual_wallet"))
     surplus_periods = []
     for idx, period in enumerate(surplus.get("periods") or []):
         surplus_periods.append(
@@ -282,6 +283,9 @@ def template_csv() -> str:
         ("# Compensación de excedentes — excedentes_tipo: no | plana | tramos", ""),
         ("excedentes_tipo", "no"),
         ("excedentes_precio", "0.06"),
+        ("# monedero_virtual (si/no): acumula como saldo el valor de los", ""),
+        ("# excedentes que superan el tope legal en vez de perderlo", ""),
+        ("monedero_virtual", "no"),
         ("excedente_1_nombre", ""),
         ("excedente_1_precio", ""),
         ("excedente_1_horario", ""),
@@ -322,6 +326,7 @@ def tariff_to_csv(tariff: dict[str, Any]) -> str:
         ("iva_servicios_pct", f"{tariff['vat_services_pct']:g}"),
         ("excedentes_tipo", {"none": "no", "flat": "plana", "schedule": "tramos"}[surplus["type"]]),
         ("excedentes_precio", f"{surplus['price']:g}"),
+        ("monedero_virtual", "si" if surplus.get("virtual_wallet") else "no"),
     ]
     for idx, period in enumerate(surplus["periods"], start=1):
         rows += [
@@ -395,6 +400,8 @@ def tariff_from_csv(text: str) -> dict[str, Any]:
             "type": surplus_map[surplus_type],
             "price": fields.get("excedentes_precio", "0"),
             "periods": surplus_periods,
+            "virtual_wallet": fields.get("monedero_virtual", "no").strip().lower()
+            in ("si", "sí", "true", "1", "yes"),
         },
         "power_prices": {
             "p1": fields.get("potencia_p1", "0"),

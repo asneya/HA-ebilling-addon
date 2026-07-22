@@ -500,6 +500,8 @@ async def _sensor_payload() -> dict | None:
                 "cycle_cost": bill["total"],
                 "projected_cost": bill["projected_total"],
                 "kwh": bill["kwh_total"],
+                "virtual_wallet": bill.get("virtual_wallet", False),
+                "wallet_credit": bill.get("wallet_credit", 0.0),
             }
         )
     if not items:

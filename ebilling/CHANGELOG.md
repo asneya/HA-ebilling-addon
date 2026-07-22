@@ -2,6 +2,20 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.6.0
+
+### Nuevo
+
+- **Monedero / batería virtual** en el comparador de tarifas: el valor de los
+  excedentes que supera el tope legal de compensación (la energía consumida de
+  la red) se computa **aparte** como saldo acumulable, en lugar de perderse.
+  Se activa por tarifa (en Compensación de excedentes) y aparece como `+X €`
+  en la tarjeta y en la factura detallada, sin alterar el total del ciclo. En
+  las tarifas sin monedero, ese importe se muestra como *excedente no
+  compensado* (informativo). Soportado también en importación/exportación CSV
+  (`monedero_virtual: si/no`) y, si publicas sensores, en
+  `sensor.ebilling_<tarifa>_monedero`.
+
 ## 0.5.0
 
 ### Nuevo

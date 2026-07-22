@@ -137,6 +137,11 @@ function renderBills(sim) {
       const surplusChip = bill.surplus_credit > 0
         ? `<span>Excedentes −${fmtEUR.format(bill.surplus_credit)}</span>`
         : "";
+      const shownBill = projected ? bill.projected : bill;
+      const wallet = shownBill ? shownBill.wallet_credit : bill.wallet_credit;
+      const walletChip = wallet > 0
+        ? `<span class="chip solar">🔋 Monedero +${fmtEUR.format(wallet)}</span>`
+        : "";
       const warning = bill.warning ? `<div class="hint">⚠ ${esc(bill.warning)}</div>` : "";
       return `
       <div class="card bill-card">
@@ -160,6 +165,7 @@ function renderBills(sim) {
           <span>Impuestos ${fmtEUR.format(sub.taxes)}</span>
           ${surplusChip}
         </div>
+        ${walletChip ? `<div class="bill-breakdown">${walletChip}</div>` : ""}
         ${warning}
         <div class="bill-actions">
           <button class="btn ghost" data-bill-detail="${esc(bill.tariff_id)}">Ver factura detallada</button>
@@ -197,7 +203,18 @@ function openBillDetail(tariffId) {
       .join("");
   }
   rows += `<tr class="total-row"><td>TOTAL FACTURA (${fmtNum.format(shown.days)} días · ${fmtNum.format(shown.kwh_total)} kWh)</td><td>${fmtEUR.format(shown.total)}</td></tr>`;
-  $("#bill-modal-body").innerHTML = `<table class="bill-table">${rows}</table>`;
+
+  // El monedero/batería virtual y el excedente perdido se computan aparte:
+  // no forman parte del total de la factura.
+  let extra = "";
+  if (shown.wallet_credit > 0) {
+    extra += `<tr class="group-row"><td colspan="2">Aparte — no afecta al total</td></tr>`;
+    extra += `<tr><td>🔋 Monedero / batería virtual<div class="detail">valor de los excedentes por encima del tope legal, acumulado como saldo</div></td><td>+${fmtEUR.format(shown.wallet_credit)}</td></tr>`;
+  } else if (shown.surplus_lost > 0) {
+    extra += `<tr class="group-row"><td colspan="2">Informativo</td></tr>`;
+    extra += `<tr><td>Excedente no compensado<div class="detail">valor vertido por encima del tope legal que se pierde (esta tarifa no tiene monedero virtual)</div></td><td>${fmtEUR.format(shown.surplus_lost)}</td></tr>`;
+  }
+  $("#bill-modal-body").innerHTML = `<table class="bill-table">${rows}${extra}</table>`;
   $("#bill-modal").classList.remove("hidden");
 }
 
@@ -549,6 +566,7 @@ function updateEditorVisibility() {
   const stype = $("#t-surplus-type").value;
   $("#t-surplus-flat").classList.toggle("hidden", stype !== "flat");
   $("#t-surplus-custom").classList.toggle("hidden", stype !== "schedule");
+  $("#t-wallet-wrap").classList.toggle("hidden", stype === "none");
 }
 
 function openTariffModal(tariffId = null) {
@@ -582,6 +600,7 @@ function openTariffModal(tariffId = null) {
   const surplus = t?.surplus || { type: "none", price: 0, periods: [] };
   $("#t-surplus-type").value = surplus.type || "none";
   $("#t-surplus-price").value = surplus.price ?? "";
+  $("#t-virtual-wallet").checked = !!surplus.virtual_wallet;
   const surplusBox = $("#t-surplus-periods");
   surplusBox.innerHTML = "";
   (surplus.periods?.length ? surplus.periods : [{}]).forEach((p) => periodRow(surplusBox, p));
@@ -628,6 +647,7 @@ function tariffFromForm() {
     type: stype,
     price: num("#t-surplus-price"),
     periods: stype === "schedule" ? readPeriodRows($("#t-surplus-periods")) : [],
+    virtual_wallet: stype !== "none" && $("#t-virtual-wallet").checked,
   };
   const servicesPrice = num("#t-services", 0);
   return {

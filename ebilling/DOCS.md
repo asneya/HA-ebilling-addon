@@ -93,6 +93,24 @@ ninguna regla usa `F`, los festivos se tratan como domingo.
 El abono se limita al importe del término de energía del periodo
 (compensación simplificada, según normativa).
 
+#### Monedero / batería virtual
+
+En España la compensación de excedentes tiene un **tope legal**: el abono no
+puede superar el coste de la energía consumida de la red. El valor de los
+excedentes que supera ese tope normalmente **se pierde**, salvo que tu tarifa
+ofrezca un **monedero o batería virtual**, que lo acumula como saldo para usar
+en otras facturas.
+
+Activa la casilla **Monedero / batería virtual** en la tarifa (dentro de
+Compensación de excedentes) y eBilling calculará ese «exceso de excedentes»
+**aparte**: aparece como un saldo (`+X €`) en la tarjeta y en la factura
+detallada, sin reducir el total de la factura del ciclo. Si la tarifa no tiene
+monedero, ese mismo importe se muestra como *excedente no compensado*
+(informativo, se pierde).
+
+Si publicas sensores, las tarifas con monedero exponen además
+`sensor.ebilling_<tarifa>_monedero` con el saldo generado en el ciclo.
+
 ### Conceptos comunes
 
 - **Término de potencia** (€/kW·día) para P1 (punta) y P2 (valle).
