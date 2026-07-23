@@ -152,6 +152,21 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
 
 .table-card { margin-top: 12px; overflow-x: auto; padding: 6px 14px; }
 
+/* ---------- Periodo personalizado ---------- */
+.custom-period {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.custom-period .cp-title { font-weight: 600; font-size: 13.5px; }
+.custom-period label { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.custom-period input[type="date"] {
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg); color: var(--text); font-size: 13.5px;
+}
+.custom-period .error-text { color: var(--danger); }
+
 /* ---------- Bills grid ---------- */
 .bills-grid {
   display: grid;
