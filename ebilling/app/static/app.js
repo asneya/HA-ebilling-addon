@@ -10,7 +10,36 @@ const state = {
   detail: null,
   detailCyclesBack: 0,
   selectedDay: null,
+  customPeriod: null, // { startDate:'YYYY-MM-DD', endDate:'YYYY-MM-DD' }
 };
+
+// Construye la query de periodo: personalizado (escenario) o ciclo relativo.
+function periodQuery(base, cyclesBack) {
+  const cp = state.customPeriod;
+  if (cp) {
+    const [y, m, d] = cp.endDate.split("-").map(Number);
+    const endExcl = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    return `${base}?start=${cp.startDate}T00:00:00&end=${endExcl}T00:00:00`;
+  }
+  return `${base}?cycles_back=${cyclesBack}`;
+}
+
+function applyCustomPeriod(startId, endId, errId) {
+  const s = $(startId).value, e = $(endId).value;
+  const err = $(errId);
+  err.textContent = "";
+  if (!s || !e) { err.textContent = "Indica inicio y fin."; return; }
+  if (s >= e) { err.textContent = "El inicio debe ser anterior al fin."; return; }
+  state.customPeriod = { startDate: s, endDate: e };
+  loadSimulation();
+  if (state.detail !== null || $("#view-detail").classList.contains("active")) loadDetail();
+}
+
+function clearCustomPeriod() {
+  state.customPeriod = null;
+  loadSimulation();
+  if (state.detail !== null || $("#view-detail").classList.contains("active")) loadDetail();
+}
 
 const fmtEUR = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 const fmtNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
@@ -51,7 +80,7 @@ async function loadSimulation() {
   const banner = $("#error-banner");
   banner.classList.add("hidden");
   try {
-    state.simulation = await api(`simulate?cycles_back=${state.cyclesBack}`);
+    state.simulation = await api(periodQuery("simulate", state.cyclesBack));
     renderDashboard();
   } catch (err) {
     banner.textContent = err.message;
@@ -81,10 +110,12 @@ function renderDashboard() {
       day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
     });
   };
+  const custom = !!state.customPeriod;
   $("#period-label").textContent =
     `${fmtDay(sim.period.start)} → ${fmtDay(sim.period.end)}` +
-    (sim.period.is_current ? " · ciclo actual" : "");
-  $("#next-cycle").disabled = state.cyclesBack === 0;
+    (custom ? " · escenario" : sim.period.is_current ? " · ciclo actual" : "");
+  $("#prev-cycle").disabled = custom;
+  $("#next-cycle").disabled = custom || state.cyclesBack === 0;
 
   renderStats(sim);
   renderBills(sim);
@@ -264,7 +295,7 @@ async function loadDetail() {
   const banner = $("#d-error");
   banner.classList.add("hidden");
   try {
-    state.detail = await api(`detail?cycles_back=${state.detailCyclesBack}`);
+    state.detail = await api(periodQuery("detail", state.detailCyclesBack));
     renderDetail();
   } catch (err) {
     banner.textContent = err.message;
@@ -293,9 +324,12 @@ function renderDetail() {
   const d = state.detail;
   if (!d) return;
   $("#d-demo").classList.toggle("hidden", d.source !== "demo");
+  const custom = !!state.customPeriod;
   $("#d-period").textContent =
-    periodLabelISO(d.period.start, d.period.end) + (d.period.is_current ? " · ciclo actual" : "");
-  $("#d-next").disabled = state.detailCyclesBack === 0;
+    periodLabelISO(d.period.start, d.period.end) +
+    (custom ? " · escenario" : d.period.is_current ? " · ciclo actual" : "");
+  $("#d-prev").disabled = custom;
+  $("#d-next").disabled = custom || state.detailCyclesBack === 0;
 
   const t = d.totals;
   const tile = (label, value, sub, cls) =>
@@ -905,6 +939,36 @@ $("#projection-toggle").addEventListener("change", (e) => {
   renderBills(state.simulation);
 });
 $("#goto-settings").addEventListener("click", (e) => { e.preventDefault(); showView("settings"); });
+
+// Periodo personalizado (escenario) — prefill con el periodo mostrado.
+function prefillCustom(startId, endId) {
+  const sim = state.simulation || state.detail;
+  if (sim && sim.period) {
+    if (!$(startId).value) $(startId).value = sim.period.start.slice(0, 10);
+    if (!$(endId).value) {
+      const [y, m, d] = sim.period.end.slice(0, 10).split("-").map(Number);
+      $(endId).value = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
+    }
+  }
+  if (state.customPeriod) {
+    $(startId).value = state.customPeriod.startDate;
+    $(endId).value = state.customPeriod.endDate;
+  }
+}
+$("#cp-toggle").addEventListener("click", () => {
+  const p = $("#custom-period");
+  p.classList.toggle("hidden");
+  if (!p.classList.contains("hidden")) prefillCustom("#cp-start", "#cp-end");
+});
+$("#cp-apply").addEventListener("click", () => applyCustomPeriod("#cp-start", "#cp-end", "#cp-error"));
+$("#cp-clear").addEventListener("click", () => { $("#cp-error").textContent = ""; clearCustomPeriod(); });
+$("#dcp-toggle").addEventListener("click", () => {
+  const p = $("#dcustom-period");
+  p.classList.toggle("hidden");
+  if (!p.classList.contains("hidden")) prefillCustom("#dcp-start", "#dcp-end");
+});
+$("#dcp-apply").addEventListener("click", () => applyCustomPeriod("#dcp-start", "#dcp-end", "#dcp-error"));
+$("#dcp-clear").addEventListener("click", () => { $("#dcp-error").textContent = ""; clearCustomPeriod(); });
 
 $("#d-prev").addEventListener("click", () => { state.detailCyclesBack += 1; state.selectedDay = null; loadDetail(); });
 $("#d-next").addEventListener("click", () => {

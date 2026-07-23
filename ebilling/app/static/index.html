@@ -38,8 +38,18 @@
             <input type="checkbox" id="projection-toggle">
             <span>Proyección fin de ciclo</span>
           </label>
+          <button id="cp-toggle" class="btn ghost">📅 Periodo</button>
           <button id="refresh-btn" class="btn ghost">↻ Actualizar</button>
         </div>
+      </div>
+
+      <div id="custom-period" class="custom-period hidden">
+        <span class="cp-title">Periodo personalizado (escenario):</span>
+        <label>Inicio <input type="date" id="cp-start"></label>
+        <label>Fin <input type="date" id="cp-end"></label>
+        <button id="cp-apply" class="btn primary">Aplicar</button>
+        <button id="cp-clear" class="btn ghost">Volver al ciclo</button>
+        <span id="cp-error" class="hint error-text"></span>
       </div>
 
       <div id="error-banner" class="banner hidden"></div>
@@ -72,7 +82,18 @@
           <div id="d-period" class="period-label">—</div>
           <button id="d-next" class="icon-btn" title="Ciclo siguiente">›</button>
         </div>
-        <button id="d-refresh" class="btn ghost">↻ Actualizar</button>
+        <div class="toolbar-right">
+          <button id="dcp-toggle" class="btn ghost">📅 Periodo</button>
+          <button id="d-refresh" class="btn ghost">↻ Actualizar</button>
+        </div>
+      </div>
+      <div id="dcustom-period" class="custom-period hidden">
+        <span class="cp-title">Periodo personalizado (escenario):</span>
+        <label>Inicio <input type="date" id="dcp-start"></label>
+        <label>Fin <input type="date" id="dcp-end"></label>
+        <button id="dcp-apply" class="btn primary">Aplicar</button>
+        <button id="dcp-clear" class="btn ghost">Volver al ciclo</button>
+        <span id="dcp-error" class="hint error-text"></span>
       </div>
       <div id="d-error" class="banner hidden"></div>
       <div id="d-demo" class="banner info hidden">

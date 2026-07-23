@@ -189,6 +189,11 @@ detalle por día/hora deja ver exactamente dónde.
   completo y aplica los términos fijos sobre todos los días del ciclo.
 - Puedes navegar a ciclos anteriores con las flechas ‹ › y la vista se
   actualiza sola cada 5 minutos.
+- **Periodo personalizado (escenario)**: con el botón **📅 Periodo** puedes
+  fijar un inicio y un fin de ciclo cualesquiera y recalcular al instante la
+  comparativa (y el detalle) sobre ese rango. Útil para analizar escenarios o
+  cuadrar un periodo de facturación concreto. Pulsa **Volver al ciclo** para
+  regresar al ciclo automático.
 
 ## Opciones del add-on
 

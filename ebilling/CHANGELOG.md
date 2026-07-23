@@ -2,6 +2,23 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.7.0
+
+### Nuevo
+
+- **Periodo de facturación personalizado (escenario)**: botón «📅 Periodo» en
+  Simulación y Detalle para fijar un inicio y un fin cualesquiera y recalcular
+  al instante la comparativa y el detalle sobre ese rango. «Volver al ciclo»
+  restaura el ciclo automático.
+
+### Cambios
+
+- **Tarjeta `ebilling-power-flow` rediseñada**: iconos vectoriales (sol, red,
+  batería, casa), líneas curvas que convergen en la casa sin cruzarse, puntos
+  de energía animados con brillo y velocidad proporcional a la potencia. Ahora
+  se actualiza en tiempo real con cada cambio de los sensores (se eliminó el
+  filtrado que suprimía cambios pequeños).
+
 ## 0.6.0
 
 ### Nuevo
