@@ -5,3 +5,4 @@ node_modules/
 # artefactos de prueba
 *.pid
 fakeha.py
+*.log

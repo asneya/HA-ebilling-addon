@@ -107,22 +107,28 @@ def _day_phase(states: dict[str, Any], now: datetime) -> str:
 
 
 def _weather(states: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
-    entity = settings.get("weather_entity") or ""
-    if not entity or entity not in states:
-        entity = next((eid for eid in sorted(states) if eid.startswith("weather.")), "")
+    """Condición y temperatura exterior desde dos sensores independientes.
+
+    El sensor de condición puede contener cualquier texto (los estados de HA
+    tipo ``partlycloudy`` o descripciones en castellano); el frontend lo
+    normaliza para elegir el icono y el fondo.
+    """
+    condition_sensor = settings.get("condition_sensor") or ""
+    temperature_sensor = settings.get("temperature_sensor") or ""
     condition = None
     temperature = None
-    if entity and entity in states:
-        state = states[entity]
-        condition = state.get("state")
-        temperature = _num((state.get("attributes") or {}).get("temperature"))
-    # Un sensor de temperatura propio tiene prioridad sobre el de weather.*
-    sensor = settings.get("temperature_sensor") or ""
-    if sensor and sensor in states:
-        value = _num(states[sensor].get("state"))
-        if value is not None:
-            temperature = value
-    return {"entity": entity, "condition": condition, "temperature": temperature}
+    if condition_sensor and condition_sensor in states:
+        raw = states[condition_sensor].get("state")
+        if raw not in (None, "", "unknown", "unavailable"):
+            condition = raw
+    if temperature_sensor and temperature_sensor in states:
+        temperature = _num(states[temperature_sensor].get("state"))
+    return {
+        "condition": condition,
+        "temperature": temperature,
+        "condition_sensor": condition_sensor,
+        "temperature_sensor": temperature_sensor,
+    }
 
 
 def _flows(power: dict[str, float]) -> dict[str, float]:
@@ -258,7 +264,10 @@ def list_entities(states: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
         "energy": [],
         "percent": [],
         "temperature": [],
-        "weather": [],
+        # «any» incluye cualquier sensor (más las entidades weather.*), para el
+        # selector del sensor de condición meteorológica, que puede ser un
+        # sensor de texto cualquiera.
+        "any": [],
     }
     for entity_id, state in states.items():
         attrs = state.get("attributes") or {}
@@ -271,10 +280,11 @@ def list_entities(states: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
             "unit": attrs.get("unit_of_measurement") or "",
         }
         if entity_id.startswith("weather."):
-            groups["weather"].append(item)
+            groups["any"].append(item)
             continue
         if not entity_id.startswith("sensor."):
             continue
+        groups["any"].append(item)
         if device_class == "power" or unit in ("w", "kw", "mw"):
             groups["power"].append(item)
         if device_class == "energy" or unit in ("wh", "kwh", "mwh"):

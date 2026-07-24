@@ -249,12 +249,28 @@
       </div>
 
       <div class="panel glass group">
-        <div class="group-head">Meteorología</div>
+        <div class="group-head">Meteorología <span class="soft">· fondo de la Home</span></div>
         <div class="list">
-          <label class="li"><span class="li-label">Entidad de tiempo</span><select id="s-weather"></select></label>
+          <label class="li"><span class="li-label">Sensor de condición</span><select id="s-condition"></select></label>
           <label class="li"><span class="li-label">Temperatura exterior</span><select id="s-temp"></select></label>
-          <p class="li-note">Si dejas la entidad vacía se detecta la primera <code>weather.*</code>. El sensor de temperatura, si lo indicas, tiene prioridad.</p>
+          <p class="li-note">
+            Dos sensores independientes. El de condición puede contener los
+            estados de HA (<code>sunny</code>, <code>partlycloudy</code>,
+            <code>rainy</code>…) o texto en castellano («Parcialmente nuboso»);
+            se interpreta para elegir el icono y el fondo.
+          </p>
         </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Tarifas</div>
+        <div class="li">
+          <a class="btn subtle" href="api/tariffs/template.csv" download>Plantilla CSV</a>
+          <button id="import-csv-btn-2" class="btn subtle">Importar CSV</button>
+          <div class="spacer"></div>
+          <button id="add-tariff-btn-2" class="btn primary">Nueva tarifa</button>
+        </div>
+        <div class="li col"><div id="tariffs-list-settings" class="bills"></div></div>
       </div>
 
       <div class="panel glass group">
