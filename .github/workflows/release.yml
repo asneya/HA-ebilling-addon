@@ -1,0 +1,55 @@
+name: Release
+
+# Crea automáticamente una release de GitHub cada vez que cambia la versión
+# del add-on (ebilling/config.yaml). HACS usa las releases para ofrecer la
+# actualización de la tarjeta Lovelace, y sirve además de histórico de versiones.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ebilling/config.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Leer versión de config.yaml
+        id: v
+        run: |
+          VERSION=$(grep -E '^version:' ebilling/config.yaml | head -1 | sed -E 's/version:[[:space:]]*"?([^"]+)"?.*/\1/')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Extraer notas del CHANGELOG
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          awk -v v="## $VERSION" '
+            BEGIN{p=0}
+            $0==v{p=1;next}
+            /^## /{if(p)exit}
+            p{print}
+          ' ebilling/CHANGELOG.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Versión $VERSION. Ver ebilling/CHANGELOG.md." > RELEASE_NOTES.md
+          fi
+
+      - name: Crear release si no existe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.v.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "La release $TAG ya existe; nada que hacer."
+          else
+            gh release create "$TAG" \
+              --title "eBilling $TAG" \
+              --notes-file RELEASE_NOTES.md \
+              dist/ebilling-card.js dist/ebilling-power-flow.js
+          fi
