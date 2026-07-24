@@ -2,398 +2,422 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>eBilling · Simulador de factura de luz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>eBilling</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-icon">⚡</span>
-      <div>
-        <h1>eBilling</h1>
-        <p class="subtitle">Simulación en tiempo real de tu factura de luz</p>
-      </div>
-    </div>
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="dashboard">Simulación</button>
-      <button class="tab" data-view="detail">Detalle</button>
-      <button class="tab" data-view="tariffs">Tarifas</button>
-      <button class="tab" data-view="settings">Ajustes</button>
-    </nav>
-  </header>
+  <!-- Fondo dinámico según el momento del día y el tiempo -->
+  <div class="bg" id="bg" data-phase="day">
+    <div class="bg-sky"></div>
+    <div class="bg-sun"></div>
+    <div class="bg-stars"></div>
+    <div class="bg-clouds"></div>
+    <div class="bg-rain"></div>
+    <div class="bg-scrim"></div>
+  </div>
 
-  <main>
-    <!-- ================= DASHBOARD ================= -->
-    <section id="view-dashboard" class="view active">
-      <div class="toolbar">
-        <div class="period-nav">
-          <button id="prev-cycle" class="icon-btn" title="Ciclo anterior">‹</button>
-          <div id="period-label" class="period-label">—</div>
-          <button id="next-cycle" class="icon-btn" title="Ciclo siguiente">›</button>
+  <main class="app">
+    <!-- ===================== HOME ===================== -->
+    <section class="view active" id="view-home">
+      <header class="hero">
+        <div>
+          <h1 class="hero-title">Energía</h1>
+          <p class="hero-sub" id="home-sub">—</p>
         </div>
-        <div class="toolbar-right">
-          <label class="switch">
-            <input type="checkbox" id="projection-toggle">
-            <span>Proyección fin de ciclo</span>
-          </label>
-          <button id="cp-toggle" class="btn ghost">📅 Periodo</button>
-          <button id="refresh-btn" class="btn ghost">↻ Actualizar</button>
+        <div class="weather glass-soft" id="weather" title="Meteorología exterior">
+          <span class="weather-icon" id="weather-icon"></span>
+          <span class="weather-temp" id="weather-temp">—</span>
         </div>
-      </div>
+      </header>
 
-      <div id="custom-period" class="custom-period hidden">
-        <span class="cp-title">Periodo personalizado (escenario):</span>
-        <label>Inicio <input type="date" id="cp-start"></label>
-        <label>Fin <input type="date" id="cp-end"></label>
-        <button id="cp-apply" class="btn primary">Aplicar</button>
-        <button id="cp-clear" class="btn ghost">Volver al ciclo</button>
-        <span id="cp-error" class="hint error-text"></span>
-      </div>
-
-      <div id="error-banner" class="banner hidden"></div>
-      <div id="demo-banner" class="banner info hidden">
-        Estás viendo <strong>datos de demostración</strong>. Configura tu fuente de
-        datos real en <a href="#" id="goto-settings">Ajustes</a>.
-      </div>
-
-      <div class="stats-row" id="stats-row"></div>
-
-      <h2 class="section-title">Comparativa de tarifas</h2>
-      <div id="bills-grid" class="bills-grid"></div>
-
-      <h2 class="section-title">Consumo diario por periodo (calendario 2.0TD)</h2>
-      <div class="card chart-card">
-        <div class="legend">
-          <span><i class="dot punta"></i> Punta</span>
-          <span><i class="dot llano"></i> Llano</span>
-          <span><i class="dot valle"></i> Valle</span>
+      <section class="panel glass">
+        <div class="panel-head">
+          <h2>Flujo de energía</h2>
+          <span class="chip" id="flow-chip">en vivo</span>
         </div>
-        <div id="daily-chart" class="chart"></div>
-      </div>
-    </section>
-
-    <!-- ================= DETALLE ================= -->
-    <section id="view-detail" class="view">
-      <div class="toolbar">
-        <div class="period-nav">
-          <button id="d-prev" class="icon-btn" title="Ciclo anterior">‹</button>
-          <div id="d-period" class="period-label">—</div>
-          <button id="d-next" class="icon-btn" title="Ciclo siguiente">›</button>
-        </div>
-        <div class="toolbar-right">
-          <button id="dcp-toggle" class="btn ghost">📅 Periodo</button>
-          <button id="d-refresh" class="btn ghost">↻ Actualizar</button>
-        </div>
-      </div>
-      <div id="dcustom-period" class="custom-period hidden">
-        <span class="cp-title">Periodo personalizado (escenario):</span>
-        <label>Inicio <input type="date" id="dcp-start"></label>
-        <label>Fin <input type="date" id="dcp-end"></label>
-        <button id="dcp-apply" class="btn primary">Aplicar</button>
-        <button id="dcp-clear" class="btn ghost">Volver al ciclo</button>
-        <span id="dcp-error" class="hint error-text"></span>
-      </div>
-      <div id="d-error" class="banner hidden"></div>
-      <div id="d-demo" class="banner info hidden">
-        Datos de <strong>demostración</strong>. Configura tu fuente real en
-        <a href="#" id="d-goto-settings">Ajustes</a>.
-      </div>
-
-      <div class="stats-row" id="d-stats"></div>
-
-      <h2 class="section-title">
-        Consumo diario
-        <span class="hint" style="font-weight:400">· pulsa un día para ver el desglose por horas</span>
-      </h2>
-      <div class="card chart-card">
-        <div class="legend">
-          <span><i class="dot punta"></i> Punta</span>
-          <span><i class="dot llano"></i> Llano</span>
-          <span><i class="dot valle"></i> Valle</span>
-          <span><i class="dot" style="background:#f59f00"></i> Exportada</span>
-        </div>
-        <div id="d-daily" class="chart"></div>
-      </div>
-
-      <h2 class="section-title">Evolución acumulada del ciclo</h2>
-      <div class="card chart-card">
-        <div class="legend">
-          <span><i class="dot" style="background:#4a6cf7"></i> Importada acumulada</span>
-          <span><i class="dot" style="background:#f59f00"></i> Exportada acumulada</span>
-        </div>
-        <div id="d-cum-month" class="chart"></div>
-      </div>
-
-      <div id="d-hourly-wrap" class="hidden">
-        <h2 class="section-title" id="d-hourly-title">Desglose por horas</h2>
-        <div class="card chart-card">
-          <div id="d-hourly" class="chart"></div>
-        </div>
-        <div class="card chart-card">
-          <div class="legend">
-            <span><i class="dot" style="background:#4a6cf7"></i> Importada acumulada</span>
-            <span><i class="dot" style="background:#f59f00"></i> Exportada acumulada</span>
-          </div>
-          <div id="d-cum-day" class="chart"></div>
-        </div>
-        <div class="card table-card">
-          <table class="bill-table" id="d-hourly-table"></table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= TARIFAS ================= -->
-    <section id="view-tariffs" class="view">
-      <div class="toolbar">
-        <h2 class="section-title">Tarifas configuradas</h2>
-        <div class="toolbar-right">
-          <a class="btn ghost" href="api/tariffs/template.csv" download>⬇ Plantilla CSV</a>
-          <button id="import-csv-btn" class="btn ghost">⬆ Importar CSV</button>
-          <button id="add-tariff-btn" class="btn primary">+ Nueva tarifa</button>
-        </div>
-      </div>
-      <div id="import-status" class="hint"></div>
-      <div id="tariffs-list" class="tariffs-list"></div>
-    </section>
-
-    <!-- ================= AJUSTES ================= -->
-    <section id="view-settings" class="view">
-      <h2 class="section-title">Fuente de datos de consumo</h2>
-      <div class="card form-card">
-        <div class="field">
-          <label>Fuente</label>
-          <select id="s-source">
-            <option value="demo">Demostración (datos sintéticos)</option>
-            <option value="homeassistant">Home Assistant (estadísticas de energía)</option>
-            <option value="influxdb">InfluxDB</option>
-          </select>
-        </div>
-
-        <div id="ha-fields" class="subform hidden">
-          <div class="field">
-            <label>Sensor de energía consumida (kWh acumulados)</label>
-            <div class="row">
-              <select id="s-ha-entity"></select>
-              <button id="load-entities-btn" class="btn ghost">Buscar sensores</button>
-            </div>
-            <p class="hint">Debe ser un sensor de energía acumulada (p. ej. el que usas en el panel de Energía).</p>
-          </div>
-          <div class="field">
-            <label>Sensor de energía vertida / excedentes (opcional)</label>
-            <select id="s-ha-entity-export"></select>
-            <p class="hint">Necesario solo si alguna tarifa compensa excedentes (autoconsumo solar).</p>
-          </div>
-          <div id="ha-external" class="hidden">
-            <div class="field"><label>URL de Home Assistant</label><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></div>
-            <div class="field"><label>Token de acceso de larga duración</label><input id="s-ha-token" type="password"></div>
-          </div>
-        </div>
-
-        <div id="influx-fields" class="subform hidden">
-          <div class="grid2">
-            <div class="field"><label>Versión</label>
-              <select id="s-ifx-version"><option value="1">InfluxDB 1.x</option><option value="2">InfluxDB 2.x</option></select>
-            </div>
-            <div class="field"><label>URL</label><input id="s-ifx-url" placeholder="http://a0d7b954-influxdb:8086"></div>
-            <div class="field"><label>Base de datos / Bucket</label><input id="s-ifx-db"></div>
-            <div class="field"><label>Measurement</label><input id="s-ifx-measurement" placeholder="kWh"></div>
-            <div class="field"><label>entity_id consumo (tag)</label><input id="s-ifx-entity" placeholder="sensor.energia_total"></div>
-            <div class="field"><label>entity_id excedentes (tag, opcional)</label><input id="s-ifx-entity-export" placeholder="sensor.energia_vertida"></div>
-            <div class="field ifx-v2"><label>Organización</label><input id="s-ifx-org"></div>
-            <div class="field ifx-v2"><label>Token</label><input id="s-ifx-token" type="password"></div>
-            <div class="field ifx-v1"><label>Usuario</label><input id="s-ifx-user"></div>
-            <div class="field ifx-v1"><label>Contraseña</label><input id="s-ifx-pass" type="password"></div>
-          </div>
-        </div>
-      </div>
-
-      <h2 class="section-title">Contrato</h2>
-      <div class="card form-card">
-        <div class="grid2">
-          <div class="field"><label>Potencia contratada punta P1 (kW)</label><input id="s-p1" type="number" step="0.1" min="0"></div>
-          <div class="field"><label>Potencia contratada valle P2 (kW)</label><input id="s-p2" type="number" step="0.1" min="0"></div>
-          <div class="field"><label>Día de inicio del ciclo de facturación</label><input id="s-billing-day" type="number" min="1" max="28"></div>
-          <div class="field"><label>Zona horaria</label><input id="s-timezone" placeholder="Europe/Madrid"></div>
-        </div>
-        <div class="field">
-          <label>Festivos nacionales (MM-DD, separados por comas)</label>
-          <input id="s-holidays" placeholder="01-01, 01-06, 05-01...">
-          <p class="hint">Las tarifas pueden usarlos con el día «F» en sus horarios (en 2.0TD son valle todo el día).</p>
-        </div>
-      </div>
-
-      <h2 class="section-title">Sensores en Home Assistant</h2>
-      <div class="card form-card">
-        <label class="switch">
-          <input type="checkbox" id="s-export-sensors">
-          <span>Publicar sensores en Home Assistant (precio actual, coste del ciclo, proyección y mejor tarifa)</span>
-        </label>
-        <div class="field" style="max-width:280px">
-          <label>Intervalo de actualización (minutos)</label>
-          <input id="s-sensor-minutes" type="number" min="1" max="60">
-        </div>
-        <p class="hint">
-          Crea entidades <code>sensor.ebilling_*</code> vía la API de estados. Se
-          actualizan mientras el add-on está en marcha.
+        <div id="flow" class="flow"></div>
+        <p class="empty hidden" id="flow-empty">
+          Asigna tus sensores de potencia en <b>Ajustes → Flujo de energía</b>
+          para ver el diagrama en vivo.
         </p>
+      </section>
+
+      <section class="panel glass">
+        <div class="panel-head">
+          <h2>Resumen de energía</h2>
+          <span class="chip">Hoy</span>
+        </div>
+        <div class="summary" id="summary"></div>
+        <p class="empty hidden" id="summary-empty">
+          Asigna tus sensores de energía diaria en <b>Ajustes → Energía del día</b>.
+        </p>
+      </section>
+    </section>
+
+    <!-- ===================== BILLING ===================== -->
+    <section class="view" id="view-billing">
+      <header class="hero compact">
+        <div>
+          <h1 class="hero-title">Facturación</h1>
+          <p class="hero-sub" id="bill-sub">—</p>
+        </div>
+      </header>
+
+      <div class="segmented glass-soft" role="tablist">
+        <button class="seg active" data-sub="sim">Simulación</button>
+        <button class="seg" data-sub="detail">Detalle</button>
+        <button class="seg" data-sub="tariffs">Tarifas</button>
       </div>
 
-      <div class="toolbar">
-        <span id="settings-status" class="hint"></span>
-        <button id="save-settings-btn" class="btn primary">Guardar ajustes</button>
+      <!-- ---- Simulación ---- -->
+      <div class="subview active" id="sub-sim">
+        <div class="panel glass">
+          <div class="period-bar">
+            <button id="prev-cycle" class="icon-btn" title="Ciclo anterior">‹</button>
+            <div class="period-label" id="period-label">—</div>
+            <button id="next-cycle" class="icon-btn" title="Ciclo siguiente">›</button>
+          </div>
+          <div class="row-actions">
+            <label class="switch">
+              <input type="checkbox" id="projection-toggle" class="ios-switch">
+              <span>Proyección fin de ciclo</span>
+            </label>
+            <div class="spacer"></div>
+            <button id="cp-toggle" class="btn subtle">Periodo</button>
+            <button id="refresh-btn" class="btn subtle">Actualizar</button>
+          </div>
+          <div id="custom-period" class="custom-period hidden">
+            <div class="cp-fields">
+              <label>Inicio <input type="date" id="cp-start"></label>
+              <label>Fin <input type="date" id="cp-end"></label>
+            </div>
+            <div class="cp-actions">
+              <button id="cp-apply" class="btn primary">Fijar intervalo</button>
+              <button id="cp-clear" class="btn subtle">Volver al ciclo</button>
+            </div>
+            <span id="cp-error" class="error-text"></span>
+          </div>
+        </div>
+
+        <div id="error-banner" class="banner error hidden"></div>
+        <div id="demo-banner" class="banner hidden">
+          Estás viendo <b>datos de demostración</b>. Configura tu fuente real en
+          <a href="#" id="goto-settings">Ajustes</a>.
+        </div>
+
+        <div class="stats" id="stats-row"></div>
+
+        <h2 class="section-title">Comparativa de tarifas</h2>
+        <div id="bills-grid" class="bills"></div>
+
+        <h2 class="section-title">Consumo diario por periodo</h2>
+        <div class="panel glass chart-panel">
+          <div class="legend">
+            <span><i class="dot punta"></i>Punta</span>
+            <span><i class="dot llano"></i>Llano</span>
+            <span><i class="dot valle"></i>Valle</span>
+          </div>
+          <div id="daily-chart" class="chart"></div>
+        </div>
+      </div>
+
+      <!-- ---- Detalle ---- -->
+      <div class="subview" id="sub-detail">
+        <div class="panel glass">
+          <div class="period-bar">
+            <button id="d-prev" class="icon-btn" title="Ciclo anterior">‹</button>
+            <div class="period-label" id="d-period">—</div>
+            <button id="d-next" class="icon-btn" title="Ciclo siguiente">›</button>
+          </div>
+          <div class="row-actions">
+            <div class="spacer"></div>
+            <button id="d-refresh" class="btn subtle">Actualizar</button>
+          </div>
+        </div>
+        <div id="d-error" class="banner error hidden"></div>
+        <div class="stats" id="d-stats"></div>
+
+        <h2 class="section-title">Consumo diario <span class="soft">· pulsa un día</span></h2>
+        <div class="panel glass chart-panel">
+          <div class="legend">
+            <span><i class="dot punta"></i>Punta</span>
+            <span><i class="dot llano"></i>Llano</span>
+            <span><i class="dot valle"></i>Valle</span>
+            <span><i class="dot export"></i>Exportada</span>
+          </div>
+          <div id="d-daily" class="chart"></div>
+        </div>
+
+        <h2 class="section-title">Evolución acumulada</h2>
+        <div class="panel glass chart-panel">
+          <div class="legend">
+            <span><i class="dot imp"></i>Importada</span>
+            <span><i class="dot export"></i>Exportada</span>
+          </div>
+          <div id="d-cum-month" class="chart"></div>
+        </div>
+
+        <div id="d-hourly-wrap" class="hidden">
+          <h2 class="section-title" id="d-hourly-title">Desglose por horas</h2>
+          <div class="panel glass chart-panel"><div id="d-hourly" class="chart"></div></div>
+          <div class="panel glass chart-panel">
+            <div class="legend">
+              <span><i class="dot imp"></i>Importada</span>
+              <span><i class="dot export"></i>Exportada</span>
+            </div>
+            <div id="d-cum-day" class="chart"></div>
+          </div>
+          <div class="panel glass table-panel"><table class="table" id="d-hourly-table"></table></div>
+        </div>
+      </div>
+
+      <!-- ---- Tarifas ---- -->
+      <div class="subview" id="sub-tariffs">
+        <div class="row-actions panel glass">
+          <a class="btn subtle" href="api/tariffs/template.csv" download>Plantilla CSV</a>
+          <button id="import-csv-btn" class="btn subtle">Importar CSV</button>
+          <div class="spacer"></div>
+          <button id="add-tariff-btn" class="btn primary">Nueva tarifa</button>
+        </div>
+        <div id="import-status" class="soft"></div>
+        <div id="tariffs-list" class="bills"></div>
+      </div>
+    </section>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <section class="view" id="view-settings">
+      <header class="hero compact">
+        <div>
+          <h1 class="hero-title">Ajustes</h1>
+          <p class="hero-sub">Fuentes de datos, contrato y sensores</p>
+        </div>
+      </header>
+
+      <div class="panel glass group">
+        <div class="group-head">Fuente de datos de consumo</div>
+        <div class="list">
+          <label class="li">
+            <span class="li-label">Fuente</span>
+            <select id="s-source">
+              <option value="demo">Demostración</option>
+              <option value="homeassistant">Home Assistant</option>
+              <option value="influxdb">InfluxDB</option>
+            </select>
+          </label>
+          <div id="ha-fields" class="hidden">
+            <label class="li">
+              <span class="li-label">Energía consumida</span>
+              <select id="s-ha-entity"></select>
+            </label>
+            <label class="li">
+              <span class="li-label">Energía vertida</span>
+              <select id="s-ha-entity-export"></select>
+            </label>
+            <div class="li"><button id="load-entities-btn" class="btn subtle">Buscar sensores</button></div>
+            <div id="ha-external" class="hidden">
+              <label class="li"><span class="li-label">URL de HA</span><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></label>
+              <label class="li"><span class="li-label">Token</span><input id="s-ha-token" type="password"></label>
+            </div>
+          </div>
+          <div id="influx-fields" class="hidden">
+            <label class="li"><span class="li-label">Versión</span>
+              <select id="s-ifx-version"><option value="1">InfluxDB 1.x</option><option value="2">InfluxDB 2.x</option></select></label>
+            <label class="li"><span class="li-label">URL</span><input id="s-ifx-url"></label>
+            <label class="li"><span class="li-label">BD / bucket</span><input id="s-ifx-db"></label>
+            <label class="li"><span class="li-label">Measurement</span><input id="s-ifx-measurement"></label>
+            <label class="li"><span class="li-label">entity_id consumo</span><input id="s-ifx-entity"></label>
+            <label class="li"><span class="li-label">entity_id vertido</span><input id="s-ifx-entity-export"></label>
+            <label class="li ifx-v2"><span class="li-label">Organización</span><input id="s-ifx-org"></label>
+            <label class="li ifx-v2"><span class="li-label">Token</span><input id="s-ifx-token" type="password"></label>
+            <label class="li ifx-v1"><span class="li-label">Usuario</span><input id="s-ifx-user"></label>
+            <label class="li ifx-v1"><span class="li-label">Contraseña</span><input id="s-ifx-pass" type="password"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Flujo de energía <span class="soft">· potencia instantánea</span></div>
+        <div class="list" id="flow-sensor-list"></div>
+        <div class="li"><button id="load-grouped-btn" class="btn subtle">Buscar entidades</button></div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Energía del día <span class="soft">· resumen de la Home</span></div>
+        <div class="list" id="energy-sensor-list"></div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Meteorología</div>
+        <div class="list">
+          <label class="li"><span class="li-label">Entidad de tiempo</span><select id="s-weather"></select></label>
+          <label class="li"><span class="li-label">Temperatura exterior</span><select id="s-temp"></select></label>
+          <p class="li-note">Si dejas la entidad vacía se detecta la primera <code>weather.*</code>. El sensor de temperatura, si lo indicas, tiene prioridad.</p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Contrato</div>
+        <div class="list">
+          <label class="li"><span class="li-label">Potencia P1 (kW)</span><input id="s-p1" type="number" step="0.1" min="0"></label>
+          <label class="li"><span class="li-label">Potencia P2 (kW)</span><input id="s-p2" type="number" step="0.1" min="0"></label>
+          <label class="li"><span class="li-label">Día de inicio de ciclo</span><input id="s-billing-day" type="number" min="1" max="28"></label>
+          <label class="li"><span class="li-label">Zona horaria</span><input id="s-timezone"></label>
+          <label class="li col"><span class="li-label">Festivos (MM-DD)</span><input id="s-holidays"></label>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Sensores en Home Assistant</div>
+        <div class="list">
+          <label class="li">
+            <span class="li-label">Publicar sensores</span>
+            <input type="checkbox" id="s-export-sensors" class="ios-switch">
+          </label>
+          <label class="li"><span class="li-label">Intervalo (min)</span><input id="s-sensor-minutes" type="number" min="1" max="60"></label>
+          <p class="li-note">Crea entidades <code>sensor.ebilling_*</code> con el precio actual, el coste del ciclo, la proyección y la mejor tarifa.</p>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <span id="settings-status" class="soft"></span>
+        <button id="save-settings-btn" class="btn primary big">Guardar ajustes</button>
       </div>
     </section>
   </main>
 
-  <!-- ================= MODAL EDITOR DE TARIFA ================= -->
+  <!-- ===================== TAB BAR ===================== -->
+  <nav class="tabbar glass" role="tablist">
+    <button class="tab active" data-view="home">
+      <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10.5V20h11v-9.5"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="tab" data-view="billing">
+      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+      <span>Facturación</span>
+    </button>
+    <button class="tab" data-view="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>
+      <span>Ajustes</span>
+    </button>
+  </nav>
+
+  <!-- ===================== MODALES ===================== -->
   <div id="tariff-modal" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head">
+    <div class="sheet glass">
+      <div class="sheet-head">
         <h3 id="tariff-modal-title">Nueva tarifa</h3>
         <button class="icon-btn" id="close-tariff-modal">✕</button>
       </div>
-      <div class="modal-body">
+      <div class="sheet-body">
         <div class="grid2">
-          <div class="field"><label>Nombre</label><input id="t-name" placeholder="Plan Estable"></div>
-          <div class="field"><label>Compañía</label><input id="t-company" placeholder="Iberdrola"></div>
-          <div class="field"><label>Color</label><input id="t-color" type="color" value="#4a6cf7"></div>
+          <label class="field"><span>Nombre</span><input id="t-name"></label>
+          <label class="field"><span>Compañía</span><input id="t-company"></label>
+          <label class="field"><span>Color</span><input id="t-color" type="color" value="#4a6cf7"></label>
         </div>
 
         <h4>Término de energía</h4>
-        <div class="field">
-          <label>Estructura de la tarifa</label>
+        <label class="field"><span>Estructura</span>
           <select id="t-etype">
-            <option value="td3">3 tramos 2.0TD estándar (punta/llano/valle)</option>
-            <option value="custom">Tramos personalizados (1 a 6, horario libre)</option>
-            <option value="pvpc">PVPC — precio horario indexado (ESIOS)</option>
+            <option value="td3">3 tramos 2.0TD (punta/llano/valle)</option>
+            <option value="custom">Tramos personalizados (1 a 6)</option>
+            <option value="pvpc">PVPC indexado (ESIOS)</option>
           </select>
+        </label>
+        <div id="t-etype-td3" class="grid3">
+          <label class="field"><span>Punta €/kWh</span><input id="t-td3-punta" type="number" step="0.000001" min="0"></label>
+          <label class="field"><span>Llano €/kWh</span><input id="t-td3-llano" type="number" step="0.000001" min="0"></label>
+          <label class="field"><span>Valle €/kWh</span><input id="t-td3-valle" type="number" step="0.000001" min="0"></label>
         </div>
-
-        <div id="t-etype-td3">
-          <div class="grid3">
-            <div class="field"><label>Punta (€/kWh)</label><input id="t-td3-punta" type="number" step="0.000001" min="0"></div>
-            <div class="field"><label>Llano (€/kWh)</label><input id="t-td3-llano" type="number" step="0.000001" min="0"></div>
-            <div class="field"><label>Valle (€/kWh)</label><input id="t-td3-valle" type="number" step="0.000001" min="0"></div>
-          </div>
-        </div>
-
         <div id="t-etype-custom" class="hidden">
           <div id="t-periods" class="period-rows"></div>
-          <button class="btn ghost" id="t-add-period">+ Añadir tramo</button>
-          <p class="hint">
-            Horario: reglas «DÍAS HORAS» separadas por «|». Días: L M X J V S D y
-            F (festivo), con rangos (L-V). Horas con fin exclusivo: 10-14,18-22.
-            Deja el horario vacío en el tramo comodín (resto de horas). Para una
-            tarifa de precio único crea un solo tramo sin horario.
-          </p>
+          <button class="btn subtle" id="t-add-period">+ Añadir tramo</button>
+          <p class="li-note">Horario: reglas «DÍAS HORAS» separadas por «|». Días L M X J V S D y F (festivo), con rangos (L-V). Horas con fin exclusivo: 10-14,18-22. Vacío = resto de horas.</p>
         </div>
-
         <div id="t-etype-pvpc" class="hidden">
-          <div class="field" style="max-width:280px">
-            <label>Margen sobre PVPC (€/kWh)</label>
-            <input id="t-pvpc-margin" type="number" step="0.0001" value="0">
-          </div>
-          <p class="hint">Los precios horarios se descargan de ESIOS (REE) y se cachean.</p>
+          <label class="field"><span>Margen sobre PVPC (€/kWh)</span><input id="t-pvpc-margin" type="number" step="0.0001" value="0"></label>
         </div>
 
         <h4>Compensación de excedentes</h4>
-        <div class="field">
-          <label>Tipo</label>
+        <label class="field"><span>Tipo</span>
           <select id="t-surplus-type">
             <option value="none">Sin compensación</option>
-            <option value="flat">Precio fijo (€/kWh)</option>
-            <option value="schedule">Por tramos horarios</option>
+            <option value="flat">Precio fijo</option>
+            <option value="schedule">Por tramos</option>
           </select>
-        </div>
+        </label>
         <div id="t-surplus-flat" class="hidden">
-          <div class="field" style="max-width:280px">
-            <label>Precio de compensación (€/kWh)</label>
-            <input id="t-surplus-price" type="number" step="0.0001" min="0">
-          </div>
+          <label class="field"><span>Precio (€/kWh)</span><input id="t-surplus-price" type="number" step="0.0001" min="0"></label>
         </div>
         <div id="t-surplus-custom" class="hidden">
           <div id="t-surplus-periods" class="period-rows"></div>
-          <button class="btn ghost" id="t-add-surplus-period">+ Añadir tramo de excedentes</button>
+          <button class="btn subtle" id="t-add-surplus-period">+ Añadir tramo</button>
         </div>
-        <p class="hint">El abono se limita al importe del término de energía (compensación simplificada).</p>
         <div id="t-wallet-wrap" class="hidden">
-          <label class="switch" style="margin-top:4px">
-            <input type="checkbox" id="t-virtual-wallet">
-            <span>Monedero / batería virtual</span>
-          </label>
-          <p class="hint">
-            Acumula como saldo el valor de los excedentes que superan el tope
-            legal (la energía consumida de la red) en lugar de perderlo. Se
-            computa aparte y no reduce el importe de esta factura.
-          </p>
+          <label class="switch"><input type="checkbox" id="t-virtual-wallet"><span>Monedero / batería virtual</span></label>
+          <p class="li-note">Acumula como saldo el valor de los excedentes que superan el tope legal en lugar de perderlo.</p>
         </div>
 
         <h4>Término de potencia (€/kW·día)</h4>
         <div class="grid2">
-          <div class="field"><label>Punta P1</label><input id="t-power-p1" type="number" step="0.000001" min="0"></div>
-          <div class="field"><label>Valle P2</label><input id="t-power-p2" type="number" step="0.000001" min="0"></div>
+          <label class="field"><span>Punta P1</span><input id="t-power-p1" type="number" step="0.000001" min="0"></label>
+          <label class="field"><span>Valle P2</span><input id="t-power-p2" type="number" step="0.000001" min="0"></label>
         </div>
 
-        <h4>Cargos y otros conceptos</h4>
+        <h4>Cargos y servicios</h4>
         <div class="grid2">
-          <div class="field"><label>Financiación bono social (€/día)</label><input id="t-bono" type="number" step="0.000001" min="0"></div>
-          <div class="field"><label>Alquiler contador (€/día)</label><input id="t-meter" type="number" step="0.00001" min="0"></div>
-          <div class="field"><label>Servicios adicionales (€/mes)</label><input id="t-services" type="number" step="0.01" min="0"></div>
-          <div class="field"><label>Nombre del servicio</label><input id="t-services-name" placeholder="Mantenimiento"></div>
+          <label class="field"><span>Bono social (€/día)</span><input id="t-bono" type="number" step="0.000001" min="0"></label>
+          <label class="field"><span>Alquiler contador (€/día)</span><input id="t-meter" type="number" step="0.00001" min="0"></label>
+          <label class="field"><span>Servicios (€/mes)</span><input id="t-services" type="number" step="0.01" min="0"></label>
+          <label class="field"><span>Nombre del servicio</span><input id="t-services-name"></label>
         </div>
 
         <h4>Impuestos</h4>
         <div class="grid3">
-          <div class="field"><label>Impuesto electricidad (%)</label><input id="t-elec-tax" type="number" step="0.0000001" min="0"></div>
-          <div class="field"><label>IVA energía (%)</label><input id="t-vat-energy" type="number" step="0.1" min="0"></div>
-          <div class="field"><label>IVA servicios (%)</label><input id="t-vat-services" type="number" step="0.1" min="0"></div>
+          <label class="field"><span>Imp. electricidad %</span><input id="t-elec-tax" type="number" step="0.0000001" min="0"></label>
+          <label class="field"><span>IVA energía %</span><input id="t-vat-energy" type="number" step="0.1" min="0"></label>
+          <label class="field"><span>IVA servicios %</span><input id="t-vat-services" type="number" step="0.1" min="0"></label>
         </div>
       </div>
-      <div class="modal-foot">
-        <span id="tariff-error" class="hint error-text"></span>
-        <button class="btn ghost" id="cancel-tariff-btn">Cancelar</button>
-        <button class="btn primary" id="save-tariff-btn">Guardar tarifa</button>
+      <div class="sheet-foot">
+        <span id="tariff-error" class="error-text"></span>
+        <button class="btn subtle" id="cancel-tariff-btn">Cancelar</button>
+        <button class="btn primary" id="save-tariff-btn">Guardar</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= MODAL DETALLE FACTURA ================= -->
   <div id="bill-modal" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head">
+    <div class="sheet glass">
+      <div class="sheet-head">
         <h3 id="bill-modal-title">Detalle de factura</h3>
         <button class="icon-btn" id="close-bill-modal">✕</button>
       </div>
-      <div class="modal-body" id="bill-modal-body"></div>
+      <div class="sheet-body" id="bill-modal-body"></div>
     </div>
   </div>
 
-  <!-- ================= MODAL IMPORTAR CSV ================= -->
   <div id="import-modal" class="modal hidden">
-    <div class="modal-box">
-      <div class="modal-head">
+    <div class="sheet glass">
+      <div class="sheet-head">
         <h3>Importar tarifa desde CSV</h3>
         <button class="icon-btn" id="close-import-modal">✕</button>
       </div>
-      <div class="modal-body">
-        <p class="hint">
-          Pega el contenido de un CSV de tarifa o carga un archivo. Puedes
-          partir de la <a href="api/tariffs/template.csv" download>plantilla</a>
-          (separador <code>;</code> o <code>,</code>).
-        </p>
-        <div class="import-actions">
-          <button class="btn ghost" id="import-load-file">📄 Cargar archivo…</button>
+      <div class="sheet-body">
+        <p class="li-note">Pega el contenido del CSV o carga un archivo. Puedes partir de la
+          <a href="api/tariffs/template.csv" download>plantilla</a>.</p>
+        <div class="row-actions">
+          <button class="btn subtle" id="import-load-file">Cargar archivo…</button>
           <input type="file" id="import-csv-input" accept=".csv,text/csv" class="hidden">
-          <button class="btn ghost" id="import-clear">Limpiar</button>
+          <button class="btn subtle" id="import-clear">Limpiar</button>
         </div>
         <textarea id="import-textarea" class="csv-textarea" spellcheck="false"
-          placeholder="campo;valor&#10;nombre;Mi tarifa&#10;tipo_energia;tramos&#10;tramo_1_nombre;Punta&#10;tramo_1_precio;0.20&#10;tramo_1_horario;L-V 10-14,18-22&#10;..."></textarea>
+          placeholder="campo;valor&#10;nombre;Mi tarifa&#10;tipo_energia;tramos&#10;tramo_1_precio;0.20"></textarea>
       </div>
-      <div class="modal-foot">
-        <span id="import-error" class="hint error-text"></span>
-        <button class="btn ghost" id="cancel-import-btn">Cancelar</button>
+      <div class="sheet-foot">
+        <span id="import-error" class="error-text"></span>
+        <button class="btn subtle" id="cancel-import-btn">Cancelar</button>
         <button class="btn primary" id="do-import-btn">Importar</button>
       </div>
     </div>

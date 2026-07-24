@@ -1,5 +1,38 @@
 # eBilling — Documentación
 
+## La aplicación
+
+La interfaz está organizada en tres pestañas, con estética de app iOS
+(superficies translúcidas «glass») y fondo dinámico:
+
+- **Home** — el diagrama de **flujo de energía** en vivo (solar, red, batería y
+  casa) y debajo el **resumen de energía del día**: generación repartida en «a
+  la casa / a la batería / a la red» y consumo de la casa en «desde solar /
+  desde batería / desde la red», con barras y porcentajes.
+  El **fondo representa el momento del día** (noche, amanecer, día, atardecer,
+  a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
+  nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la
+  **temperatura exterior**.
+- **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
+  desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
+- **Ajustes** — todo lo configurable, agrupado: fuente de datos, sensores del
+  flujo, sensores de energía del día, meteorología, contrato y publicación de
+  sensores en Home Assistant.
+
+### Sensores que necesita la Home
+
+En **Ajustes** pulsa **Buscar entidades** y asigna:
+
+| Grupo | Sensores |
+|---|---|
+| Flujo de energía (W/kW) | producción solar, importación y exportación de red, carga y descarga de batería, consumo de la casa (opcional) y % de batería (opcional) |
+| Energía del día (kWh) | solar hoy, importada hoy, exportada hoy, carga hoy, descarga hoy |
+| Meteorología | entidad `weather.*` (si la dejas vacía se autodetecta) y, opcionalmente, un sensor de temperatura propio que tiene prioridad |
+
+El consumo de la casa se calcula por balance si no defines su sensor. El
+reparto del resumen atribuye a la generación lo vertido y lo que carga la
+batería, y el resto a la casa (mismo modelo que las apps de inversores).
+
 ## Primeros pasos
 
 Al arrancar, el add-on funciona en **modo demo** con datos sintéticos para que

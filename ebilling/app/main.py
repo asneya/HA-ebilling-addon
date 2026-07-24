@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 import billing
 import datasources
+import live
 import pvpc
 import sensors
 import storage
@@ -240,6 +241,33 @@ async def list_entities():
         raise HTTPException(502, str(err)) from err
     except Exception as err:  # pragma: no cover - errores de red
         raise HTTPException(502, f"No se pudo conectar con Home Assistant: {err}") from err
+
+
+@app.get("/api/entities/grouped")
+async def list_entities_grouped():
+    """Entidades de HA agrupadas por tipo, para los selectores de Ajustes."""
+    settings = storage.load()["settings"]
+    try:
+        states = await live.fetch_states(settings)
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        raise HTTPException(502, f"No se pudo conectar con Home Assistant: {err}") from err
+    return live.list_entities(states)
+
+
+@app.get("/api/live")
+async def get_live():
+    """Flujo de energía, resumen del día y meteorología para la Home."""
+    settings = storage.load()["settings"]
+    tz = _tz(settings)
+    try:
+        return await live.build(settings, datetime.now(tz))
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error leyendo el estado en vivo", exc_info=True)
+        raise HTTPException(502, f"No se pudo leer el estado de Home Assistant: {err}") from err
 
 
 # ---------------------------------------------------------------------------
