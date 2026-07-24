@@ -2,6 +2,26 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.15.0
+
+### Nuevo
+
+- **Pantalla «Energía»**: al pulsar el resumen de energía de la Home se abre una
+  vista de análisis con:
+  - Selector de rango **Día · Semana · Mes · Año · Total** y navegación al
+    periodo anterior.
+  - Selector de vista por iconos: **general, solar, casa, batería y red**.
+  - En **día**, curvas de **potencia (W)** cada 5 minutos con la serie de
+    **ayer** como comparación; en el resto, **energía (kWh)** por día, mes o
+    año en barras.
+  - **Leyenda interactiva**: cada serie se activa o desactiva y muestra el
+    total del periodo o, al **pulsar un punto del gráfico**, el valor de ese
+    instante (doble pulsación para deseleccionar).
+  - Tarjeta de **reparto del periodo** (origen del consumo o destino de la
+    generación) con barra apilada y porcentajes.
+- Nuevo endpoint `/api/series`, que lee las **estadísticas de largo plazo** de
+  Home Assistant y toma las unidades de los metadatos de cada estadística.
+
 ## 0.14.0
 
 ### Cambios
