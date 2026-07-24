@@ -28,7 +28,7 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 # Caché breve de series de consumo para no golpear la fuente en cada refresco.
 _cache: dict[str, tuple[float, list]] = {}
-CACHE_TTL = 300  # segundos
+CACHE_TTL = 60  # segundos (refresco casi en tiempo real)
 
 
 @asynccontextmanager
@@ -61,6 +61,48 @@ def _cycle_bounds(settings: dict, now: datetime) -> tuple[datetime, datetime]:
     else:
         end = start.replace(month=start.month + 1)
     return start, end
+
+
+def _resolve_period(
+    settings: dict,
+    now: datetime,
+    cycles_back: int,
+    start: str | None,
+    end: str | None,
+) -> tuple[datetime, datetime, bool]:
+    """Devuelve (inicio, fin, es_ciclo_actual) del periodo a calcular.
+
+    Prioridad: 1) start/end explícitos (uso puntual); 2) intervalo de trabajo
+    fijado por el usuario (settings.working_period), salvo que se esté
+    navegando por ciclos; 3) ciclo de facturación automático (con cycles_back).
+    """
+    tz = _tz(settings)
+    if start and end:
+        try:
+            return (
+                datetime.fromisoformat(start).replace(tzinfo=tz),
+                datetime.fromisoformat(end).replace(tzinfo=tz),
+                False,
+            )
+        except ValueError as err:
+            raise HTTPException(400, f"Fechas no válidas: {err}") from err
+
+    wp = settings.get("working_period")
+    if not cycles_back and wp and wp.get("start") and wp.get("end"):
+        try:
+            s = datetime.fromisoformat(wp["start"]).replace(tzinfo=tz)
+            # ``end`` es inclusivo: el límite del cálculo es el día siguiente.
+            e = datetime.fromisoformat(wp["end"]).replace(tzinfo=tz) + timedelta(days=1)
+            if e > s:
+                return s, e, False
+        except ValueError:
+            pass
+
+    cycle_start, cycle_end = _cycle_bounds(settings, now)
+    for _ in range(cycles_back):
+        cycle_end = cycle_start
+        cycle_start, _unused = _cycle_bounds(settings, cycle_start - timedelta(days=1))
+    return cycle_start, cycle_end, cycles_back == 0
 
 
 async def _consumption(settings: dict, start: datetime, end: datetime, tz, kind: str):
@@ -215,17 +257,7 @@ async def _run_simulation(
     tz = _tz(settings)
     now = datetime.now(tz)
 
-    if start and end:
-        try:
-            cycle_start = datetime.fromisoformat(start).replace(tzinfo=tz)
-            cycle_end = datetime.fromisoformat(end).replace(tzinfo=tz)
-        except ValueError as err:
-            raise HTTPException(400, f"Fechas no válidas: {err}") from err
-    else:
-        cycle_start, cycle_end = _cycle_bounds(settings, now)
-        for _ in range(cycles_back):
-            cycle_end = cycle_start
-            cycle_start, _unused = _cycle_bounds(settings, cycle_start - timedelta(days=1))
+    cycle_start, cycle_end, is_current = _resolve_period(settings, now, cycles_back, start, end)
 
     fetch_end = min(cycle_end, now)
     if fetch_end <= cycle_start:
@@ -312,7 +344,7 @@ async def _run_simulation(
             "end": cycle_end.isoformat(),
             "elapsed_days": round(elapsed_days, 2),
             "cycle_days": round(cycle_days, 2),
-            "is_current": not (start and end) and cycles_back == 0,
+            "is_current": is_current,
         },
         "consumption": {
             "kwh": {p: round(v, 2) for p, v in kwh_20td.items()},
@@ -349,17 +381,7 @@ async def _run_detail(
     tz = _tz(settings)
     now = datetime.now(tz)
 
-    if start and end:
-        try:
-            cycle_start = datetime.fromisoformat(start).replace(tzinfo=tz)
-            cycle_end = datetime.fromisoformat(end).replace(tzinfo=tz)
-        except ValueError as err:
-            raise HTTPException(400, f"Fechas no válidas: {err}") from err
-    else:
-        cycle_start, cycle_end = _cycle_bounds(settings, now)
-        for _ in range(cycles_back):
-            cycle_end = cycle_start
-            cycle_start, _unused = _cycle_bounds(settings, cycle_start - timedelta(days=1))
+    cycle_start, cycle_end, is_current = _resolve_period(settings, now, cycles_back, start, end)
 
     fetch_end = min(cycle_end, now)
     if fetch_end <= cycle_start:
@@ -434,7 +456,7 @@ async def _run_detail(
             "end": cycle_end.isoformat(),
             "elapsed_days": round(max((fetch_end - cycle_start).total_seconds() / 86400.0, 1 / 24), 2),
             "cycle_days": round((cycle_end - cycle_start).total_seconds() / 86400.0, 2),
-            "is_current": not (start and end) and cycles_back == 0,
+            "is_current": is_current,
         },
         "totals": {k: round(v, 2) for k, v in tot.items()},
         "days": daily,

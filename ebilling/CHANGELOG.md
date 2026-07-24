@@ -2,6 +2,16 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.7.1
+
+### Cambios
+
+- El **intervalo de trabajo** ahora **se guarda** y pasa a ser el periodo por
+  defecto de todos los cálculos (comparativa, detalle y sensores): la app
+  trabaja siempre sobre el último intervalo indicado y sobrevive a recargas y
+  reinicios. La vista se **refresca automáticamente cada minuto** (antes 5) y
+  el refresco alcanza también a la pestaña Detalle cuando está abierta.
+
 ## 0.7.0
 
 ### Nuevo
