@@ -2,6 +2,31 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.12.0
+
+### Corregido
+
+- **Regresión**: al rediseñar la tarjeta en 0.11.0 desaparecieron los **valores
+  de potencia por línea**. Vuelven, colocados sobre cada carril con halo.
+- Las constantes del módulo se declaraban en el **ámbito global** (`S`, `R`,
+  `CX`…), lo que podía colisionar con otras tarjetas del panel: todo el archivo
+  va ahora dentro de un IIFE y no se redefine si el recurso se carga dos veces.
+- Las **secciones del anillo** tenían un área de pulsación de 4,5 px (casi
+  imposible de acertar en móvil): ahora 20 px, además de foco por teclado.
+
+### Cambios
+
+- **Enrutado ortogonal** de las líneas, con carriles paralelos y esquinas
+  redondeadas, en lugar de arcos sueltos.
+- Las **líneas activas se colorean** con el color de su origen (las inactivas
+  quedan en gris tenue), de modo que el flujo se entiende sin mirar las bolas.
+- **Iconos rediseñados**: panel solar con retícula, torre de alta tensión, casa
+  en silueta y batería cuyo **relleno refleja el estado de carga**.
+- El color de la **casa** por defecto es neutro (hereda el del tema), en vez de
+  repetir el ámbar del solar.
+- Cifras con **numeración tabular**, mensaje de ayuda si no hay sensores
+  asignados, `aria-label` descriptivo y menos escrituras en `localStorage`.
+
 ## 0.11.0
 
 ### Cambios

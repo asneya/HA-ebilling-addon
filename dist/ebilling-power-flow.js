@@ -1,33 +1,64 @@
 /*
  * eBilling Power Flow — tarjeta Lovelace de flujo de energía fotovoltaica
- * Layout en cruz: Solar (arriba), Red (izq.), Casa (der.), Batería (abajo).
- * Una bola por línea, colores configurables, anillo de reparto diario en la
- * casa y tooltip al pulsar cada sección del anillo.
+ *
+ * Layout en cruz (Solar arriba · Red izq. · Casa der. · Batería abajo) con
+ * enrutado ortogonal de esquinas redondeadas, una bola por línea, líneas
+ * activas coloreadas, valores por línea, anillo de reparto diario en la casa
+ * con tooltip, e iconos vectoriales (la batería refleja su nivel de carga).
  *
  * Instalación:
  *   - HACS: recurso /hacsfiles/HA-ebilling-addon/ebilling-power-flow.js
  *   - Manual: copia a /config/www/ y añade /local/ebilling-power-flow.js
  */
 
-const PF_DEFAULT_COLORS = { solar: "#f6a609", grid: "#5b8def", battery: "#12b886", home: "#f6a609" };
+// Todo el módulo va dentro de un IIFE: al cargarse como recurso Lovelace
+// (script clásico) las constantes de nivel superior irían al ámbito global y
+// podrían colisionar con otras tarjetas.
+(() => {
+"use strict";
 
-// Geometría (viewBox 400x408). Nodos en cruz.
+// El color de la casa por defecto es neutro (hereda el color de texto del
+// tema), como en las apps de inversores; el resto son propios de cada fuente.
+const PF_DEFAULT_COLORS = { solar: "#f5a524", grid: "#6b8afd", battery: "#10b981", home: null };
+const PF_NEUTRAL = "var(--primary-text-color)";
+
+/* ---------------------------- geometría ---------------------------- */
+// viewBox 400x420. Nodos en los puntos medios de un cuadrado.
+const R = 46;                 // radio del nodo
+const CX = 200, CY = 212;     // centro del diagrama
+const LANE = 18;              // separación de carriles paralelos
+const CORNER = 16;            // radio de la esquina redondeada
+const EXT = Math.sqrt(R * R - LANE * LANE); // 42.33 → punto de anclaje al círculo
+
 const PF_NODES = {
-  solar: { x: 200, y: 80, r: 50, label: "Solar", labelPos: "top" },
-  grid: { x: 80, y: 204, r: 50, label: "Red", labelPos: "bottom" },
-  home: { x: 320, y: 204, r: 50, label: "Casa", labelPos: "bottom" },
-  battery: { x: 200, y: 328, r: 50, label: "Batería", labelPos: "bottom" },
+  solar: { x: CX, y: 76, label: "Solar", labelAbove: true },
+  grid: { x: 76, y: CY, label: "Red" },
+  home: { x: 324, y: CY, label: "Casa" },
+  battery: { x: CX, y: 348, label: "Batería" },
 };
-const PF_RING = 50; // radio del anillo (borde) de la casa
 
-// flujo: id, nodo origen (color), start[x,y], control[x,y], end[x,y]
+const LANE_TOP = CY - LANE, LANE_BOTTOM = CY + LANE;
+const LANE_LEFT = CX - LANE, LANE_RIGHT = CX + LANE;
+const S = PF_NODES.solar, G = PF_NODES.grid, H = PF_NODES.home, B = PF_NODES.battery;
+
+// id, nodo de origen (da el color), path, [x,y] de la etiqueta de valor
 const PF_FLOWS = [
-  ["solar_battery", "solar", [200, 130], [200, 204], [200, 278]],
-  ["grid_home", "grid", [130, 204], [200, 204], [270, 204]],
-  ["solar_grid", "solar", [165, 115], [150, 154], [115, 169]],
-  ["solar_home", "solar", [235, 115], [250, 154], [285, 169]],
-  ["grid_battery", "grid", [115, 239], [150, 254], [165, 293]],
-  ["battery_home", "battery", [235, 293], [250, 254], [285, 239]],
+  // rectas por el centro
+  ["solar_battery", "solar", `M${CX},${S.y + R} V${B.y - R}`, [CX, 162]],
+  ["grid_home", "grid", `M${G.x + R},${CY} H${H.x - R}`, [252, 206]],
+  // esquinas: salen en vertical del nodo, giran y entran en horizontal
+  ["solar_grid", "solar",
+    `M${LANE_LEFT},${S.y + EXT} V${LANE_TOP - CORNER} Q${LANE_LEFT},${LANE_TOP} ${LANE_LEFT - CORNER},${LANE_TOP} H${G.x + EXT}`,
+    [142, LANE_TOP - 8]],
+  ["solar_home", "solar",
+    `M${LANE_RIGHT},${S.y + EXT} V${LANE_TOP - CORNER} Q${LANE_RIGHT},${LANE_TOP} ${LANE_RIGHT + CORNER},${LANE_TOP} H${H.x - EXT}`,
+    [258, LANE_TOP - 8]],
+  ["grid_battery", "grid",
+    `M${G.x + EXT},${LANE_BOTTOM} H${LANE_LEFT - CORNER} Q${LANE_LEFT},${LANE_BOTTOM} ${LANE_LEFT},${LANE_BOTTOM + CORNER} V${B.y - EXT}`,
+    [142, LANE_BOTTOM + 15]],
+  ["battery_home", "battery",
+    `M${LANE_RIGHT},${B.y - EXT} V${LANE_BOTTOM + CORNER} Q${LANE_RIGHT},${LANE_BOTTOM} ${LANE_RIGHT + CORNER},${LANE_BOTTOM} H${H.x - EXT}`,
+    [258, LANE_BOTTOM + 15]],
 ];
 
 const POWER_SLOTS = [
@@ -47,6 +78,8 @@ const ENERGY_SLOTS = [
   ["battery_discharge_energy", "Descarga de batería hoy"],
 ];
 
+/* ---------------------------- utilidades ---------------------------- */
+
 function pfFmt(w) {
   const a = Math.abs(w);
   if (a >= 1000) return `${(w / 1000).toFixed(2)} kW`;
@@ -63,37 +96,60 @@ function pfPolar(cx, cy, r, deg) {
   return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
 }
 
-// Icono vectorial centrado exactamente en (cx, cy).
-function pfIcon(cx, cy, type, color) {
-  const s = 0.92;
-  const t = `translate(${(cx - 12 * s).toFixed(2)},${(cy - 12 * s).toFixed(2)}) scale(${s})`;
-  const wrap = (inner, fill) =>
-    `<g transform="${t}" fill="${fill || "none"}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`;
+// Iconos 24×24 centrados exactamente en (cx, cy).
+function pfIcon(cx, cy, type, color, scale = 1) {
+  const s = scale;
+  const open = `<g transform="translate(${(cx - 12 * s).toFixed(2)},${(cy - 12 * s).toFixed(2)}) scale(${s})" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">`;
   if (type === "solar") {
-    let rays = "";
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4;
-      rays += `<line x1="${(12 + Math.cos(a) * 7).toFixed(1)}" y1="${(12 + Math.sin(a) * 7).toFixed(1)}" x2="${(12 + Math.cos(a) * 10.5).toFixed(1)}" y2="${(12 + Math.sin(a) * 10.5).toFixed(1)}"/>`;
-    }
-    return wrap(`<circle cx="12" cy="12" r="4.5"/>${rays}`);
+    // Panel inclinado con retícula.
+    return open + `
+      <path d="M4.5,16.5 L8.2,7.5 H20 L17,16.5 Z"/>
+      <path d="M12.2,7.5 L9.6,16.5 M16.1,7.5 L13.3,16.5"/>
+      <path d="M6.6,12 H18.6"/>
+      <path d="M11,16.5 V19.5 M8.5,19.5 H13.5"/>
+    </g>`;
   }
-  if (type === "grid") return wrap(`<path d="M13 2 L5 13 h5 l-1 9 8-12 h-5 z"/>`, color);
-  if (type === "battery") return wrap(`<rect x="4" y="8" width="14" height="9" rx="1.6"/><line x1="20" y1="11" x2="20" y2="14"/>`);
-  return wrap(`<path d="M4 12 L12 5 L20 12"/><path d="M6.5 10.5 V20 H17.5 V10.5"/>`); // home
+  if (type === "grid") {
+    // Torre de alta tensión.
+    return open + `
+      <path d="M9.2,4.5 H14.8"/>
+      <path d="M12,4.5 L6.6,19.5 M12,4.5 L17.4,19.5"/>
+      <path d="M9.9,10.4 H14.1 M8.8,13.8 H15.2 M7.7,17 H16.3"/>
+    </g>`;
+  }
+  if (type === "battery") {
+    // Celda vertical; el relleno refleja el estado de carga (data-el).
+    return open + `
+      <path d="M10.2,3.6 H13.8"/>
+      <rect x="7.8" y="5.4" width="8.4" height="14.6" rx="1.8"/>
+      <rect data-el="bat_fill" x="9.3" y="18.5" width="5.4" height="0" rx="0.9" fill="${color}" stroke="none"/>
+    </g>`;
+  }
+  // Casa (silueta rellena).
+  return `<g transform="translate(${(cx - 12 * s).toFixed(2)},${(cy - 12 * s).toFixed(2)}) scale(${s})">
+    <path d="M12,4.2 L21,12.4 h-2.6 V20 H5.6 V12.4 H3 Z" fill="${color}"/>
+  </g>`;
 }
+
+/* ---------------------------- tarjeta ---------------------------- */
 
 class EBillingPowerFlow extends HTMLElement {
   setConfig(config) {
     this._config = Object.assign({ title: "Flujo de energía", entities: {}, colors: {} }, config || {});
     this._built = false;
     this._dur = {};
+    this._lastWrite = 0;
   }
   set hass(hass) { this._hass = hass; this._update(); }
   getCardSize() { return 8; }
   static getStubConfig() { return { title: "Flujo de energía", entities: {}, colors: {} }; }
   static getConfigElement() { return document.createElement("ebilling-power-flow-editor"); }
 
-  _color(key) { return (this._config.colors || {})[key] || PF_DEFAULT_COLORS[key]; }
+  _color(key) {
+    const c = (this._config.colors || {})[key];
+    if (c) return c;
+    return PF_DEFAULT_COLORS[key] || PF_NEUTRAL;
+  }
 
   _watts(key) {
     const id = (this._config.entities || {})[key];
@@ -173,6 +229,8 @@ class EBillingPowerFlow extends HTMLElement {
     };
   }
 
+  // Integración aproximada del consumo por fuente (respaldo si no hay
+  // sensores de energía). Se persiste como máximo cada 30 s.
   _accumulate(v) {
     let d;
     try { d = JSON.parse(localStorage.getItem("ebilling_pf_daily") || "{}"); } catch (_) { d = {}; }
@@ -186,16 +244,27 @@ class EBillingPowerFlow extends HTMLElement {
       d.battery += (v.battery_home || 0) * dtH;
     }
     d.ts = now;
-    try { localStorage.setItem("ebilling_pf_daily", JSON.stringify(d)); } catch (_) { /* noop */ }
+    if (now - this._lastWrite > 30000) {
+      this._lastWrite = now;
+      try { localStorage.setItem("ebilling_pf_daily", JSON.stringify(d)); } catch (_) { /* noop */ }
+    }
+    this._mem = d;
     return d;
+  }
+
+  _configured() {
+    const e = this._config.entities || {};
+    return Object.keys(e).some((k) => e[k]);
   }
 
   _update() {
     if (!this._hass || !this._config) return;
     if (!this._built) this._build();
+    const E = this._els;
+    if (E.hint) E.hint.style.display = this._configured() ? "none" : "";
+
     const f = this._flows();
     const mix = this._energyMix() || this._accumulate(f.values);
-    const E = this._els;
     const io = (v, energy) => (energy ? pfEnergyFmt(v) : pfFmt(v));
 
     if (E.solar) E.solar.textContent = pfFmt(f.solar);
@@ -211,15 +280,26 @@ class EBillingPowerFlow extends HTMLElement {
     const b = this._inOut("battery_charge_energy", "battery_discharge_energy", "battery_charge", "battery_discharge");
     if (E.bat_out) E.bat_out.textContent = `↓ ${io(b.tohome, b.energy)}`;
     if (E.bat_in) E.bat_in.textContent = `↑ ${io(b.feedin, b.energy)}`;
+
+    // Nivel de carga dibujado dentro del icono de la batería.
     const soc = this._watts("battery_soc");
     if (E.sub_battery) E.sub_battery.textContent = soc != null ? `Batería · ${Math.round(soc)}%` : "Batería";
+    if (E.bat_fill) {
+      const pct = soc != null ? Math.max(0, Math.min(100, soc)) : 0;
+      const h = (12.6 * pct) / 100;
+      E.bat_fill.setAttribute("height", h.toFixed(2));
+      E.bat_fill.setAttribute("y", (18.5 - h).toFixed(2));
+    }
 
+    // Líneas: colorear las activas y mover su bola; etiqueta con el valor.
     const THRESH = 5;
     for (const [id] of PF_FLOWS) {
-      const grp = E[`ball_${id}`];
       const w = f.values[id] || 0;
       const on = w > THRESH;
-      if (grp) grp.style.display = on ? "" : "none";
+      const live = E[`live_${id}`], ball = E[`ball_${id}`], lbl = E[`label_${id}`];
+      if (live) live.style.opacity = on ? "0.5" : "0";
+      if (ball) ball.style.display = on ? "" : "none";
+      if (lbl) { lbl.style.display = on ? "" : "none"; if (on) lbl.textContent = pfFmt(w); }
       if (on) {
         const dur = Math.max(0.6, Math.min(3.4, Math.round((3000 / w) * 5) / 5));
         if (this._dur[id] !== dur) {
@@ -229,20 +309,29 @@ class EBillingPowerFlow extends HTMLElement {
         }
       }
     }
+
     this._renderRing(mix);
+
+    if (E.svg) {
+      E.svg.setAttribute(
+        "aria-label",
+        `Solar ${pfFmt(f.solar)}. Casa ${pfEnergyFmt(homeTotal)} hoy, ${pfFmt(f.home)} ahora. ` +
+        `Red: ${io(g.feedin, g.energy)} exportada, ${io(g.tohome, g.energy)} importada. ` +
+        `Batería: ${io(b.feedin, b.energy)} carga, ${io(b.tohome, b.energy)} descarga.`
+      );
+    }
   }
 
   _renderRing(mix) {
     const el = this._els.ring;
     if (!el) return;
-    const cx = PF_NODES.home.x, cy = PF_NODES.home.y, r = PF_RING;
     const parts = [
       ["solar", "Solar", mix.solar, this._color("solar")],
       ["grid", "Red", mix.grid, this._color("grid")],
       ["battery", "Batería", mix.battery, this._color("battery")],
     ].filter((p) => p[2] > 0);
     const total = parts.reduce((s, p) => s + p[2], 0);
-    let svg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--primary-text-color)" stroke-opacity="0.12" stroke-width="4"/>`;
+    let svg = `<circle cx="${H.x}" cy="${H.y}" r="${R}" fill="none" stroke="${PF_NEUTRAL}" stroke-opacity="0.14" stroke-width="5"/>`;
     if (total > 0) {
       const gap = parts.length > 1 ? 5 : 0;
       let ang = 0;
@@ -251,11 +340,15 @@ class EBillingPowerFlow extends HTMLElement {
         const mid = ang + span / 2;
         const a0 = ang + gap / 2, a1 = ang + span - gap / 2;
         if (a1 > a0) {
-          const [x0, y0] = pfPolar(cx, cy, r, a0);
-          const [x1, y1] = pfPolar(cx, cy, r, a1);
+          const [x0, y0] = pfPolar(H.x, H.y, R, a0);
+          const [x1, y1] = pfPolar(H.x, H.y, R, a1);
           const large = a1 - a0 > 180 ? 1 : 0;
           const pct = Math.round((val / total) * 100);
-          svg += `<path class="pf-seg" style="cursor:pointer" data-key="${key}" data-name="${name}" data-val="${val.toFixed(0)}" data-pct="${pct}" data-mid="${mid.toFixed(1)}" d="M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}" fill="none" stroke="${color}" stroke-width="4.5" stroke-linecap="round"><title>${name}: ${pfEnergyFmt(val)} (${pct}%)</title></path>`;
+          const d = `M${x0.toFixed(2)},${y0.toFixed(2)} A${R},${R} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}`;
+          const ds = `data-key="${key}" data-name="${name}" data-val="${val.toFixed(0)}" data-pct="${pct}" data-mid="${mid.toFixed(1)}"`;
+          svg += `<path d="${d}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" pointer-events="none"/>`;
+          // Camino invisible más grueso: área de pulsación cómoda en móvil.
+          svg += `<path class="pf-seg" ${ds} d="${d}" fill="none" stroke="transparent" stroke-width="20" stroke-linecap="butt" tabindex="0" role="button" aria-label="${name}: ${pfEnergyFmt(val)}, ${pct}%"><title>${name}: ${pfEnergyFmt(val)} (${pct}%)</title></path>`;
         }
         ang += span;
       }
@@ -271,101 +364,102 @@ class EBillingPowerFlow extends HTMLElement {
     const tip = this._els.tip;
     if (!tip) return;
     this._tipSrc = ds.key;
-    const [px, py] = pfPolar(PF_NODES.home.x, PF_NODES.home.y, PF_RING + 22, parseFloat(ds.mid));
+    const [px, py] = pfPolar(H.x, H.y, R + 26, parseFloat(ds.mid));
     const text = `${ds.name} · ${pfEnergyFmt(parseFloat(ds.val))} · ${ds.pct}%`;
-    const w = text.length * 6.1 + 16, h = 22;
+    const w = text.length * 6.2 + 18, h = 24;
     const x = Math.max(6, Math.min(400 - w - 6, px - w / 2));
-    const y = Math.max(6, Math.min(408 - h - 6, py - 11));
+    const y = Math.max(6, Math.min(420 - h - 6, py - 12));
     tip.innerHTML =
-      `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="6" fill="var(--primary-text-color)"/>` +
-      `<text x="${(x + w / 2).toFixed(1)}" y="${(y + 15).toFixed(1)}" text-anchor="middle" fill="var(--card-background-color)" font-size="11" font-weight="600" font-family="inherit">${this._esc(text)}</text>`;
+      `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="7" fill="${PF_NEUTRAL}"/>` +
+      `<text x="${(x + w / 2).toFixed(1)}" y="${(y + 16).toFixed(1)}" text-anchor="middle" fill="var(--card-background-color)" font-size="11.5" font-weight="600" font-family="inherit">${this._esc(text)}</text>`;
     tip.style.display = "";
   }
   _hideTip() { this._tipSrc = null; if (this._els.tip) this._els.tip.style.display = "none"; }
-
-  _nodeLabel(n) {
-    if (n.labelPos === "top") return `<text class="pf-lbl" x="${n.x}" y="${n.y - n.r - 9}" text-anchor="middle">${n.label}</text>`;
-    return `<text class="pf-lbl" x="${n.x}" y="${n.y + n.r + 20}" text-anchor="middle" data-el="${n.label === "Batería" ? "sub_battery" : ""}">${n.label}</text>`;
-  }
 
   _build() {
     this._built = true;
     this._els = {};
     const card = document.createElement("ha-card");
-
-    let lines = "", balls = "";
-    for (const [id, from, s, c, e] of PF_FLOWS) {
-      const color = this._color(from);
-      const d = `M${s[0]},${s[1]} Q${c[0]},${c[1]} ${e[0]},${e[1]}`;
-      lines += `<path class="pf-base" d="${d}"/>`;
-      balls += `<g class="pf-ball" data-id="${id}" style="display:none">
-        <circle r="5.5" fill="${color}" style="filter:drop-shadow(0 0 3px ${color})"/>
-        <animateMotion data-id="${id}" dur="1.6s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1" keyTimes="0;1" path="${d}"/>
-      </g>`;
-    }
-
-    const S = PF_NODES.solar, G = PF_NODES.grid, H = PF_NODES.home, B = PF_NODES.battery;
-    const gc = this._color("grid"), bc = this._color("battery"), sc = this._color("solar"), hc = this._color("home");
+    const sc = this._color("solar"), gc = this._color("grid"), bc = this._color("battery"), hc = this._color("home");
     const muted = "var(--secondary-text-color)";
 
-    const solarNode = `<g>
-      <circle cx="${S.x}" cy="${S.y}" r="${S.r}" fill="var(--card-background-color)" stroke="${sc}" stroke-width="2.5"/>
-      ${pfIcon(S.x, S.y - 13, "solar", sc)}
-      <text class="pf-val" data-el="solar" x="${S.x}" y="${S.y + 16}" text-anchor="middle">—</text>
-    </g>`;
+    let lines = "", balls = "", labels = "";
+    for (const [id, from, d, pos] of PF_FLOWS) {
+      const color = this._color(from);
+      lines += `<path class="pf-base" d="${d}"/>`;
+      lines += `<path class="pf-live" data-el="live_${id}" d="${d}" stroke="${color}"/>`;
+      balls += `<g data-el="ball_${id}" style="display:none">
+        <circle r="5" fill="${color}" style="filter:drop-shadow(0 0 3px ${color})"/>
+        <animateMotion data-el="anim_${id}" dur="1.6s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1" keyTimes="0;1" path="${d}"/>
+      </g>`;
+      labels += `<text class="pf-flowval" data-el="label_${id}" x="${pos[0]}" y="${pos[1]}" text-anchor="middle" style="display:none"></text>`;
+    }
 
-    const homeNode = `<g>
-      <circle cx="${H.x}" cy="${H.y}" r="${H.r}" fill="var(--card-background-color)"/>
-      <g class="pf-ring"></g>
-      ${pfIcon(H.x, H.y - 15, "home", hc)}
-      <text class="pf-val" data-el="home_total" x="${H.x}" y="${H.y + 6}" text-anchor="middle">—</text>
-      <text class="pf-io" style="fill:${muted}" data-el="home_power" x="${H.x}" y="${H.y + 21}" text-anchor="middle">—</text>
-    </g>`;
+    const nodes = `
+      <g>
+        <circle cx="${S.x}" cy="${S.y}" r="${R}" fill="var(--card-background-color)" stroke="${sc}" stroke-width="2.5"/>
+        ${pfIcon(S.x, S.y - 12, "solar", sc, 1.05)}
+        <text class="pf-val" data-el="solar" x="${S.x}" y="${S.y + 19}" text-anchor="middle">—</text>
+      </g>
+      <g>
+        <circle cx="${G.x}" cy="${G.y}" r="${R}" fill="var(--card-background-color)" stroke="${gc}" stroke-width="2.5"/>
+        ${pfIcon(G.x, G.y - 19, "grid", gc, 0.95)}
+        <text class="pf-io" style="fill:${muted}" data-el="grid_in" x="${G.x}" y="${G.y + 6}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:${gc}" data-el="grid_out" x="${G.x}" y="${G.y + 22}" text-anchor="middle">—</text>
+      </g>
+      <g>
+        <circle cx="${B.x}" cy="${B.y}" r="${R}" fill="var(--card-background-color)" stroke="${bc}" stroke-width="2.5"/>
+        ${pfIcon(B.x, B.y - 19, "battery", bc, 0.95)}
+        <text class="pf-io" style="fill:${bc}" data-el="bat_out" x="${B.x}" y="${B.y + 6}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:${muted}" data-el="bat_in" x="${B.x}" y="${B.y + 22}" text-anchor="middle">—</text>
+      </g>
+      <g>
+        <circle cx="${H.x}" cy="${H.y}" r="${R}" fill="var(--card-background-color)"/>
+        <g class="pf-ring"></g>
+        ${pfIcon(H.x, H.y - 16, "home", hc, 0.95)}
+        <text class="pf-val" data-el="home_total" x="${H.x}" y="${H.y + 8}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:${muted}" data-el="home_power" x="${H.x}" y="${H.y + 24}" text-anchor="middle">—</text>
+      </g>`;
 
-    const gridNode = `<g>
-      <circle cx="${G.x}" cy="${G.y}" r="${G.r}" fill="var(--card-background-color)" stroke="${gc}" stroke-width="2.5"/>
-      ${pfIcon(G.x, G.y - 20, "grid", gc)}
-      <text class="pf-io" style="fill:${muted}" data-el="grid_in" x="${G.x}" y="${G.y + 3}" text-anchor="middle">—</text>
-      <text class="pf-io" style="fill:${gc}" data-el="grid_out" x="${G.x}" y="${G.y + 20}" text-anchor="middle">—</text>
-    </g>`;
-
-    const batNode = `<g>
-      <circle cx="${B.x}" cy="${B.y}" r="${B.r}" fill="var(--card-background-color)" stroke="${bc}" stroke-width="2.5"/>
-      ${pfIcon(B.x, B.y - 20, "battery", bc)}
-      <text class="pf-io" style="fill:${bc}" data-el="bat_out" x="${B.x}" y="${B.y + 3}" text-anchor="middle">—</text>
-      <text class="pf-io" style="fill:${muted}" data-el="bat_in" x="${B.x}" y="${B.y + 20}" text-anchor="middle">—</text>
-    </g>`;
-
-    const labels = [S, G, H, B].map((n) => this._nodeLabel(n)).join("");
+    const nodeLabels = [S, G, H, B].map((n) => {
+      const y = n.labelAbove ? n.y - R - 11 : n.y + R + 20;
+      const attr = n === B ? ` data-el="sub_battery"` : "";
+      return `<text class="pf-lbl"${attr} x="${n.x}" y="${y}" text-anchor="middle">${n.label}</text>`;
+    }).join("");
 
     card.innerHTML = `
       <style>${EBillingPowerFlow.styles}</style>
       <div class="pf-wrap">
         ${this._config.title ? `<div class="pf-title">${this._esc(this._config.title)}</div>` : ""}
-        <svg viewBox="0 0 400 408" class="pf-svg">
+        <svg data-el="svg" viewBox="0 0 400 420" class="pf-svg" role="img">
           ${lines}
           ${balls}
-          ${solarNode}${gridNode}${batNode}${homeNode}
+          ${nodes}
           ${labels}
+          ${nodeLabels}
           <g class="pf-tip" style="display:none"></g>
         </svg>
+        <div class="pf-hint" data-el="hint" style="display:none">
+          Asigna tus sensores de potencia en la configuración de la tarjeta.
+        </div>
       </div>`;
     this.innerHTML = "";
     this.appendChild(card);
 
-    for (const [id] of PF_FLOWS) {
-      this._els[`ball_${id}`] = card.querySelector(`.pf-ball[data-id="${id}"]`);
-      this._els[`anim_${id}`] = card.querySelector(`animateMotion[data-id="${id}"]`);
-    }
     card.querySelectorAll("[data-el]").forEach((el) => { if (el.dataset.el) this._els[el.dataset.el] = el; });
     this._els.ring = card.querySelector(".pf-ring");
     this._els.tip = card.querySelector(".pf-tip");
 
-    card.addEventListener("click", (e) => {
-      const seg = e.target.closest(".pf-seg");
+    const toggle = (seg) => {
       if (!seg) { this._hideTip(); return; }
       if (this._tipSrc === seg.dataset.key) this._hideTip();
       else this._setTip(seg.dataset);
+    };
+    card.addEventListener("click", (e) => toggle(e.target.closest(".pf-seg")));
+    card.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const seg = e.target.closest && e.target.closest(".pf-seg");
+      if (seg) { e.preventDefault(); toggle(seg); }
     });
   }
 
@@ -378,13 +472,22 @@ class EBillingPowerFlow extends HTMLElement {
 
 EBillingPowerFlow.styles = `
   .pf-wrap { padding: 14px 12px 12px; }
-  .pf-title { font-size: 1.1rem; font-weight: 600; color: var(--primary-text-color); padding: 2px 6px 8px; }
-  .pf-svg { width: 100%; height: auto; max-width: 460px; display: block; margin: 0 auto; }
-  .pf-base { fill: none; stroke: var(--primary-text-color); opacity: 0.14; stroke-width: 2.5; stroke-linecap: round; }
-  .pf-val { fill: var(--primary-text-color); font-size: 14px; font-weight: 700; font-family: inherit; }
-  .pf-io { font-size: 11px; font-weight: 600; font-family: inherit; }
+  .pf-title { font-size: 1.1rem; font-weight: 600; color: var(--primary-text-color); padding: 2px 6px 6px; }
+  .pf-svg { width: 100%; height: auto; max-width: 470px; display: block; margin: 0 auto;
+            font-variant-numeric: tabular-nums; }
+  .pf-base { fill: none; stroke: var(--primary-text-color); opacity: 0.13; stroke-width: 2.5; stroke-linecap: round; }
+  .pf-live { fill: none; stroke-width: 2.5; stroke-linecap: round; opacity: 0; transition: opacity .4s ease; }
+  .pf-val { fill: var(--primary-text-color); font-size: 15px; font-weight: 700; font-family: inherit; }
+  .pf-io { font-size: 11.5px; font-weight: 600; font-family: inherit; }
   .pf-lbl { fill: var(--secondary-text-color); font-size: 12px; font-family: inherit; }
-  @media (prefers-reduced-motion: reduce) { .pf-ball animateMotion { display: none; } }
+  .pf-flowval {
+    fill: var(--secondary-text-color); font-size: 10.5px; font-weight: 600; font-family: inherit;
+    paint-order: stroke; stroke: var(--card-background-color); stroke-width: 3.5px; stroke-linejoin: round;
+  }
+  .pf-seg:focus { outline: none; }
+  .pf-seg:focus-visible { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 2px; }
+  .pf-hint { font-size: 12px; color: var(--secondary-text-color); text-align: center; padding: 4px 10px 2px; }
+  @media (prefers-reduced-motion: reduce) { animateMotion { display: none; } }
 `;
 
 /* ------------------------- editor visual ------------------------- */
@@ -422,7 +525,7 @@ class EBillingPowerFlowEditor extends HTMLElement {
     const rows = rowsFor(POWER_SLOTS, power) + rowsFor(SOC_SLOTS, percent);
     const energyRows = rowsFor(ENERGY_SLOTS, energy);
     const colorRow = (key, label) => `
-      <div class="pfe-color"><input type="color" data-color="${key}" value="${(this._config.colors || {})[key] || PF_DEFAULT_COLORS[key]}"><span>${label}</span></div>`;
+      <div class="pfe-color"><input type="color" data-color="${key}" value="${(this._config.colors || {})[key] || PF_DEFAULT_COLORS[key] || "#9aa3b5"}"><span>${label}</span></div>`;
 
     this.innerHTML = `
       <style>
@@ -444,7 +547,7 @@ class EBillingPowerFlowEditor extends HTMLElement {
         <div class="pfe-h">Sensores de potencia (flujos)</div>
         ${rows}
         <div class="pfe-h">Sensores de energía diaria (anillo de la casa)</div>
-        <div class="pfe-note">Opcional. Si los defines, el anillo usa estos totales del día; si no, se calcula de forma aproximada.</div>
+        <div class="pfe-note">Opcional. Si los defines, el anillo y los totales usan estos valores del día; si no, se calculan de forma aproximada.</div>
         ${energyRows}
         <div class="pfe-h">Colores</div>
         <div class="pfe-colors">
@@ -479,15 +582,20 @@ class EBillingPowerFlowEditor extends HTMLElement {
   }
 }
 
-customElements.define("ebilling-power-flow", EBillingPowerFlow);
-customElements.define("ebilling-power-flow-editor", EBillingPowerFlowEditor);
+// Evita redefinir si el recurso se carga dos veces (caché/HACS + manual).
+if (!customElements.get("ebilling-power-flow")) {
+  customElements.define("ebilling-power-flow", EBillingPowerFlow);
+  customElements.define("ebilling-power-flow-editor", EBillingPowerFlowEditor);
 
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "ebilling-power-flow",
-  name: "eBilling — Flujo de energía",
-  description: "Diagrama animado del flujo de potencia entre solar, red, batería y casa.",
-  preview: true,
-});
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: "ebilling-power-flow",
+    name: "eBilling — Flujo de energía",
+    description: "Diagrama animado del flujo de potencia entre solar, red, batería y casa.",
+    preview: true,
+  });
 
-console.info("%c eBilling-power-flow %c v0.11 ", "background:#f6a609;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#12b886;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+  console.info("%c eBilling-power-flow %c v0.12 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+}
+
+})();
