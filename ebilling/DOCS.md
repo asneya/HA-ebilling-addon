@@ -16,8 +16,9 @@ La interfaz está organizada en tres pestañas, con estética de app iOS
 - **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
   desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
 - **Ajustes** — todo lo configurable, agrupado: fuente de datos, sensores del
-  flujo, sensores de energía del día, meteorología, contrato y publicación de
-  sensores en Home Assistant.
+  flujo, sensores de energía del día, meteorología, **tarifas**, contrato y
+  publicación de sensores en Home Assistant. Las tarifas se gestionan tanto
+  aquí como desde Facturación (es la misma lista).
 
 ### Sensores que necesita la Home
 
@@ -27,7 +28,7 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 |---|---|
 | Flujo de energía (W/kW) | producción solar, importación y exportación de red, carga y descarga de batería, consumo de la casa (opcional) y % de batería (opcional) |
 | Energía del día (kWh) | solar hoy, importada hoy, exportada hoy, carga hoy, descarga hoy |
-| Meteorología | entidad `weather.*` (si la dejas vacía se autodetecta) y, opcionalmente, un sensor de temperatura propio que tiene prioridad |
+| Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
 
 El consumo de la casa se calcula por balance si no defines su sensor. El
 reparto del resumen atribuye a la generación lo vertido y lo que carga la

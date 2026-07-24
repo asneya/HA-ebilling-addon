@@ -74,8 +74,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "battery_charge_energy": "",
         "battery_discharge_energy": "",
     },
-    # Meteorología del fondo de la Home. Vacío = autodetectar weather.*
-    "weather_entity": "",
+    # Meteorología del fondo de la Home: dos sensores independientes, uno con
+    # la condición (texto) y otro con la temperatura exterior.
+    "condition_sensor": "",
     "temperature_sensor": "",
     # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
     # fin inclusivo). Si está definido, es el periodo por defecto de todos los

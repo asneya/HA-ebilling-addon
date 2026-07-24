@@ -2,6 +2,22 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.14.0
+
+### Cambios
+
+- **Meteorología con sensores independientes**: la condición y la temperatura
+  exterior se toman de **dos sensores** que eliges en Ajustes, en lugar de una
+  entidad `weather.*`. El sensor de condición acepta los estados de HA
+  (`sunny`, `partlycloudy`, `rainy`…) o **texto en castellano** («Parcialmente
+  nuboso», «Lluvia débil», «Cielo despejado»…): se interpreta para elegir el
+  icono y el fondo.
+- **Las tarifas se gestionan desde los dos sitios**: la lista completa (crear,
+  editar, duplicar, CSV, eliminar) está ahora también en **Ajustes → Tarifas**,
+  además de en Facturación.
+- Al abrir **Ajustes** las entidades de Home Assistant se cargan solas, sin
+  tener que pulsar «Buscar entidades».
+
 ## 0.13.0
 
 ### Nuevo

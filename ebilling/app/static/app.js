@@ -66,17 +66,23 @@ function showSub(name) {
 
 /* ========================= HOME: meteorología y fondo ========================= */
 
-// Agrupa las condiciones de HA en las familias que usa el fondo.
-const WEATHER_GROUP = {
-  "sunny": "clear", "clear-night": "clear",
-  "partlycloudy": "partlycloudy", "windy": "partlycloudy", "windy-variant": "partlycloudy",
-  "cloudy": "cloudy", "exceptional": "cloudy",
-  "fog": "fog",
-  "rainy": "rainy", "snowy-rainy": "rainy", "hail": "rainy",
-  "pouring": "pouring",
-  "lightning": "lightning", "lightning-rainy": "lightning",
-  "snowy": "snowy",
-};
+/* El sensor de condición puede traer los estados de HA (`partlycloudy`) o
+   texto libre en castellano («Parcialmente nuboso»). Se normaliza a las
+   familias que usan el icono y el fondo. */
+function weatherFamily(raw) {
+  if (!raw) return "clear";
+  const s = String(raw).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const has = (...keys) => keys.some((k) => s.includes(k));
+  if (has("lightning", "thunder", "tormenta", "electric")) return "lightning";
+  if (has("pouring", "chubasc", "diluv", "heavy rain", "lluvia fuerte")) return "pouring";
+  if (has("rain", "lluvia", "llov", "drizzle", "llovizna", "shower")) return "rainy";
+  if (has("snow", "niev", "nieve", "hail", "granizo")) return "snowy";
+  if (has("fog", "niebla", "neblina", "mist", "bruma", "haze", "calima")) return "fog";
+  if (has("partlycloudy", "partly", "parcial", "poco nub", "intervalos nub")) return "partlycloudy";
+  if (has("cloud", "nub", "cubierto", "overcast")) return "cloudy";
+  if (has("wind", "viento")) return "partlycloudy";
+  return "clear";
+}
 
 function weatherIcon(condition, phase) {
   const night = phase === "night";
@@ -90,7 +96,7 @@ function weatherIcon(condition, phase) {
   const smallSun = `<circle cx="16.6" cy="7.4" r="2.8"/><path d="M16.6 2.6v1.4M21.4 7.4H20M19.9 4.1l-1 1M19.9 10.7l-1-1"/>`;
   const smallMoon = `<path d="M17.9 4.2a3.4 3.4 0 1 0 2 4.9 3.6 3.6 0 0 1-2-4.9Z"/>`;
 
-  switch (WEATHER_GROUP[condition] || "clear") {
+  switch (weatherFamily(condition)) {
     case "clear": return O + (night ? moon : sun) + `</svg>`;
     case "partlycloudy": return O + (night ? smallMoon : smallSun) + cloud + `</svg>`;
     case "cloudy": return O + cloud + `</svg>`;
@@ -126,14 +132,14 @@ function renderLive() {
   // Fondo y cabecera
   const bg = $("#bg");
   bg.dataset.phase = live.phase || "day";
-  bg.dataset.weather = WEATHER_GROUP[live.weather.condition] || "clear";
+  bg.dataset.weather = weatherFamily(live.weather.condition);
 
   const temp = live.weather.temperature;
   $("#weather-temp").textContent = temp != null ? `${Math.round(temp)}°` : "—";
   $("#weather-icon").innerHTML = weatherIcon(live.weather.condition, live.phase);
   $("#weather").title = live.weather.condition
     ? `${live.weather.condition} · ${PHASE_TEXT[live.phase] || ""}`
-    : "Configura la meteorología en Ajustes";
+    : "Asigna los sensores de condición y temperatura en Ajustes";
 
   const now = new Date(live.generated_at);
   $("#home-sub").textContent =
@@ -667,11 +673,15 @@ function describeTariff(t) {
   return n === 1 ? "Precio único" : `${n} tramos`;
 }
 
+// Se pinta en Facturación → Tarifas y también en Ajustes → Tarifas.
 function renderTariffsList() {
-  const list = $("#tariffs-list");
+  const targets = [$("#tariffs-list"), $("#tariffs-list-settings")].filter(Boolean);
   const tariffs = state.config?.tariffs || [];
-  if (!tariffs.length) { list.innerHTML = `<p class="empty">No hay tarifas. Crea la primera o importa un CSV.</p>`; return; }
-  list.innerHTML = tariffs.map((t) => {
+  if (!tariffs.length) {
+    targets.forEach((el) => { el.innerHTML = `<p class="empty">No hay tarifas. Crea la primera o importa un CSV.</p>`; });
+    return;
+  }
+  const html = tariffs.map((t) => {
     const e = t.energy || {};
     const chips = e.type === "pvpc"
       ? `<div class="price"><div class="pl">Energía</div><div class="pv">PVPC</div></div>`
@@ -699,9 +709,12 @@ function renderTariffsList() {
       </div>
     </div>`;
   }).join("");
-  list.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openTariffModal(b.dataset.edit)));
-  list.querySelectorAll("[data-clone]").forEach((b) => b.addEventListener("click", () => cloneTariff(b.dataset.clone)));
-  list.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => deleteTariff(b.dataset.del)));
+  targets.forEach((el) => {
+    el.innerHTML = html;
+    el.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => openTariffModal(b.dataset.edit)));
+    el.querySelectorAll("[data-clone]").forEach((b) => b.addEventListener("click", () => cloneTariff(b.dataset.clone)));
+    el.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", () => deleteTariff(b.dataset.del)));
+  });
 }
 
 function periodRow(container, period = {}) {
@@ -907,7 +920,7 @@ function renderSensorLists() {
   $("#energy-sensor-list").innerHTML = ENERGY_FIELDS.map(([key, label, kind]) => `
     <label class="li"><span class="li-label">${label}</span>
       <select data-energy="${key}">${optionsFor(kind, (s.energy_sensors || {})[key] || "")}</select></label>`).join("");
-  $("#s-weather").innerHTML = optionsFor("weather", s.weather_entity || "");
+  $("#s-condition").innerHTML = optionsFor("any", s.condition_sensor || "");
   $("#s-temp").innerHTML = optionsFor("temperature", s.temperature_sensor || "");
 }
 
@@ -941,7 +954,9 @@ function fillSettings() {
   $("#s-ha-entity-export").innerHTML = `<option value="">— ninguno —</option>` +
     (s.ha_entity_export ? `<option value="${esc(s.ha_entity_export)}" selected>${esc(s.ha_entity_export)}</option>` : "");
   renderSensorLists();
+  renderTariffsList();
   updateSourceVisibility();
+  ensureGroupedEntities();
 }
 
 function updateSourceVisibility() {
@@ -952,6 +967,16 @@ function updateSourceVisibility() {
   const v2 = $("#s-ifx-version").value === "2";
   $$(".ifx-v2").forEach((el) => el.classList.toggle("hidden", !v2));
   $$(".ifx-v1").forEach((el) => el.classList.toggle("hidden", v2));
+}
+
+// Carga silenciosa de entidades al abrir Ajustes: evita tener que pulsar
+// «Buscar entidades» para ver los desplegables poblados.
+async function ensureGroupedEntities() {
+  if (state.grouped) return;
+  try {
+    state.grouped = await api("entities/grouped");
+    renderSensorLists();
+  } catch (_) { /* sin conexión con HA: se mantiene el valor guardado */ }
 }
 
 async function loadGroupedEntities() {
@@ -1002,7 +1027,7 @@ function settingsFromForm() {
     sensor_update_minutes: parseInt($("#s-sensor-minutes").value, 10) || 5,
     flow_sensors: flow,
     energy_sensors: energy,
-    weather_entity: $("#s-weather").value,
+    condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
     influx: {
       version: parseInt($("#s-ifx-version").value, 10) || 2,
@@ -1105,6 +1130,8 @@ $("#t-add-period").addEventListener("click", () => periodRow($("#t-periods")));
 $("#t-add-surplus-period").addEventListener("click", () => periodRow($("#t-surplus-periods")));
 
 $("#import-csv-btn").addEventListener("click", openImportModal);
+$("#import-csv-btn-2").addEventListener("click", openImportModal);
+$("#add-tariff-btn-2").addEventListener("click", () => openTariffModal(null));
 $("#close-import-modal").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
 $("#cancel-import-btn").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
 $("#do-import-btn").addEventListener("click", doImport);
