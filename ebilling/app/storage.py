@@ -18,6 +18,10 @@ CONFIG_PATH = os.path.join(DATA_DIR, "ebilling.json")
 
 _lock = threading.Lock()
 
+# Ajustes cuyo valor es un diccionario: se combinan con los valores por
+# defecto al cargar y se actualizan por claves (no se reemplazan enteros).
+NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power")
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     "source": "demo",  # demo | homeassistant | influxdb
     "ha_entity": "",
@@ -52,6 +56,27 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     ],
     "export_sensors": True,
     "sensor_update_minutes": 5,
+    # Sensores del diagrama de flujo (potencia instantánea, W/kW) y del
+    # resumen de energía del día (kWh), usados por la pantalla Home.
+    "flow_sensors": {
+        "pv": "",
+        "grid_import": "",
+        "grid_export": "",
+        "battery_charge": "",
+        "battery_discharge": "",
+        "home": "",
+        "battery_soc": "",
+    },
+    "energy_sensors": {
+        "pv_energy": "",
+        "grid_import_energy": "",
+        "grid_export_energy": "",
+        "battery_charge_energy": "",
+        "battery_discharge_energy": "",
+    },
+    # Meteorología del fondo de la Home. Vacío = autodetectar weather.*
+    "weather_entity": "",
+    "temperature_sensor": "",
     # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
     # fin inclusivo). Si está definido, es el periodo por defecto de todos los
     # cálculos (comparativa, detalle y sensores). null = ciclo automático.
@@ -165,11 +190,16 @@ def load() -> dict[str, Any]:
         defaults = _default_config()
         settings = defaults["settings"]
         stored_settings = config.get("settings") or {}
-        stored_influx = dict(stored_settings.get("influx") or {})
+        stored_nested = {
+            key: dict(stored_settings.get(key) or {}) for key in NESTED_SETTINGS
+        }
         settings.update(stored_settings)
-        merged_influx = dict(defaults["settings"]["influx"])
-        merged_influx.update(stored_influx)
-        settings["influx"] = merged_influx
+        # Los diccionarios anidados se combinan con sus valores por defecto,
+        # para que las claves nuevas aparezcan tras una actualización.
+        for key in NESTED_SETTINGS:
+            merged = dict(defaults["settings"][key])
+            merged.update(stored_nested[key])
+            settings[key] = merged
         return {
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
@@ -193,8 +223,8 @@ def update_settings(patch: dict[str, Any]) -> dict[str, Any]:
     config = load()
     settings = config["settings"]
     for key, value in patch.items():
-        if key == "influx" and isinstance(value, dict):
-            settings.setdefault("influx", {}).update(value)
+        if key in NESTED_SETTINGS and isinstance(value, dict):
+            settings.setdefault(key, {}).update(value)
         else:
             settings[key] = value
     save(config)

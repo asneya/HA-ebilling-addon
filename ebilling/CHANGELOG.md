@@ -2,6 +2,31 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.13.0
+
+### Nuevo
+
+- **Rediseño completo de la aplicación** con estética de app web iOS
+  («glass»): superficies translúcidas, tipografía del sistema, hojas
+  modales y **barra de navegación inferior** con tres secciones.
+- **Home**: el diagrama de **flujo de energía en vivo** (leído ahora por el
+  propio add-on desde tus sensores de HA) y, debajo, el **resumen de energía
+  del día** con generación (a la casa / a la batería / a la red) y consumo de
+  la casa (desde solar / desde batería / desde la red), con barras apiladas y
+  porcentajes.
+- **Fondo dinámico** según el **momento del día** (noche, amanecer, día,
+  atardecer, a partir de `sun.sun`) y las **condiciones meteorológicas**
+  (nubes, lluvia, nieve, niebla), más **icono del tiempo y temperatura
+  exterior** en la cabecera, tomados de una entidad `weather.*` (autodetectada)
+  y, opcionalmente, de un sensor de temperatura propio.
+- **Facturación** agrupa el simulador, el detalle por día/hora y la gestión de
+  tarifas en un control segmentado.
+- **Ajustes** reorganizados en secciones tipo lista de iOS: fuente de datos,
+  sensores del flujo, sensores de energía del día, meteorología, contrato y
+  publicación de sensores.
+- Nuevo endpoint `/api/live` (flujos, resumen del día, tiempo y fase del día) y
+  `/api/entities/grouped` para los selectores de Ajustes.
+
 ## 0.12.0
 
 ### Corregido
