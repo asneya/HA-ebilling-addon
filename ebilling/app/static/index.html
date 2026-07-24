@@ -44,16 +44,78 @@
         </p>
       </section>
 
-      <section class="panel glass">
+      <section class="panel glass tappable" id="summary-panel" role="button" tabindex="0"
+               aria-label="Ver el detalle de energía">
         <div class="panel-head">
           <h2>Resumen de energía</h2>
           <span class="chip">Hoy</span>
+          <span class="disclosure">›</span>
         </div>
         <div class="summary" id="summary"></div>
         <p class="empty hidden" id="summary-empty">
           Asigna tus sensores de energía diaria en <b>Ajustes → Energía del día</b>.
         </p>
       </section>
+    </section>
+
+    <!-- ===================== ENERGÍA (detalle) ===================== -->
+    <section class="view" id="view-energy">
+      <header class="nav-head">
+        <button class="icon-btn" id="energy-back" aria-label="Volver">‹</button>
+        <h1 class="nav-title">Energía</h1>
+        <span class="nav-spacer"></span>
+      </header>
+
+      <div class="panel glass controls">
+        <div class="segmented glass-soft ranges" role="tablist">
+          <button class="seg active" data-range="day">Día</button>
+          <button class="seg" data-range="week">Semana</button>
+          <button class="seg" data-range="month">Mes</button>
+          <button class="seg" data-range="year">Año</button>
+          <button class="seg" data-range="total">Total</button>
+        </div>
+        <div class="period-bar">
+          <button class="icon-btn" id="e-prev" aria-label="Anterior">‹</button>
+          <div class="period-label" id="e-label">—</div>
+          <button class="icon-btn" id="e-next" aria-label="Siguiente">›</button>
+        </div>
+        <div class="viewtabs" role="tablist">
+          <button class="vt active" data-eview="overview" title="General" aria-label="General">
+            <svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-5 3 3 4-6"/></svg>
+          </button>
+          <button class="vt" data-eview="solar" title="Solar" aria-label="Solar">
+            <svg viewBox="0 0 24 24"><path d="M4.5 16.5 8.2 7.5H20l-3 9z"/><path d="M12.2 7.5 9.6 16.5M16.1 7.5l-2.8 9M6.6 12h12"/><path d="M11 16.5v3M8.5 19.5h5"/></svg>
+          </button>
+          <button class="vt" data-eview="home" title="Casa" aria-label="Casa">
+            <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/></svg>
+          </button>
+          <button class="vt" data-eview="battery" title="Batería" aria-label="Batería">
+            <svg viewBox="0 0 24 24"><path d="M10.2 3.6h3.6"/><rect x="7.8" y="5.4" width="8.4" height="14.6" rx="1.8"/></svg>
+          </button>
+          <button class="vt" data-eview="grid" title="Red" aria-label="Red">
+            <svg viewBox="0 0 24 24"><path d="M9.2 4.5h5.6"/><path d="M12 4.5 6.6 19.5M12 4.5l5.4 15"/><path d="M9.9 10.4h4.2M8.8 13.8h6.4M7.7 17h8.6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="e-error" class="banner error hidden"></div>
+
+      <div class="panel glass">
+        <div class="e-stamp" id="e-stamp">—</div>
+        <div class="e-legend" id="e-legend"></div>
+        <div class="e-chart-unit" id="e-unit">W</div>
+        <div id="e-chart" class="chart e-chart"></div>
+        <p class="empty hidden" id="e-empty">
+          Sin datos para este periodo. Comprueba los sensores en <b>Ajustes</b>.
+        </p>
+      </div>
+
+      <div class="panel glass hidden" id="e-breakdown-panel">
+        <div class="panel-head"><h2 id="e-breakdown-title">Reparto del periodo</h2></div>
+        <div class="sum-total"><b id="e-bd-total">—</b><span id="e-bd-unit">kWh</span></div>
+        <div class="sum-bar" id="e-bd-bar"></div>
+        <div class="e-bd-rows" id="e-bd-rows"></div>
+      </div>
     </section>
 
     <!-- ===================== BILLING ===================== -->

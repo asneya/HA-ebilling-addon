@@ -19,6 +19,7 @@ import datasources
 import live
 import pvpc
 import sensors
+import series
 import storage
 import tariffs as tariffs_mod
 
@@ -120,12 +121,12 @@ async def _consumption(settings: dict, start: datetime, end: datetime, tz, kind:
     cached = _cache.get(key)
     if cached and time.monotonic() - cached[0] < CACHE_TTL:
         return cached[1]
-    series = await datasources.get_hourly_consumption(settings, start, end, tz, kind)
-    _cache[key] = (time.monotonic(), series)
+    hourly = await datasources.get_hourly_consumption(settings, start, end, tz, kind)
+    _cache[key] = (time.monotonic(), hourly)
     if len(_cache) > 64:
         oldest = min(_cache, key=lambda k: _cache[k][0])
         _cache.pop(oldest, None)
-    return series
+    return hourly
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +255,27 @@ async def list_entities_grouped():
     except Exception as err:  # pragma: no cover - errores de red
         raise HTTPException(502, f"No se pudo conectar con Home Assistant: {err}") from err
     return live.list_entities(states)
+
+
+@app.get("/api/series")
+async def get_series(
+    view: str = Query("overview"),
+    range: str = Query("day"),
+    offset: int = Query(0, ge=-120, le=0),
+):
+    """Series para la pantalla Energía (día/semana/mes/año/total)."""
+    settings = storage.load()["settings"]
+    tz = _tz(settings)
+    try:
+        states = await live.fetch_states(settings)
+        return await series.build(
+            settings, states, view, range, offset, tz, datetime.now(tz)
+        )
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error construyendo las series", exc_info=True)
+        raise HTTPException(502, f"No se pudieron obtener las series: {err}") from err
 
 
 @app.get("/api/live")

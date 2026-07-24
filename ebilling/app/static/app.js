@@ -49,7 +49,9 @@ $$(".seg").forEach((seg) => seg.addEventListener("click", () => showSub(seg.data
 function showView(name) {
   state.view = name;
   document.body.dataset.view = name;
-  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
+  // «energy» es una pantalla apilada sobre Home: no tiene pestaña propia.
+  const tabFor = name === "energy" ? "home" : name;
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === tabFor));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (name === "home") loadLive();
@@ -319,6 +321,239 @@ function renderFlow(live) {
   const bf = $("#flow .bat-fill");
   if (bf) { bf.setAttribute("height", fill.toFixed(2)); bf.setAttribute("y", (18.5 - fill).toFixed(2)); }
 }
+
+/* ========================= ENERGÍA (pantalla de detalle) ========================= */
+
+const eState = { range: "day", view: "overview", offset: 0, data: null, hidden: new Set(), cursor: null };
+
+async function loadEnergy() {
+  const banner = $("#e-error");
+  banner.classList.add("hidden");
+  try {
+    eState.data = await api(`series?view=${eState.view}&range=${eState.range}&offset=${eState.offset}`);
+    eState.cursor = null;
+    renderEnergy();
+  } catch (err) {
+    banner.textContent = err.message;
+    banner.classList.remove("hidden");
+    $("#e-chart").innerHTML = "";
+  }
+}
+
+function fmtValue(v, unit) {
+  if (v == null) return "--";
+  if (unit === "W") {
+    return Math.abs(v) >= 1000 ? `${fmtNum.format(v / 1000)} kW` : `${Math.round(v)} W`;
+  }
+  return `${fmtNum.format(v)} kWh`;
+}
+
+const MESES_ABR = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+// Etiqueta del eje X. Se lee del propio ISO para respetar la zona horaria del
+// add-on (usar Date lo desplazaría a la del navegador).
+function xLabel(iso, range) {
+  if (range === "total") return iso;
+  if (range === "day") return iso.slice(11, 16);
+  const m = Number(iso.slice(5, 7)) - 1;
+  if (range === "year") return MESES_ABR[m] || "";
+  return `${Number(iso.slice(8, 10))} ${MESES_ABR[m] || ""}`;
+}
+
+// Marca de tiempo completa del punto seleccionado.
+function stampLabel(iso, range) {
+  if (range === "total") return iso;
+  const day = Number(iso.slice(8, 10));
+  const mes = MESES_ABR[Number(iso.slice(5, 7)) - 1] || "";
+  const year = iso.slice(0, 4);
+  if (range === "day") return `${day} ${mes} ${year}, ${iso.slice(11, 16)}`;
+  if (range === "year") return `${mes} ${year}`;
+  return `${day} ${mes} ${year}`;
+}
+
+function renderEnergy() {
+  const d = eState.data;
+  if (!d) return;
+  $("#e-label").textContent = d.label;
+  $("#e-next").disabled = !d.can_next;
+  $("#e-unit").textContent = d.unit;
+  $$(".seg[data-range]").forEach((s) => s.classList.toggle("active", s.dataset.range === eState.range));
+  $$(".vt").forEach((v) => v.classList.toggle("active", v.dataset.eview === eState.view));
+
+  const hasData = d.x.length && d.series.some((s) => s.values.some((v) => v != null));
+  $("#e-empty").classList.toggle("hidden", !!hasData);
+  $("#e-chart").classList.toggle("hidden", !hasData);
+
+  // Marca de tiempo: el punto seleccionado o el final del periodo.
+  const idx = eState.cursor;
+  $("#e-stamp").textContent =
+    idx != null && d.x[idx] ? stampLabel(d.x[idx], eState.range) : d.label;
+
+  renderEnergyLegend();
+  if (hasData) renderEnergyChart();
+  renderEnergyBreakdown();
+}
+
+function renderEnergyLegend() {
+  const d = eState.data;
+  const idx = eState.cursor;
+  $("#e-legend").innerHTML = d.series.map((s) => {
+    const off = eState.hidden.has(s.key);
+    // Con punto seleccionado se muestra su valor; si no, el total del periodo.
+    const atPoint = idx != null ? s.values[idx] : null;
+    const value = idx != null ? fmtValue(atPoint, d.unit) : fmtValue(s.total, d.unit);
+    const suffix = idx == null && s.total_label ? `<small>${s.total_label}</small>` : "";
+    return `
+      <button class="e-serie ${off ? "off" : ""}" data-serie="${esc(s.key)}"
+              aria-pressed="${!off}" title="Mostrar u ocultar ${esc(s.label)}">
+        <span class="n">${esc(s.label)}</span>
+        <span class="v">
+          <span class="check" style="background:${esc(s.color)}">${off ? "" : "✓"}</span>
+          <span class="num">${value}${suffix}</span>
+        </span>
+      </button>`;
+  }).join("");
+  $$("#e-legend [data-serie]").forEach((b) => b.addEventListener("click", () => {
+    const key = b.dataset.serie;
+    if (eState.hidden.has(key)) eState.hidden.delete(key); else eState.hidden.add(key);
+    renderEnergy();
+  }));
+}
+
+function renderEnergyChart() {
+  const d = eState.data;
+  const visible = d.series.filter((s) => !eState.hidden.has(s.key));
+  const W = 720, H = 300, padL = 52, padR = 12, padT = 14, padB = 30;
+  const values = visible.flatMap((s) => s.values.filter((v) => v != null));
+  const rawMax = Math.max(...values, 0.1) * 1.08;
+  // Paso redondeado para que el eje no muestre cifras arbitrarias.
+  const pow = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
+  const yStep = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((v) => v * 4 >= rawMax) || pow * 10;
+  const max = yStep * 4;
+  const n = d.x.length;
+  const X = (i) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
+  const Y = (v) => H - padB - (v / max) * (H - padT - padB);
+
+  let svg = "";
+  for (let i = 0; i <= 4; i++) {
+    const val = (max / 4) * i;
+    const y = Y(val);
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="currentColor" opacity="0.12"/>`;
+    svg += `<text x="${padL - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="currentColor" opacity="0.55">${fmtNum.format(val)}</text>`;
+  }
+
+  if (d.chart === "bar") {
+    const groups = visible.length || 1;
+    const slot = (W - padL - padR) / Math.max(n, 1);
+    const bw = Math.max(2, Math.min(22, (slot * 0.68) / groups));
+    visible.forEach((s, gi) => {
+      s.values.forEach((v, i) => {
+        if (v == null || v <= 0) return;
+        const x = padL + slot * i + slot / 2 - (groups * bw) / 2 + gi * bw;
+        const y = Y(v);
+        svg += `<rect class="bar-seg" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - padB - y).toFixed(1)}" rx="2.5" fill="${s.color}"><title>${xLabel(d.x[i], eState.range)} · ${esc(s.label)}: ${fmtValue(v, d.unit)}</title></rect>`;
+      });
+    });
+  } else {
+    visible.forEach((s) => {
+      let path = "", open = false;
+      s.values.forEach((v, i) => {
+        if (v == null) { open = false; return; }
+        path += `${open ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)} `;
+        open = true;
+      });
+      const dash = s.key === "yesterday" ? ` stroke-dasharray="5 4"` : "";
+      svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2"${dash} stroke-linejoin="round" stroke-linecap="round"/>`;
+    });
+  }
+
+  // Cursor: línea vertical con la etiqueta del punto.
+  const idx = eState.cursor;
+  if (idx != null && d.x[idx]) {
+    const x = d.chart === "bar"
+      ? padL + ((W - padL - padR) / Math.max(n, 1)) * (idx + 0.5)
+      : X(idx);
+    svg += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H - padB}" stroke="currentColor" opacity="0.55" stroke-width="1.4"/>`;
+    visible.forEach((s) => {
+      const v = s.values[idx];
+      if (v != null) svg += `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4" fill="${s.color}" stroke="var(--glass)" stroke-width="2"/>`;
+    });
+    const anchor = x > W - 90 ? "end" : "start";
+    svg += `<text class="e-cursor-label" x="${(x + (anchor === "end" ? -8 : 8)).toFixed(1)}" y="${padT + 12}" text-anchor="${anchor}">${esc(xLabel(d.x[idx], eState.range))}</text>`;
+  }
+
+  // Etiquetas del eje X (unas pocas, repartidas).
+  const step = Math.max(1, Math.ceil(n / 6));
+  d.x.forEach((iso, i) => {
+    if (i % step && i !== n - 1) return;
+    const x = d.chart === "bar" ? padL + ((W - padL - padR) / Math.max(n, 1)) * (i + 0.5) : X(i);
+    svg += `<text x="${x.toFixed(1)}" y="${H - 9}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">${esc(xLabel(iso, eState.range))}</text>`;
+  });
+
+  const el = $("#e-chart");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico de ${esc(eState.view)}">${svg}</svg>`;
+
+  // Selección de punto por pulsación o arrastre.
+  const svgEl = el.querySelector("svg");
+  const pick = (ev) => {
+    const rect = svgEl.getBoundingClientRect();
+    const px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left) * (W / rect.width);
+    let i;
+    if (d.chart === "bar") {
+      i = Math.floor((px - padL) / ((W - padL - padR) / Math.max(n, 1)));
+    } else {
+      i = Math.round(((px - padL) / (W - padL - padR)) * (n - 1));
+    }
+    i = Math.max(0, Math.min(n - 1, i));
+    if (i !== eState.cursor) { eState.cursor = i; renderEnergy(); }
+  };
+  svgEl.addEventListener("pointerdown", (ev) => {
+    pick(ev);
+    // La captura falla con punteros sintéticos o ya liberados: no es crítica.
+    try { svgEl.setPointerCapture(ev.pointerId); } catch (_) { /* noop */ }
+  });
+  svgEl.addEventListener("pointermove", (ev) => { if (ev.buttons) pick(ev); });
+  svgEl.addEventListener("dblclick", () => { eState.cursor = null; renderEnergy(); });
+}
+
+function renderEnergyBreakdown() {
+  const bd = eState.data.breakdown;
+  const panel = $("#e-breakdown-panel");
+  if (!bd || !bd.rows.length) { panel.classList.add("hidden"); return; }
+  panel.classList.remove("hidden");
+  $("#e-breakdown-title").textContent =
+    eState.view === "solar" ? "Reparto de la generación" : "Origen del consumo";
+  $("#e-bd-total").textContent = fmtNum.format(bd.total);
+  $("#e-bd-unit").textContent = bd.unit;
+  const total = bd.rows.reduce((s, r) => s + r.kwh, 0) || 1;
+  $("#e-bd-bar").innerHTML = bd.rows.filter((r) => r.kwh > 0)
+    .map((r) => `<i style="width:${(r.kwh / total) * 100}%;background:${esc(r.color)}"></i>`).join("");
+  $("#e-bd-rows").innerHTML = bd.rows.map((r) => `
+    <div class="e-bd-row">
+      <div class="l" style="color:${esc(r.color)}">${esc(r.label)}</div>
+      <div class="p">${r.pct}%</div>
+      <div class="k">${fmtNum.format(r.kwh)} kWh</div>
+    </div>`).join("");
+}
+
+function openEnergy() {
+  showView("energy");
+  loadEnergy();
+}
+
+$("#summary-panel").addEventListener("click", openEnergy);
+$("#summary-panel").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEnergy(); }
+});
+$("#energy-back").addEventListener("click", () => showView("home"));
+$$(".seg[data-range]").forEach((b) => b.addEventListener("click", () => {
+  eState.range = b.dataset.range; eState.offset = 0; loadEnergy();
+}));
+$$(".vt").forEach((b) => b.addEventListener("click", () => {
+  eState.view = b.dataset.eview; loadEnergy();
+}));
+$("#e-prev").addEventListener("click", () => { eState.offset -= 1; loadEnergy(); });
+$("#e-next").addEventListener("click", () => { if (eState.offset < 0) { eState.offset += 1; loadEnergy(); } });
 
 /* ========================= BILLING: simulación ========================= */
 

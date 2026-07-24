@@ -13,6 +13,15 @@ La interfaz está organizada en tres pestañas, con estética de app iOS
   a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
   nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la
   **temperatura exterior**.
+- **Energía** (al pulsar el resumen de la Home) — pantalla de análisis con
+  rangos **Día · Semana · Mes · Año · Total**, navegación al periodo anterior y
+  cinco vistas por iconos: **general, solar, casa, batería y red**. En el rango
+  de día se dibuja la **potencia (W)** con la curva de **ayer** como
+  comparación; en el resto, la **energía (kWh)** por día, mes o año. En la
+  leyenda puedes **activar y desactivar cada serie**, que muestra el total del
+  periodo o, si **pulsas un punto del gráfico**, el valor exacto de ese punto
+  (doble pulsación para quitar la selección). Debajo, el reparto del periodo
+  (origen del consumo o destino de la generación).
 - **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
   desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
 - **Ajustes** — todo lo configurable, agrupado: fuente de datos, sensores del
