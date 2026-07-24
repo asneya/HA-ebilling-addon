@@ -2,6 +2,17 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.8.1
+
+### Nuevo
+
+- La tarjeta `ebilling-power-flow` permite configurar **sensores de energía
+  diaria** (kWh) por fuente (producción solar, importada/exportada de red,
+  carga/descarga de batería). Cuando se definen, el **anillo de la casa** se
+  pinta con esos totales reales del día; si no, se mantiene el cálculo
+  aproximado en el navegador. El editor visual incluye ahora ese grupo de
+  sensores.
+
 ## 0.8.0
 
 ### Cambios
