@@ -136,15 +136,32 @@ entities:
   battery_discharge: sensor.descarga_bateria  # potencia de descarga
   home: sensor.consumo_casa             # opcional (si falta, se calcula)
   battery_soc: sensor.bateria_soc       # opcional (muestra el % de batería)
+colors:                                 # opcional (o con el picker del editor)
+  solar: '#f6a609'
+  grid: '#e5484d'
+  battery: '#12b886'
+  home: '#4a6cf7'
 ```
+
+Disposición: **solar arriba**, **casa en el centro**, **batería abajo a la
+izquierda** y **red abajo a la derecha**. En cada línea con potencia viaja
+**una sola bola** (más rápida cuanto mayor es la potencia) y una etiqueta con
+el valor.
+
+**Anillo de la casa**: alrededor del nodo de la casa se dibuja un donut que
+representa cuánta energía ha **consumido la casa hoy de cada fuente** (solar,
+red, batería), con el color de cada una.
 
 Notas:
 
 - Los sensores son de **potencia instantánea** (unidad `W` o `kW`; se detecta
   y se muestra en kW/W automáticamente).
+- Los **colores** de cada elemento son configurables (editor visual con
+  selector de color, o clave `colors` en YAML).
 - Si no tienes batería, deja `battery_charge`/`battery_discharge` sin asignar
   y esos flujos no aparecen. Igual con la exportación si no viertes a la red.
 - El **consumo de la casa** se calcula a partir del balance
   (solar + importada + descarga − exportada − carga) si no defines `home`.
-- La animación respeta `prefers-reduced-motion` (se detiene si el sistema
-  pide reducir el movimiento).
+- El anillo diario se **acumula en el navegador** (localStorage) integrando la
+  potencia mientras la tarjeta está visible; es orientativo y se reinicia cada
+  día. La animación respeta `prefers-reduced-motion`.

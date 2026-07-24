@@ -2,6 +2,21 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.8.0
+
+### Cambios
+
+- **Tarjeta `ebilling-power-flow` rediseñada** con nueva disposición (solar
+  arriba, casa en el centro, batería abajo-izquierda, red abajo-derecha):
+  - **Una sola bola** viajando por cada línea activa (antes eran varios
+    puntos), con velocidad proporcional a la potencia y etiqueta del valor.
+  - **Colores configurables** por elemento (selector de color en el editor
+    visual o clave `colors` en YAML).
+  - **Anillo en la casa** (donut) que muestra cuánta energía ha consumido la
+    casa hoy de cada fuente —solar, red, batería—, con su color. Se acumula en
+    el navegador mientras la tarjeta está visible (orientativo, se reinicia a
+    diario).
+
 ## 0.7.1
 
 ### Cambios
