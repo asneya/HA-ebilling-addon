@@ -52,6 +52,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     ],
     "export_sensors": True,
     "sensor_update_minutes": 5,
+    # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
+    # fin inclusivo). Si está definido, es el periodo por defecto de todos los
+    # cálculos (comparativa, detalle y sensores). null = ciclo automático.
+    "working_period": None,
 }
 
 # Tarifas de arranque: la de referencia extraída de una factura real de

@@ -189,11 +189,13 @@ detalle por día/hora deja ver exactamente dónde.
   completo y aplica los términos fijos sobre todos los días del ciclo.
 - Puedes navegar a ciclos anteriores con las flechas ‹ › y la vista se
   actualiza sola cada 5 minutos.
-- **Periodo personalizado (escenario)**: con el botón **📅 Periodo** puedes
-  fijar un inicio y un fin de ciclo cualesquiera y recalcular al instante la
-  comparativa (y el detalle) sobre ese rango. Útil para analizar escenarios o
-  cuadrar un periodo de facturación concreto. Pulsa **Volver al ciclo** para
-  regresar al ciclo automático.
+- **Intervalo de trabajo fijo**: con el botón **📅 Periodo** puedes fijar un
+  inicio y un fin cualesquiera. Ese intervalo **se guarda** y pasa a ser el
+  periodo por defecto de **todos** los cálculos (comparativa, detalle y también
+  los sensores publicados en Home Assistant): la app trabaja siempre sobre el
+  último intervalo que hayas indicado, y se **refresca automáticamente** (~cada
+  minuto) sobre él. Sobrevive a recargas y reinicios. Pulsa **Volver al ciclo**
+  para regresar al ciclo de facturación automático.
 
 ## Opciones del add-on
 

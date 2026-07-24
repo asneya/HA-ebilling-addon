@@ -10,35 +10,40 @@ const state = {
   detail: null,
   detailCyclesBack: 0,
   selectedDay: null,
-  customPeriod: null, // { startDate:'YYYY-MM-DD', endDate:'YYYY-MM-DD' }
 };
 
-// Construye la query de periodo: personalizado (escenario) o ciclo relativo.
-function periodQuery(base, cyclesBack) {
-  const cp = state.customPeriod;
-  if (cp) {
-    const [y, m, d] = cp.endDate.split("-").map(Number);
-    const endExcl = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-    return `${base}?start=${cp.startDate}T00:00:00&end=${endExcl}T00:00:00`;
-  }
-  return `${base}?cycles_back=${cyclesBack}`;
+// Intervalo de trabajo persistente (guardado en los ajustes del add-on).
+// { start:'YYYY-MM-DD', end:'YYYY-MM-DD' } (fin inclusivo) o null.
+function workingPeriod() {
+  return (state.config && state.config.settings && state.config.settings.working_period) || null;
 }
 
-function applyCustomPeriod(startId, endId, errId) {
+function reloadPeriodViews() {
+  loadSimulation();
+  if (state.detail !== null || $("#view-detail").classList.contains("active")) loadDetail();
+}
+
+async function applyCustomPeriod(startId, endId, errId) {
   const s = $(startId).value, e = $(endId).value;
   const err = $(errId);
   err.textContent = "";
   if (!s || !e) { err.textContent = "Indica inicio y fin."; return; }
   if (s >= e) { err.textContent = "El inicio debe ser anterior al fin."; return; }
-  state.customPeriod = { startDate: s, endDate: e };
-  loadSimulation();
-  if (state.detail !== null || $("#view-detail").classList.contains("active")) loadDetail();
+  try {
+    // Se guarda como intervalo de trabajo: pasa a ser el periodo por defecto
+    // de todos los cálculos (y de los sensores), y persiste entre recargas.
+    await api("settings", { method: "PUT", body: JSON.stringify({ working_period: { start: s, end: e } }) });
+    await reloadConfig();
+    reloadPeriodViews();
+  } catch (er) { err.textContent = er.message; }
 }
 
-function clearCustomPeriod() {
-  state.customPeriod = null;
-  loadSimulation();
-  if (state.detail !== null || $("#view-detail").classList.contains("active")) loadDetail();
+async function clearCustomPeriod() {
+  try {
+    await api("settings", { method: "PUT", body: JSON.stringify({ working_period: null }) });
+    await reloadConfig();
+    reloadPeriodViews();
+  } catch (er) { /* noop */ }
 }
 
 const fmtEUR = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -80,7 +85,7 @@ async function loadSimulation() {
   const banner = $("#error-banner");
   banner.classList.add("hidden");
   try {
-    state.simulation = await api(periodQuery("simulate", state.cyclesBack));
+    state.simulation = await api(`simulate?cycles_back=${state.cyclesBack}`);
     renderDashboard();
   } catch (err) {
     banner.textContent = err.message;
@@ -110,10 +115,10 @@ function renderDashboard() {
       day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
     });
   };
-  const custom = !!state.customPeriod;
+  const custom = !!workingPeriod();
   $("#period-label").textContent =
     `${fmtDay(sim.period.start)} → ${fmtDay(sim.period.end)}` +
-    (custom ? " · escenario" : sim.period.is_current ? " · ciclo actual" : "");
+    (custom ? " · intervalo fijo" : sim.period.is_current ? " · ciclo actual" : "");
   $("#prev-cycle").disabled = custom;
   $("#next-cycle").disabled = custom || state.cyclesBack === 0;
 
@@ -295,7 +300,7 @@ async function loadDetail() {
   const banner = $("#d-error");
   banner.classList.add("hidden");
   try {
-    state.detail = await api(periodQuery("detail", state.detailCyclesBack));
+    state.detail = await api(`detail?cycles_back=${state.detailCyclesBack}`);
     renderDetail();
   } catch (err) {
     banner.textContent = err.message;
@@ -324,10 +329,10 @@ function renderDetail() {
   const d = state.detail;
   if (!d) return;
   $("#d-demo").classList.toggle("hidden", d.source !== "demo");
-  const custom = !!state.customPeriod;
+  const custom = !!workingPeriod();
   $("#d-period").textContent =
     periodLabelISO(d.period.start, d.period.end) +
-    (custom ? " · escenario" : d.period.is_current ? " · ciclo actual" : "");
+    (custom ? " · intervalo fijo" : d.period.is_current ? " · ciclo actual" : "");
   $("#d-prev").disabled = custom;
   $("#d-next").disabled = custom || state.detailCyclesBack === 0;
 
@@ -942,17 +947,17 @@ $("#goto-settings").addEventListener("click", (e) => { e.preventDefault(); showV
 
 // Periodo personalizado (escenario) — prefill con el periodo mostrado.
 function prefillCustom(startId, endId) {
+  const wp = workingPeriod();
+  if (wp) {
+    $(startId).value = wp.start;
+    $(endId).value = wp.end;
+    return;
+  }
   const sim = state.simulation || state.detail;
   if (sim && sim.period) {
-    if (!$(startId).value) $(startId).value = sim.period.start.slice(0, 10);
-    if (!$(endId).value) {
-      const [y, m, d] = sim.period.end.slice(0, 10).split("-").map(Number);
-      $(endId).value = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
-    }
-  }
-  if (state.customPeriod) {
-    $(startId).value = state.customPeriod.startDate;
-    $(endId).value = state.customPeriod.endDate;
+    $(startId).value = sim.period.start.slice(0, 10);
+    const [y, m, d] = sim.period.end.slice(0, 10).split("-").map(Number);
+    $(endId).value = new Date(Date.UTC(y, m - 1, d - 1)).toISOString().slice(0, 10);
   }
 }
 $("#cp-toggle").addEventListener("click", () => {
@@ -1022,6 +1027,10 @@ $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
     return;
   }
   await loadSimulation();
-  // Refresco automático cada 5 minutos («tiempo real»).
-  setInterval(loadSimulation, 5 * 60 * 1000);
+  // Refresco automático (casi en tiempo real) sobre el intervalo vigente,
+  // actualizando la vista que esté abierta.
+  setInterval(() => {
+    loadSimulation();
+    if ($("#view-detail").classList.contains("active")) loadDetail();
+  }, 60 * 1000);
 })();
