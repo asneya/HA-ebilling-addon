@@ -75,6 +75,13 @@ function pfFmt(w) {
   return `${Math.round(w)} W`;
 }
 
+function pfEnergyFmt(wh) {
+  const k = wh / 1000;
+  if (Math.abs(k) >= 100) return `${Math.round(k)} kWh`;
+  if (Math.abs(k) >= 1) return `${k.toFixed(2)} kWh`;
+  return `${Math.round(wh)} Wh`;
+}
+
 function pfPolar(cx, cy, r, deg) {
   const rad = ((deg - 90) * Math.PI) / 180;
   return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
@@ -163,6 +170,20 @@ class EBillingPowerFlow extends HTMLElement {
     return { solar: rem, grid: Math.max(GI - gToB, 0), battery: BD };
   }
 
+  // Totales in (feed-in, ←) / out (hacia la casa, →) de red o batería.
+  // Usa energía diaria si está configurada; si no, potencia instantánea.
+  _inOut(feedEnergyKey, homeEnergyKey, feedPowerKey, homePowerKey) {
+    const fe = this._energy(feedEnergyKey), he = this._energy(homeEnergyKey);
+    if (fe != null || he != null) {
+      return { feedin: Math.max(fe || 0, 0), tohome: Math.max(he || 0, 0), energy: true };
+    }
+    return {
+      feedin: Math.max(this._watts(feedPowerKey) || 0, 0),
+      tohome: Math.max(this._watts(homePowerKey) || 0, 0),
+      energy: false,
+    };
+  }
+
   _flows() {
     const pv = Math.max(this._watts("pv") || 0, 0);
     const gi = Math.max(this._watts("grid_import") || 0, 0);
@@ -222,20 +243,28 @@ class EBillingPowerFlow extends HTMLElement {
     // Anillo: usa los sensores de energía diaria si están; si no, integra la
     // potencia en el navegador (aproximado).
     const mix = this._energyMix() || this._accumulate(f.values);
+    const E = this._els;
+    const io = (v, energy) => (energy ? pfEnergyFmt(v) : pfFmt(v));
 
-    for (const key of Object.keys(PF_NODES)) {
-      const n = f.nodes[key];
-      if (this._els[`val_${key}`]) this._els[`val_${key}`].textContent = pfFmt(n.power);
-      const sub = this._els[`sub_${key}`];
-      if (sub) {
-        if (key === "grid") sub.textContent = n.dir === "in" ? "importa" : n.dir === "out" ? "exporta" : PF_NODES.grid.label;
-        else if (key === "battery") {
-          const soc = this._watts("battery_soc");
-          const st = n.dir === "in" ? "carga" : n.dir === "out" ? "descarga" : PF_NODES.battery.label;
-          sub.textContent = soc != null ? `${st} · ${Math.round(soc)}%` : st;
-        }
-      }
-    }
+    // Solar: producción instantánea.
+    if (E.solar) E.solar.textContent = pfFmt(f.nodes.solar.power);
+
+    // Casa: total consumido hoy (principal) + potencia instantánea (debajo).
+    const homeTotal = (mix.solar || 0) + (mix.grid || 0) + (mix.battery || 0);
+    if (E.home_total) E.home_total.textContent = pfEnergyFmt(homeTotal);
+    if (E.home_power) E.home_power.textContent = pfFmt(f.nodes.home.power);
+
+    // Red: ← feed-in (exporta) · → hacia la casa (importa).
+    const g = this._inOut("grid_export_energy", "grid_import_energy", "grid_export", "grid_import");
+    if (E.grid_in) E.grid_in.textContent = `← ${io(g.feedin, g.energy)}`;
+    if (E.grid_out) E.grid_out.textContent = `${io(g.tohome, g.energy)} →`;
+
+    // Batería: ← carga · → hacia la casa (descarga). SOC en la etiqueta.
+    const b = this._inOut("battery_charge_energy", "battery_discharge_energy", "battery_charge", "battery_discharge");
+    if (E.bat_in) E.bat_in.textContent = `← ${io(b.feedin, b.energy)}`;
+    if (E.bat_out) E.bat_out.textContent = `${io(b.tohome, b.energy)} →`;
+    const soc = this._watts("battery_soc");
+    if (E.sub_battery) E.sub_battery.textContent = soc != null ? `Batería · ${Math.round(soc)}%` : "Batería";
 
     const THRESH = 5;
     for (const [id] of PF_FLOWS) {
@@ -266,28 +295,57 @@ class EBillingPowerFlow extends HTMLElement {
     if (!el) return;
     const cx = PF_NODES.home.x, cy = PF_NODES.home.y, r = PF_HOME_RING;
     const parts = [
-      ["solar", mix.solar, this._color("solar")],
-      ["grid", mix.grid, this._color("grid")],
-      ["battery", mix.battery, this._color("battery")],
-    ].filter((p) => p[1] > 0);
-    const total = parts.reduce((s, p) => s + p[1], 0);
+      ["solar", "Solar", mix.solar, this._color("solar")],
+      ["grid", "Red", mix.grid, this._color("grid")],
+      ["battery", "Batería", mix.battery, this._color("battery")],
+    ].filter((p) => p[2] > 0);
+    const total = parts.reduce((s, p) => s + p[2], 0);
     let svg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--primary-text-color)" stroke-opacity="0.10" stroke-width="7"/>`;
     if (total > 0) {
       const gap = parts.length > 1 ? 4 : 0;
       let ang = 0;
-      for (const [, val, color] of parts) {
+      for (const [key, name, val, color] of parts) {
         const span = (val / total) * 360;
+        const mid = ang + span / 2;
         const a0 = ang + gap / 2, a1 = ang + span - gap / 2;
         if (a1 > a0) {
           const [x0, y0] = pfPolar(cx, cy, r, a0);
           const [x1, y1] = pfPolar(cx, cy, r, a1);
           const large = a1 - a0 > 180 ? 1 : 0;
-          svg += `<path d="M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round"/>`;
+          const pct = Math.round((val / total) * 100);
+          svg += `<path class="pf-seg" style="cursor:pointer" data-key="${key}" data-name="${name}" data-val="${val.toFixed(0)}" data-pct="${pct}" data-mid="${mid.toFixed(1)}" d="M${x0.toFixed(2)},${y0.toFixed(2)} A${r},${r} 0 ${large} 1 ${x1.toFixed(2)},${y1.toFixed(2)}" fill="none" stroke="${color}" stroke-width="7" stroke-linecap="round"><title>${name}: ${pfEnergyFmt(val)} (${pct}%)</title></path>`;
         }
         ang += span;
       }
     }
     el.innerHTML = svg;
+
+    // Refresca el tooltip abierto (si su sección sigue existiendo).
+    if (this._tipSrc) {
+      const seg = el.querySelector(`.pf-seg[data-key="${this._tipSrc}"]`);
+      if (seg) this._setTip(seg.dataset); else this._hideTip();
+    }
+  }
+
+  _setTip(ds) {
+    const tip = this._els.tip;
+    if (!tip) return;
+    this._tipSrc = ds.key;
+    const cx = PF_NODES.home.x, cy = PF_NODES.home.y;
+    const [px, py] = pfPolar(cx, cy, PF_HOME_RING + 20, parseFloat(ds.mid));
+    const text = `${ds.name} · ${pfEnergyFmt(parseFloat(ds.val))} · ${ds.pct}%`;
+    const w = text.length * 6.1 + 16, h = 22;
+    const x = Math.max(6, Math.min(360 - w - 6, px - w / 2));
+    const y = Math.max(6, Math.min(372 - h - 6, py - 11));
+    tip.innerHTML =
+      `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h}" rx="6" fill="var(--primary-text-color)"/>` +
+      `<text x="${(x + w / 2).toFixed(1)}" y="${(y + 15).toFixed(1)}" text-anchor="middle" fill="var(--card-background-color)" font-size="11" font-weight="600" font-family="inherit">${this._esc(text)}</text>`;
+    tip.style.display = "";
+  }
+
+  _hideTip() {
+    this._tipSrc = null;
+    if (this._els.tip) this._els.tip.style.display = "none";
   }
 
   _build() {
@@ -312,27 +370,36 @@ class EBillingPowerFlow extends HTMLElement {
       labels += `<text class="pf-plabel" data-id="${id}" x="${mx.toFixed(1)}" y="${my.toFixed(1)}" text-anchor="middle" style="display:none"></text>`;
     }
 
-    for (const key of Object.keys(PF_NODES)) {
-      const n = PF_NODES[key];
-      const color = this._color(key);
-      if (key === "home") {
-        nodes += `
-          <g>
-            <circle cx="${n.x}" cy="${n.y}" r="${PF_HOME_DISC}" fill="var(--card-background-color)"/>
-            <g class="pf-ring" data-key="home"></g>
-            ${pfIcon(n.x, n.y - 4, "home", color)}
-            <text class="pf-val" data-key="home" x="${n.x}" y="${n.y + 15}" text-anchor="middle">—</text>
-            <text class="pf-sub" data-key="home" x="${n.x}" y="${n.y + PF_HOME_RING + 15}" text-anchor="middle">${n.label}</text>
-          </g>`;
-      } else {
-        nodes += `
-          <g>
-            <circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="var(--card-background-color)" stroke="${color}" stroke-width="2.5"/>
-            ${pfIcon(n.x, n.y, key, color)}
-            <text class="pf-val" data-key="${key}" x="${n.x}" y="${n.y + 13}" text-anchor="middle">—</text>
-            <text class="pf-sub" data-key="${key}" x="${n.x}" y="${n.y + n.r + 13}" text-anchor="middle">${n.label}</text>
-          </g>`;
-      }
+    // Solar (arriba): producción instantánea.
+    const cs = this._color("solar");
+    nodes += `<g>
+      <circle cx="${PF_NODES.solar.x}" cy="${PF_NODES.solar.y}" r="${PF_NODES.solar.r}" fill="var(--card-background-color)" stroke="${cs}" stroke-width="2.5"/>
+      ${pfIcon(PF_NODES.solar.x, PF_NODES.solar.y - 4, "solar", cs)}
+      <text class="pf-val" data-el="solar" x="${PF_NODES.solar.x}" y="${PF_NODES.solar.y + 15}" text-anchor="middle">—</text>
+      <text class="pf-sub" x="${PF_NODES.solar.x}" y="${PF_NODES.solar.y + PF_NODES.solar.r + 13}" text-anchor="middle">Solar</text>
+    </g>`;
+
+    // Casa (centro): total consumido hoy + potencia instantánea, con anillo.
+    const ch = this._color("home");
+    nodes += `<g>
+      <circle cx="${PF_NODES.home.x}" cy="${PF_NODES.home.y}" r="${PF_HOME_DISC}" fill="var(--card-background-color)"/>
+      <g class="pf-ring"></g>
+      ${pfIcon(PF_NODES.home.x, PF_NODES.home.y - 15, "home", ch)}
+      <text class="pf-val" data-el="home_total" x="${PF_NODES.home.x}" y="${PF_NODES.home.y + 3}" text-anchor="middle">—</text>
+      <text class="pf-sub" data-el="home_power" x="${PF_NODES.home.x}" y="${PF_NODES.home.y + 16}" text-anchor="middle">—</text>
+      <text class="pf-sub" x="${PF_NODES.home.x}" y="${PF_NODES.home.y + PF_HOME_RING + 15}" text-anchor="middle">Casa</text>
+    </g>`;
+
+    // Red y batería (abajo): ← feed-in / → hacia la casa.
+    for (const [key, inEl, outEl] of [["grid", "grid_in", "grid_out"], ["battery", "bat_in", "bat_out"]]) {
+      const n = PF_NODES[key], c = this._color(key);
+      nodes += `<g>
+        <circle cx="${n.x}" cy="${n.y}" r="${n.r}" fill="var(--card-background-color)" stroke="${c}" stroke-width="2.5"/>
+        ${pfIcon(n.x, n.y - 13, key, c)}
+        <text class="pf-io" data-el="${inEl}" x="${n.x}" y="${n.y + 4}" text-anchor="middle">—</text>
+        <text class="pf-io" data-el="${outEl}" x="${n.x}" y="${n.y + 16}" text-anchor="middle">—</text>
+        <text class="pf-sub" data-el="sub_${key}" x="${n.x}" y="${n.y + n.r + 13}" text-anchor="middle">${n.label}</text>
+      </g>`;
     }
 
     card.innerHTML = `
@@ -344,6 +411,7 @@ class EBillingPowerFlow extends HTMLElement {
           ${balls}
           ${labels}
           ${nodes}
+          <g class="pf-tip" style="display:none"></g>
         </svg>
       </div>`;
     this.innerHTML = "";
@@ -354,9 +422,17 @@ class EBillingPowerFlow extends HTMLElement {
       this._els[`anim_${id}`] = card.querySelector(`animateMotion[data-id="${id}"]`);
       this._els[`plabel_${id}`] = card.querySelector(`.pf-plabel[data-id="${id}"]`);
     }
-    card.querySelectorAll(".pf-val").forEach((el) => (this._els[`val_${el.dataset.key}`] = el));
-    card.querySelectorAll(".pf-sub").forEach((el) => (this._els[`sub_${el.dataset.key}`] = el));
+    card.querySelectorAll("[data-el]").forEach((el) => (this._els[el.dataset.el] = el));
     this._els.ring = card.querySelector(".pf-ring");
+    this._els.tip = card.querySelector(".pf-tip");
+
+    // Tooltip al pulsar una sección del donut (y ocultar al pulsar fuera).
+    card.addEventListener("click", (e) => {
+      const seg = e.target.closest(".pf-seg");
+      if (!seg) { this._hideTip(); return; }
+      if (this._tipSrc === seg.dataset.key) this._hideTip();
+      else this._setTip(seg.dataset);
+    });
   }
 
   _esc(s) {
@@ -373,6 +449,7 @@ EBillingPowerFlow.styles = `
   .pf-base { fill: none; stroke: var(--primary-text-color); opacity: 0.12; stroke-width: 2.5; stroke-linecap: round; }
   .pf-val { fill: var(--primary-text-color); font-size: 12px; font-weight: 700; font-family: inherit; }
   .pf-sub { fill: var(--secondary-text-color); font-size: 9px; font-family: inherit; }
+  .pf-io { fill: var(--primary-text-color); font-size: 9.5px; font-weight: 600; font-family: inherit; }
   .pf-plabel {
     fill: var(--primary-text-color); font-size: 10.5px; font-weight: 700; font-family: inherit;
     paint-order: stroke; stroke: var(--card-background-color); stroke-width: 3px; stroke-linejoin: round;
@@ -485,4 +562,4 @@ window.customCards.push({
   preview: true,
 });
 
-console.info("%c eBilling-power-flow %c v0.8 ", "background:#f6a609;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#12b886;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+console.info("%c eBilling-power-flow %c v0.10 ", "background:#f6a609;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#12b886;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");

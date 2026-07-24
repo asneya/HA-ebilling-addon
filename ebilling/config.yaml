@@ -1,5 +1,5 @@
 name: eBilling
-version: "0.9.0"
+version: "0.10.0"
 slug: ebilling
 description: Simulación en tiempo real de tu factura de luz con comparativa de tarifas
 url: https://github.com/asneya/HA-ebilling-addon

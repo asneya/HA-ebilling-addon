@@ -160,9 +160,16 @@ izquierda** y **red abajo a la derecha**. En cada línea con potencia viaja
 **una sola bola** (más rápida cuanto mayor es la potencia) y una etiqueta con
 el valor.
 
+En el círculo de la **casa** se muestra el **total consumido hoy** (kWh) y,
+debajo, la **potencia instantánea**. En los círculos de **red** y **batería**
+aparecen dos valores con flecha: **← feed-in** (exportar a red / cargar
+batería) y **→ hacia la casa** (importar / descargar) — con los totales de
+energía diaria si los configuras, o la potencia actual si no.
+
 **Anillo de la casa**: alrededor del nodo de la casa se dibuja un donut que
 representa cuánta energía ha **consumido la casa hoy de cada fuente** (solar,
-red, batería), con el color de cada una. Para que sea **exacto**, asigna los
+red, batería), con el color de cada una. **Pulsa** una sección para ver su
+tooltip (fuente · kWh · %). Para que sea **exacto**, asigna los
 **sensores de energía diaria** (kWh) en el editor (grupo «Sensores de energía
 diaria»). Si no los defines, el anillo se calcula de forma aproximada
 integrando la potencia en el navegador mientras la tarjeta está visible.

@@ -2,6 +2,18 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.10.0
+
+### Nuevo
+
+- Tarjeta `ebilling-power-flow`:
+  - En el círculo de la **casa** se muestra el **total consumido hoy** (kWh) y,
+    debajo, la potencia instantánea.
+  - **Tooltip al pulsar** cada sección del anillo (fuente · kWh · %).
+  - En **red** y **batería**, dos valores con flecha: **← feed-in**
+    (exportar / cargar) y **→ hacia la casa** (importar / descargar). Usan los
+    totales de energía diaria si están configurados; si no, la potencia actual.
+
 ## 0.9.0
 
 ### Nuevo
