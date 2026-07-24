@@ -2,6 +2,21 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.11.0
+
+### Cambios
+
+- **Rediseño de la tarjeta `ebilling-power-flow`** con disposición en **cruz**
+  (Solar arriba, Red izquierda, Casa derecha, Batería abajo), más cercana a las
+  apps de inversores:
+  - Iconos y valores **centrados y alineados** dentro de cada círculo (se
+    corrigió el descuadre de iconos y textos).
+  - Círculos más grandes; el de la **Casa** lleva el anillo multicolor del
+    reparto diario como borde, con el total (kWh) y la potencia debajo.
+  - Red con **← / →** y Batería con **↓ / ↑**, coloreando el sentido «hacia la
+    casa».
+  - Líneas curvas en las esquinas y rectas en la cruz, con una bola por línea.
+
 ## 0.10.0
 
 ### Nuevo
