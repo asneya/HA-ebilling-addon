@@ -136,6 +136,12 @@ entities:
   battery_discharge: sensor.descarga_bateria  # potencia de descarga
   home: sensor.consumo_casa             # opcional (si falta, se calcula)
   battery_soc: sensor.bateria_soc       # opcional (muestra el % de batería)
+  # Energía diaria (kWh) para el anillo de la casa (opcional pero recomendado):
+  pv_energy: sensor.solar_hoy
+  grid_import_energy: sensor.red_importada_hoy
+  grid_export_energy: sensor.red_exportada_hoy
+  battery_charge_energy: sensor.bateria_carga_hoy
+  battery_discharge_energy: sensor.bateria_descarga_hoy
 colors:                                 # opcional (o con el picker del editor)
   solar: '#f6a609'
   grid: '#e5484d'
@@ -150,7 +156,10 @@ el valor.
 
 **Anillo de la casa**: alrededor del nodo de la casa se dibuja un donut que
 representa cuánta energía ha **consumido la casa hoy de cada fuente** (solar,
-red, batería), con el color de cada una.
+red, batería), con el color de cada una. Para que sea **exacto**, asigna los
+**sensores de energía diaria** (kWh) en el editor (grupo «Sensores de energía
+diaria»). Si no los defines, el anillo se calcula de forma aproximada
+integrando la potencia en el navegador mientras la tarjeta está visible.
 
 Notas:
 
@@ -162,6 +171,7 @@ Notas:
   y esos flujos no aparecen. Igual con la exportación si no viertes a la red.
 - El **consumo de la casa** se calcula a partir del balance
   (solar + importada + descarga − exportada − carga) si no defines `home`.
-- El anillo diario se **acumula en el navegador** (localStorage) integrando la
-  potencia mientras la tarjeta está visible; es orientativo y se reinicia cada
-  día. La animación respeta `prefers-reduced-motion`.
+- El anillo diario usa los **sensores de energía** si los defines (exacto); si
+  no, se **acumula en el navegador** (localStorage) integrando la potencia
+  mientras la tarjeta está visible (orientativo, se reinicia cada día).
+- La animación respeta `prefers-reduced-motion`.

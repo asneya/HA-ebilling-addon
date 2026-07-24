@@ -58,6 +58,16 @@ const SENSOR_SLOTS = [
   ["battery_soc", "Estado de carga batería % (opcional)"],
 ];
 
+// Sensores de energía diaria (kWh) para pintar el anillo de la casa con datos
+// reales en vez del cálculo aproximado en el navegador.
+const ENERGY_SLOTS = [
+  ["pv_energy", "Producción solar hoy"],
+  ["grid_import_energy", "Importada de red hoy"],
+  ["grid_export_energy", "Exportada a red hoy"],
+  ["battery_charge_energy", "Carga de batería hoy"],
+  ["battery_discharge_energy", "Descarga de batería hoy"],
+];
+
 function pfFmt(w) {
   const a = Math.abs(w);
   if (a >= 1000) return `${(w / 1000).toFixed(2)} kW`;
@@ -118,6 +128,40 @@ class EBillingPowerFlow extends HTMLElement {
     return v;
   }
 
+  // Lee un sensor de energía en Wh (kWh→Wh, MWh→Wh). null si no está.
+  _energy(key) {
+    const id = (this._config.entities || {})[key];
+    if (!id || !this._hass) return null;
+    const st = this._hass.states[id];
+    if (!st || st.state === "unavailable" || st.state === "unknown") return null;
+    const v = parseFloat(st.state);
+    if (!isFinite(v)) return null;
+    const unit = (st.attributes.unit_of_measurement || "").toLowerCase();
+    if (unit === "wh") return v;
+    if (unit === "mwh") return v * 1e6;
+    return v * 1000; // kWh por defecto
+  }
+
+  // Reparto real del consumo de la casa por fuente a partir de los sensores de
+  // energía diaria, si están configurados. Devuelve {solar,grid,battery} o null.
+  _energyMix() {
+    const pv = this._energy("pv_energy");
+    const gi = this._energy("grid_import_energy");
+    const bd = this._energy("battery_discharge_energy");
+    if (pv == null && gi == null && bd == null) return null; // no configurados
+    const P = Math.max(pv || 0, 0);
+    const GI = Math.max(gi || 0, 0);
+    const GE = Math.max(this._energy("grid_export_energy") || 0, 0);
+    const BC = Math.max(this._energy("battery_charge_energy") || 0, 0);
+    const BD = Math.max(bd || 0, 0);
+    const sToG = Math.min(GE, P);
+    let rem = Math.max(P - sToG, 0);
+    const sToB = Math.min(BC, rem);
+    rem -= sToB;
+    const gToB = Math.max(BC - sToB, 0);
+    return { solar: rem, grid: Math.max(GI - gToB, 0), battery: BD };
+  }
+
   _flows() {
     const pv = Math.max(this._watts("pv") || 0, 0);
     const gi = Math.max(this._watts("grid_import") || 0, 0);
@@ -174,7 +218,9 @@ class EBillingPowerFlow extends HTMLElement {
     if (!this._hass || !this._config) return;
     if (!this._built) this._build();
     const f = this._flows();
-    const mix = this._accumulate(f.values);
+    // Anillo: usa los sensores de energía diaria si están; si no, integra la
+    // potencia en el navegador (aproximado).
+    const mix = this._energyMix() || this._accumulate(f.values);
 
     for (const key of Object.keys(PF_NODES)) {
       const n = f.nodes[key];
@@ -339,27 +385,32 @@ class EBillingPowerFlowEditor extends HTMLElement {
   setConfig(config) { this._config = Object.assign({ entities: {}, colors: {} }, config || {}); this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
 
-  _powerSensors() {
+  _sensorsBy(kind) {
     if (!this._hass) return [];
     const all = Object.keys(this._hass.states).filter((id) => id.startsWith("sensor."));
-    const power = all.filter((id) => {
+    const units = kind === "energy" ? ["wh", "kwh", "mwh"] : ["w", "kw", "mw"];
+    const dc = kind === "energy" ? "energy" : "power";
+    const match = all.filter((id) => {
       const a = this._hass.states[id].attributes || {};
       const u = (a.unit_of_measurement || "").toLowerCase();
-      return a.device_class === "power" || u === "w" || u === "kw" || u === "mw";
+      return a.device_class === dc || units.includes(u);
     });
-    return (power.length ? power : all).sort();
+    return (match.length ? match : all).sort();
   }
 
   _render() {
     if (!this._hass || !this._config || this._built) return;
     this._built = true;
-    const sensors = this._powerSensors();
-    const opt = (sel) =>
+    const power = this._sensorsBy("power");
+    const energy = this._sensorsBy("energy");
+    const opt = (list, sel) =>
       `<option value="">— sin asignar —</option>` +
-      sensors.map((id) => `<option value="${id}" ${id === sel ? "selected" : ""}>${id}</option>`).join("");
-    const rows = SENSOR_SLOTS.map(([key, label]) => `
+      list.map((id) => `<option value="${id}" ${id === sel ? "selected" : ""}>${id}</option>`).join("");
+    const rowsFor = (slots, list) => slots.map(([key, label]) => `
       <div class="pfe-row"><label>${label}</label>
-        <select data-key="${key}">${opt((this._config.entities || {})[key] || "")}</select></div>`).join("");
+        <select data-key="${key}">${opt(list, (this._config.entities || {})[key] || "")}</select></div>`).join("");
+    const rows = rowsFor(SENSOR_SLOTS, power);
+    const energyRows = rowsFor(ENERGY_SLOTS, energy);
     const colorRow = (key, label) => `
       <div class="pfe-color"><input type="color" data-color="${key}" value="${(this._config.colors || {})[key] || PF_DEFAULT_COLORS[key]}"><span>${label}</span></div>`;
 
@@ -375,11 +426,16 @@ class EBillingPowerFlowEditor extends HTMLElement {
         .pfe-color { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-text-color); }
         .pfe-color input[type=color] { width: 34px; height: 28px; padding: 0; border: none; background: none; }
         .pfe-h { font-size: 12.5px; font-weight: 600; color: var(--primary-text-color); margin-top: 6px; }
+        .pfe-note { font-size: 11px; color: var(--secondary-text-color); margin-top: -4px; }
       </style>
       <div class="pfe">
         <div class="pfe-row"><label>Título</label>
           <input id="pfe-title" type="text" value="${(this._config.title || "").replace(/"/g, "&quot;")}"></div>
+        <div class="pfe-h">Sensores de potencia (flujos)</div>
         ${rows}
+        <div class="pfe-h">Sensores de energía diaria (anillo de la casa)</div>
+        <div class="pfe-note">Opcional. Si los defines, el anillo usa estos totales del día; si no, se calcula de forma aproximada.</div>
+        ${energyRows}
         <div class="pfe-h">Colores</div>
         <div class="pfe-colors">
           ${colorRow("solar", "Solar")}${colorRow("home", "Casa")}${colorRow("battery", "Batería")}${colorRow("grid", "Red")}
