@@ -2,6 +2,21 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.9.0
+
+### Nuevo
+
+- **Releases automáticas**: cada cambio de versión publica una release en
+  GitHub (workflow de Actions), para que HACS ofrezca la actualización de la
+  tarjeta Lovelace automáticamente (antes había que redescargarla a mano).
+
+### Corregido
+
+- En el editor de la tarjeta `ebilling-power-flow`, el sensor de **estado de
+  carga de batería (%)** no aparecía en su desplegable porque se filtraba por
+  unidades de potencia (W/kW). Ahora ese campo se filtra por porcentaje (`%` /
+  `device_class: battery`).
+
 ## 0.8.1
 
 ### Nuevo

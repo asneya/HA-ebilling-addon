@@ -48,15 +48,16 @@ const PF_FLOWS = [
   ["grid_battery", "grid", "battery", [180, 348]],
 ];
 
-const SENSOR_SLOTS = [
+const POWER_SLOTS = [
   ["pv", "Producción solar (PV)"],
   ["grid_import", "Importación de red"],
   ["grid_export", "Exportación a red"],
   ["battery_charge", "Carga de batería"],
   ["battery_discharge", "Descarga de batería"],
   ["home", "Consumo de la casa (opcional)"],
-  ["battery_soc", "Estado de carga batería % (opcional)"],
 ];
+// El SOC va aparte: es un sensor de porcentaje (%), no de potencia.
+const SOC_SLOTS = [["battery_soc", "Estado de carga batería % (opcional)"]];
 
 // Sensores de energía diaria (kWh) para pintar el anillo de la casa con datos
 // reales en vez del cálculo aproximado en el navegador.
@@ -388,12 +389,15 @@ class EBillingPowerFlowEditor extends HTMLElement {
   _sensorsBy(kind) {
     if (!this._hass) return [];
     const all = Object.keys(this._hass.states).filter((id) => id.startsWith("sensor."));
-    const units = kind === "energy" ? ["wh", "kwh", "mwh"] : ["w", "kw", "mw"];
-    const dc = kind === "energy" ? "energy" : "power";
+    const cfg = {
+      energy: { units: ["wh", "kwh", "mwh"], dc: "energy" },
+      percent: { units: ["%"], dc: "battery" },
+      power: { units: ["w", "kw", "mw"], dc: "power" },
+    }[kind] || { units: [], dc: null };
     const match = all.filter((id) => {
       const a = this._hass.states[id].attributes || {};
       const u = (a.unit_of_measurement || "").toLowerCase();
-      return a.device_class === dc || units.includes(u);
+      return a.device_class === cfg.dc || cfg.units.includes(u);
     });
     return (match.length ? match : all).sort();
   }
@@ -403,13 +407,14 @@ class EBillingPowerFlowEditor extends HTMLElement {
     this._built = true;
     const power = this._sensorsBy("power");
     const energy = this._sensorsBy("energy");
+    const percent = this._sensorsBy("percent");
     const opt = (list, sel) =>
       `<option value="">— sin asignar —</option>` +
       list.map((id) => `<option value="${id}" ${id === sel ? "selected" : ""}>${id}</option>`).join("");
     const rowsFor = (slots, list) => slots.map(([key, label]) => `
       <div class="pfe-row"><label>${label}</label>
         <select data-key="${key}">${opt(list, (this._config.entities || {})[key] || "")}</select></div>`).join("");
-    const rows = rowsFor(SENSOR_SLOTS, power);
+    const rows = rowsFor(POWER_SLOTS, power) + rowsFor(SOC_SLOTS, percent);
     const energyRows = rowsFor(ENERGY_SLOTS, energy);
     const colorRow = (key, label) => `
       <div class="pfe-color"><input type="color" data-color="${key}" value="${(this._config.colors || {})[key] || PF_DEFAULT_COLORS[key]}"><span>${label}</span></div>`;

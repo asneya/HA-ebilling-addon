@@ -29,6 +29,12 @@ la tienda por defecto, se añade como **repositorio personalizado**:
 4. HACS registra el recurso automáticamente. Recarga el navegador
    (Ctrl/Cmd + Shift + R) y añade la tarjeta a tu panel.
 
+> **Actualizaciones**: el repositorio publica *releases* con cada versión, así
+> que HACS te avisará cuando haya una nueva y la actualizarás con un clic (más
+> una recarga forzada del navegador). Tras actualizar, si tienes también la
+> tarjeta de flujo (`ebilling-power-flow.js`) como recurso aparte, recarga
+> igualmente para que el navegador coja la versión nueva.
+
 > El botón de arriba abre directamente el diálogo de repositorio en tu HACS.
 
 ## Instalación manual (sin HACS)
