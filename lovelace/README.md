@@ -160,8 +160,9 @@ izquierda** y **red abajo a la derecha**. En cada línea con potencia viaja
 **una sola bola** (más rápida cuanto mayor es la potencia) y una etiqueta con
 el valor.
 
-En el círculo de la **casa** se muestra el **total consumido hoy** (kWh) y,
-debajo, la **potencia instantánea**. En los círculos de **red** y **batería**
+En el círculo de la **casa** se muestra la **potencia instantánea** y, debajo y
+más pequeño, el **total consumido hoy** (kWh), igual que en el de solar. En los
+círculos de **red** y **batería**
 aparecen dos valores con flecha: **← feed-in** (exportar a red / cargar
 batería) y **→ hacia la casa** (importar / descargar) — con los totales de
 energía diaria si los configuras, o la potencia actual si no.

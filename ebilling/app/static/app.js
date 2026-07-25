@@ -351,9 +351,9 @@ function renderFlow(live) {
       </g>
       <g>
         ${ring}
-        ${fIcon(FN.home.x, FN.home.y - 16, "home", inkColor, 0.95)}
-        <text class="pf-val" x="${FN.home.x}" y="${FN.home.y + 8}" text-anchor="middle">${fmtNum.format(e.home.total)} kWh</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.home.x}" y="${FN.home.y + 24}" text-anchor="middle">${pW(p.home || 0)}</text>
+        ${fIcon(FN.home.x, FN.home.y - 14, "home", inkColor, 0.95)}
+        <text class="pf-val" x="${FN.home.x}" y="${FN.home.y + 9}" text-anchor="middle">${pW(p.home || 0)}</text>
+        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.home.x}" y="${FN.home.y + 24}" text-anchor="middle">${fmtNum.format(e.home.total)} kWh</text>
       </g>
       <text class="pf-lbl" x="${FN.solar.x}" y="${FN.solar.y - NR - 11}" text-anchor="middle">Solar</text>
       <text class="pf-lbl" x="${FN.grid.x}" y="${FN.grid.y + NR + 20}" text-anchor="middle">Red</text>
