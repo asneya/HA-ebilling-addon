@@ -2,6 +2,25 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.16.1
+
+### Nuevo
+
+- **Si tus sensores ya miden el día en curso, se usan tal cual.** Nuevo ajuste
+  *Contadores de energía → Qué miden*:
+  - **Detectarlo automáticamente** (por defecto): compara el estado del sensor
+    con el incremento del día; si coinciden, el sensor ya es diario y se usa su
+    estado, que va al segundo en vez de esperar a las estadísticas.
+  - **Ya son del día en curso**: se leen los estados directamente, sin consultar
+    estadísticas.
+  - **Son acumulados**: se calcula el incremento desde la medianoche.
+
+### Cambios
+
+- El **desglose del día** de la pantalla de Energía usa exactamente los mismos
+  totales que la Home (antes los recalculaba por su cuenta y podían diferir unos
+  minutos). Los días pasados siguen saliendo de las estadísticas.
+
 ## 0.16.0
 
 ### Corregido

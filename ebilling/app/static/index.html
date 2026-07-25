@@ -340,11 +340,20 @@
       <div class="panel glass group">
         <div class="group-head">Contadores de energía <span class="soft">· resumen de la Home</span></div>
         <div class="list" id="energy-sensor-list"></div>
+        <label class="li">
+          <span class="li-label">Qué miden</span>
+          <select id="s-energy-counters">
+            <option value="auto">Detectarlo automáticamente</option>
+            <option value="daily">Ya son del día en curso</option>
+            <option value="lifetime">Son acumulados (calcular el día)</option>
+          </select>
+        </label>
         <p class="li-note">
-          Contadores en kWh, normalmente acumulados desde el inicio del
-          histórico (<code>total_increasing</code>). El add-on calcula por su
-          cuenta el <b>incremento del día</b> a partir de las estadísticas, así
-          que no necesitas sensores «de hoy».
+          Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
+          es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde el
+          inicio del histórico (<code>total_increasing</code>), el add-on calcula
+          el incremento desde la medianoche con las estadísticas. En
+          <i>automático</i> lo distingue comparando ambos valores.
         </p>
         <p class="li-note">
           El de la casa es <b>opcional</b>: si no tienes un contador de consumo,

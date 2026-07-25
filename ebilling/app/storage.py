@@ -77,6 +77,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         # su sensor de potencia (flow_sensors.home).
         "home_energy": "",
     },
+    # Qué miden los contadores de energía anteriores:
+    #   auto     → se detecta comparando el estado con el incremento del día
+    #   daily    → ya son del día en curso: se lee su estado tal cual
+    #   lifetime → acumulados: se calcula el incremento desde la medianoche
+    "energy_counters": "auto",
     # Meteorología del fondo de la Home: dos sensores independientes, uno con
     # la condición (texto) y otro con la temperatura exterior.
     "condition_sensor": "",

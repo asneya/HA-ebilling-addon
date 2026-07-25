@@ -35,11 +35,18 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
 | Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
 
-Los contadores de energía **no tienen que ser sensores «de hoy»**: lo normal es
-que sean contadores acumulados desde el inicio del histórico
-(`total_increasing`), y el add-on calcula por su cuenta el **incremento desde la
-medianoche** a partir de las estadísticas de largo plazo. Si un contador no
-tiene estadísticas, se usa su estado actual como último recurso.
+Los contadores de energía pueden ser **sensores del día en curso** («Solar hoy»,
+«Importada hoy»…) o **contadores acumulados** desde el inicio del histórico
+(`total_increasing`). Lo eliges en *Contadores de energía → Qué miden*:
+
+| Opción | Qué hace |
+|---|---|
+| **Detectarlo automáticamente** (por defecto) | Calcula el incremento del día y lo compara con el estado del sensor; si coinciden, el sensor ya es diario y se usa su estado, que va al segundo |
+| **Ya son del día en curso** | Lee los estados tal cual, sin consultar estadísticas |
+| **Son acumulados** | Calcula el **incremento desde la medianoche** con las estadísticas de largo plazo (en pasos de 5 minutos) |
+
+Si un contador no tiene estadísticas, se usa su estado actual como último
+recurso.
 
 El **consumo de la casa** se toma, por este orden:
 
@@ -84,7 +91,8 @@ Se abre pulsando el **resumen de energía** de la Home.
   (`detailedForecast`, `detailedHourly`, con `pv_estimate` en kW) y de
   **Forecast.Solar** (`watts` en W y `wh_days` en Wh).
 - **Reparto del periodo**: debajo del gráfico, el origen del consumo o el
-  destino de la generación, con barra apilada y porcentajes.
+  destino de la generación, con barra apilada y porcentajes. En el día en curso
+  son exactamente los mismos totales que muestra la Home.
 
 ## Primeros pasos
 
