@@ -217,20 +217,52 @@ _DAILY_TTL = 120.0
 _daily_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": {}}
 
 
+def _same_day_total(state_value: float, computed: float) -> bool:
+    """¿El estado del sensor es ya el total del día?
+
+    Un contador del día marca prácticamente lo mismo que el incremento
+    calculado (solo difieren en lo consumido en los últimos minutos, que las
+    estadísticas aún no han consolidado). Uno acumulado marca mucho más.
+    """
+    margin = max(computed * 0.25, 300.0)  # 25 % o 0,3 kWh
+    return state_value <= computed + margin
+
+
+def _states_energy(
+    energy_cfg: dict[str, str], states: dict[str, Any]
+) -> dict[str, float]:
+    """Energía (Wh) leyendo el estado de cada contador tal cual."""
+    out: dict[str, float] = {}
+    for key in ENERGY_KEYS:
+        entity = energy_cfg.get(key)
+        if not entity:
+            continue
+        value = _convert(states.get(entity), "energy")
+        if value is not None:
+            out[key] = value
+    return out
+
+
 async def daily_energy(
     settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
 ) -> dict[str, float]:
-    """Energía de hoy (Wh) por sensor, calculada desde las estadísticas.
+    """Energía de hoy (Wh) por sensor.
 
-    Los sensores de energía suelen ser contadores acumulados desde el inicio
-    del histórico (``total_increasing``), así que su estado no sirve como total
-    del día: se pide el incremento (``change``) desde la medianoche local.
+    Según el ajuste ``energy_counters``:
 
-    Se consulta el periodo de 5 minutos (que va casi al día) y, como respaldo,
-    el bucket diario; si un sensor no tiene estadísticas se usa su estado.
+    - ``daily``: los sensores ya miden el día en curso, así que se lee su
+      estado directamente (sin consultar estadísticas).
+    - ``lifetime``: son contadores acumulados desde el inicio del histórico
+      (``total_increasing``), así que se pide el incremento (``change``) desde
+      la medianoche local, en pasos de 5 minutos y con el bucket diario como
+      respaldo.
+    - ``auto`` (por defecto): se calcula el incremento y se compara con el
+      estado; si coinciden, el sensor ya es del día y se usa su estado, que va
+      al segundo.
     """
     energy_cfg = settings.get("energy_sensors") or {}
     flow_cfg = settings.get("flow_sensors") or {}
+    mode = settings.get("energy_counters") or "auto"
     ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
     # Sin contador propio del consumo de la casa, se mide integrando su sensor
     # de potencia (que ya está configurado en el flujo de energía).
@@ -238,16 +270,25 @@ async def daily_energy(
     if not ids and not home_power:
         return {}
 
+    # Contadores del día declarados y con consumo de casa propio: nada que
+    # consultar, se leen los estados y listo.
+    if mode == "daily" and not home_power:
+        return _states_energy(energy_cfg, states)
+
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    cache_key = f"{start.isoformat()}|{','.join(ids)}|{home_power}"
+    cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{home_power}"
     if (
         _daily_cache["key"] == cache_key
         and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
     ):
-        return dict(_daily_cache["value"])
+        cached = dict(_daily_cache["value"])
+        if mode == "daily":
+            # El estado va al segundo; solo la casa (integral) viene cacheada.
+            cached.update(_states_energy(energy_cfg, states))
+        return cached
 
     requests: list[dict[str, Any]] = []
-    if ids:
+    if ids and mode != "daily":
         requests.append(
             {"ids": ids, "start": start, "end": now, "period": "5minute", "types": ["change"]}
         )
@@ -269,24 +310,36 @@ async def daily_energy(
     except Exception:  # noqa: BLE001 - se degrada al estado actual del sensor
         _LOGGER.warning("No se pudieron leer las estadísticas del día", exc_info=True)
 
-    detailed = results[0] if ids else {}
-    coarse = results[1] if ids else {}
+    stats_requested = bool(ids) and mode != "daily"
+    detailed = results[0] if stats_requested else {}
+    coarse = results[1] if stats_requested else {}
 
     out: dict[str, float] = {}
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
         if not entity:
             continue
+        state_value = _convert(states.get(entity), "energy")
+        if mode == "daily":
+            if state_value is not None:
+                out[key] = state_value
+            continue
         factor = series_mod._unit_factor(entity, states, "energy", units)
         buckets = series_mod._extract(detailed, entity, "change", tz, factor)
         if not buckets:
             buckets = series_mod._extract(coarse, entity, "change", tz, factor)
-        if buckets:
-            out[key] = sum(buckets.values()) * 1000.0  # kWh → Wh
+        if not buckets:
+            if state_value is not None:
+                out[key] = state_value
+            continue
+        computed = sum(buckets.values()) * 1000.0  # kWh → Wh
+        # En automático, si el estado coincide con el incremento del día es que
+        # el sensor ya mide el día en curso: se usa su estado, más fresco que
+        # las estadísticas (que van con hasta 5 minutos de retraso).
+        if mode == "auto" and state_value is not None and _same_day_total(state_value, computed):
+            out[key] = state_value
         else:
-            fallback = _convert(states.get(entity), "energy")
-            if fallback is not None:
-                out[key] = fallback
+            out[key] = computed
 
     # Consumo de la casa por integración de su potencia media (Wh).
     if power_index is not None and power_index < len(results):

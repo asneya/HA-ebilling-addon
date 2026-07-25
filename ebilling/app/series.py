@@ -625,10 +625,13 @@ async def _build_power(
     energy_keys = ENERGY_KEYS
     energy_ids = [energy_cfg.get(k) for k in energy_keys if energy_cfg.get(k)]
     energy_index = None
-    if energy_ids and view in ("solar", "home", "overview"):
+    # El día en curso se resuelve con los mismos totales que la Home (más
+    # abajo); para días pasados se piden aquí, en pasos de 5 minutos (no el
+    # bucket diario, que se consolida por horas).
+    is_today = end > now
+    wants_breakdown = bool(energy_ids) and view in ("solar", "home", "overview")
+    if wants_breakdown and not is_today:
         energy_index = len(requests)
-        # En pasos de 5 minutos (no el bucket diario, que se consolida por horas
-        # y en el día en curso puede ir hasta una hora por detrás).
         requests.append(
             {"ids": energy_ids, "start": start, "end": end,
              "period": "5minute", "types": ["change"]}
@@ -693,10 +696,10 @@ async def _build_power(
                 )
             )
 
-    breakdown = None
+    totals: dict[str, float] | None = None
     if energy_index is not None:
         raw = results[energy_index]
-        totals: dict[str, float] = {}
+        totals = {}
         for key in energy_keys:
             sensor = energy_cfg.get(key)
             if not sensor:
@@ -704,6 +707,17 @@ async def _build_power(
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
             totals[key] = sum(_extract(raw, sensor, "change", tz, factor).values())
+    elif wants_breakdown and is_today:
+        # Mismos totales que la Home (cacheados allí), para que las dos
+        # pantallas muestren exactamente lo mismo. Import local: `live` importa
+        # este módulo.
+        import live  # noqa: PLC0415
+
+        wh = await live.daily_energy(settings, states, tz, now)
+        totals = {key: (wh.get(key) or 0.0) / 1000.0 for key in energy_keys}
+
+    breakdown = None
+    if totals is not None:
         # Consumo de la casa medido: su contador si existe y, si no, la integral
         # de su sensor de potencia (el total que ya calcula la leyenda).
         home_serie = next((item for item in series if item["key"] == "home"), None)

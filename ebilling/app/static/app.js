@@ -1389,6 +1389,7 @@ function fillSettings() {
   $("#s-holidays").value = (s.holidays || []).join(", ");
   $("#s-export-sensors").checked = s.export_sensors !== false;
   $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
+  $("#s-energy-counters").value = s.energy_counters || "auto";
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
   $("#s-ifx-url").value = ifx.url || "";
@@ -1479,6 +1480,7 @@ function settingsFromForm() {
     sensor_update_minutes: parseInt($("#s-sensor-minutes").value, 10) || 5,
     flow_sensors: flow,
     energy_sensors: energy,
+    energy_counters: $("#s-energy-counters").value,
     condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
     solar_forecast_sensor: $("#s-forecast").value,
