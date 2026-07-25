@@ -14,14 +14,9 @@ La interfaz está organizada en tres pestañas, con estética de app iOS
   nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la
   **temperatura exterior**.
 - **Energía** (al pulsar el resumen de la Home) — pantalla de análisis con
-  rangos **Día · Semana · Mes · Año · Total**, navegación al periodo anterior y
-  cinco vistas por iconos: **general, solar, casa, batería y red**. En el rango
-  de día se dibuja la **potencia (W)** con la curva de **ayer** como
-  comparación; en el resto, la **energía (kWh)** por día, mes o año. En la
-  leyenda puedes **activar y desactivar cada serie**, que muestra el total del
-  periodo o, si **pulsas un punto del gráfico**, el valor exacto de ese punto
-  (doble pulsación para quitar la selección). Debajo, el reparto del periodo
-  (origen del consumo o destino de la generación).
+  rangos **Día · Semana · Mes · Año · Total** y cinco vistas por iconos:
+  **general, solar, casa, batería y red**. Ver la sección
+  [Pantalla «Energía»](#pantalla-energía).
 - **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
   desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
 - **Ajustes** — todo lo configurable, agrupado: fuente de datos, sensores del
@@ -36,12 +31,60 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 | Grupo | Sensores |
 |---|---|
 | Flujo de energía (W/kW) | producción solar, importación y exportación de red, carga y descarga de batería, consumo de la casa (opcional) y % de batería (opcional) |
-| Energía del día (kWh) | solar hoy, importada hoy, exportada hoy, carga hoy, descarga hoy |
+| Contadores de energía (kWh) | solar, importada, exportada, carga, descarga y **casa** (opcional) |
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
+| Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
 
-El consumo de la casa se calcula por balance si no defines su sensor. El
-reparto del resumen atribuye a la generación lo vertido y lo que carga la
-batería, y el resto a la casa (mismo modelo que las apps de inversores).
+Los contadores de energía **no tienen que ser sensores «de hoy»**: lo normal es
+que sean contadores acumulados desde el inicio del histórico
+(`total_increasing`), y el add-on calcula por su cuenta el **incremento desde la
+medianoche** a partir de las estadísticas de largo plazo. Si un contador no
+tiene estadísticas, se usa su estado actual como último recurso.
+
+El **consumo de la casa** se toma, por este orden:
+
+1. Su **contador de energía** (kWh), si lo indicas en *Contadores de energía →
+   Casa*.
+2. La **integral de su sensor de potencia**, el que ya configuras en el flujo de
+   energía: no hace falta ningún ajuste extra.
+3. Por **balance**, si no tienes ninguno de los dos.
+
+El reparto atribuye a la generación lo vertido y lo que carga la batería, y el
+resto a la casa (mismo modelo que las apps de inversores); lo que carga la
+batería por encima de lo generado se atribuye a la red. Cuando el consumo está
+medido, los orígenes (solar, batería, red) se reparten hasta cubrir exactamente
+ese total, así que los porcentajes siempre suman 100 %. Es el mismo cálculo en la
+Home y en la pantalla de Energía.
+
+## Pantalla «Energía»
+
+Se abre pulsando el **resumen de energía** de la Home.
+
+- **Rango**: Día · Semana · Mes · Año · Total. Las flechas ‹ › van al periodo
+  anterior o siguiente y el **rótulo del periodo es pulsable**: abre el control
+  de fecha del sistema y, al elegir un día, se muestra el día, la semana, el mes
+  o el año que lo contiene según el rango activo.
+- **Vista** (iconos): general, solar, casa, batería y red.
+- **Gráfico**: en el rango de día, la **potencia media (W)** cada 5 minutos con
+  la curva de **ayer** como comparación; en el resto, la **energía (kWh)** por
+  día, mes o año. Todas las series se dibujan como **línea con su área
+  translúcida**. El eje llega hasta el final del periodo: los buckets que aún no
+  han ocurrido quedan como hueco.
+- **Leyenda**: cada serie se activa y desactiva pulsándola, y muestra el
+  **total de energía del periodo**. Al **pulsar un punto del gráfico** todas
+  pasan a mostrar el valor de ese instante; el botón **Totales** vuelve a los
+  totales del periodo.
+- **Zoom del eje del tiempo**: pellizca con dos dedos (o `⌘`/`Ctrl` + rueda del
+  ratón) para estirar el eje X, arrastra para desplazarte y pulsa el indicador
+  `1.0×` para restablecerlo. También hay botones **−** y **+**. El eje Y se
+  mantiene fijo.
+- **Previsión de generación**: en la vista solar, si el intervalo incluye horas
+  futuras y has configurado un sensor de previsión, se dibuja como **línea
+  punteada** (sin entrada en la leyenda). Se admiten los atributos de **Solcast**
+  (`detailedForecast`, `detailedHourly`, con `pv_estimate` en kW) y de
+  **Forecast.Solar** (`watts` en W y `wh_days` en Wh).
+- **Reparto del periodo**: debajo del gráfico, el origen del consumo o el
+  destino de la generación, con barra apilada y porcentajes.
 
 ## Primeros pasos
 

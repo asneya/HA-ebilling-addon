@@ -73,11 +73,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "grid_export_energy": "",
         "battery_charge_energy": "",
         "battery_discharge_energy": "",
+        # Opcional: si no se define, el consumo de la casa se mide integrando
+        # su sensor de potencia (flow_sensors.home).
+        "home_energy": "",
     },
     # Meteorología del fondo de la Home: dos sensores independientes, uno con
     # la condición (texto) y otro con la temperatura exterior.
     "condition_sensor": "",
     "temperature_sensor": "",
+    # Sensor de previsión de generación solar (Solcast, Forecast.Solar…). Se usa
+    # para dibujar el forecast punteado en la pantalla de Energía cuando el
+    # intervalo incluye tiempo futuro.
+    "solar_forecast_sensor": "",
     # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
     # fin inclusivo). Si está definido, es el periodo por defecto de todos los
     # cálculos (comparativa, detalle y sensores). null = ciclo automático.

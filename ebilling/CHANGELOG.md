@@ -2,6 +2,66 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.16.0
+
+### Corregido
+
+- **Los totales del día se calculan, no se leen del sensor**: el flujo de
+  energía y el resumen de la Home tomaban el estado de los sensores de energía,
+  que normalmente son **contadores acumulados desde el inicio del histórico**
+  (`total_increasing`). Ahora el add-on pide a las estadísticas el
+  **incremento desde la medianoche local** de cada contador (y solo usa el
+  estado como último recurso, si el sensor no tiene estadísticas).
+- Las series de semana, mes y año ya no dibujan **ceros en los buckets
+  futuros**: el eje llega hasta el final del periodo, pero los días sin datos
+  quedan como hueco.
+- Los valores guardados en los selectores de sensores se conservan aunque la
+  entidad no esté en la lista (no disponible en ese momento).
+- El **consumo de la casa se mide, no se deduce**: si tienes configurado su
+  sensor de potencia (en el flujo de energía) se integra para obtener los kWh
+  del día; si además tienes un contador de consumo en kWh, puedes indicarlo en
+  *Contadores de energía → Casa*. Solo se deduce por balance cuando no hay
+  ninguno de los dos.
+- El **reparto** ya no puede sumar más que el total: lo que carga la batería por
+  encima de lo generado se atribuye a la red y los orígenes del consumo se
+  reparten hasta cubrir exactamente el total (antes, con contadores diarios
+  reales, los porcentajes podían pasar del 100 %). El modelo es ahora **el mismo
+  en la Home y en la pantalla de Energía** (`series.split_flows`).
+- Los totales del día se leen del periodo de **5 minutos** (así van casi al día,
+  sin esperar a que se consolide la hora) y se **cachean 2 minutos**, para no
+  abrir una conexión con Home Assistant en cada refresco de la Home.
+
+### Nuevo
+
+- **Previsión de generación solar** en el gráfico de la vista solar: cuando el
+  intervalo incluye horas futuras se dibuja como **línea punteada y sin
+  leyenda**. Se configura en **Ajustes → Previsión solar** y es compatible con
+  **Solcast** (`detailedForecast` / `detailedHourly`) y **Forecast.Solar**
+  (`watts`, `wh_days`).
+- **Zoom del eje del tiempo** en todos los gráficos de Energía: pellizca con
+  dos dedos (o `⌘`/`Ctrl` + rueda), arrastra para desplazarte y pulsa el
+  indicador `1.0×` para restablecerlo. El eje Y se queda fijo al desplazarse.
+- **Selector de periodo pulsable**: el rótulo del intervalo abre el **control
+  de fecha del sistema**; al elegir un día se muestra el día, la semana, el mes
+  o el año que lo contiene, según el rango activo.
+- Botón **Totales** para deshacer la selección de un punto y volver a los
+  totales del periodo.
+
+### Cambios
+
+- Las leyendas muestran el **total de energía del periodo** de cada serie
+  (antes, en la vista de día, mostraban el máximo de potencia).
+- Al entrar en cualquier gráfico **todas las series están visibles** y sin
+  punto seleccionado.
+- Todas las series con leyenda se dibujan como **línea con su área
+  translúcida** (también en semana, mes, año y total, que antes eran barras).
+  La curva de **ayer** va al fondo y con un área más tenue.
+- **Guías de Apple (HIG)**: zonas interactivas de al menos 44 px (iconos de
+  vista, segmentos de rango, flechas, barra de pestañas), tipografía y
+  jerarquía revisadas, **indicador de progreso** superior mientras se cargan
+  datos y **spinner** sobre el gráfico, foco visible con teclado y respeto por
+  `prefers-reduced-motion`.
+
 ## 0.15.0
 
 ### Nuevo

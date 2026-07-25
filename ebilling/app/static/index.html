@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
+  <!-- Indicador de progreso: visible mientras hay peticiones en vuelo -->
+  <div class="progress" role="progressbar" aria-label="Cargando" aria-hidden="true"></div>
+
   <!-- Fondo dinámico según el momento del día y el tiempo -->
   <div class="bg" id="bg" data-phase="day">
     <div class="bg-sky"></div>
@@ -75,9 +78,13 @@
           <button class="seg" data-range="total">Total</button>
         </div>
         <div class="period-bar">
-          <button class="icon-btn" id="e-prev" aria-label="Anterior">‹</button>
-          <div class="period-label" id="e-label">—</div>
-          <button class="icon-btn" id="e-next" aria-label="Siguiente">›</button>
+          <button class="icon-btn" id="e-prev" aria-label="Periodo anterior">‹</button>
+          <div class="period-picker" id="e-picker">
+            <span class="period-label" id="e-label">—</span>
+            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5l5 5 5-5"/></svg>
+            <input type="date" id="e-date" class="period-input" aria-label="Elegir el periodo">
+          </div>
+          <button class="icon-btn" id="e-next" aria-label="Periodo siguiente">›</button>
         </div>
         <div class="viewtabs" role="tablist">
           <button class="vt active" data-eview="overview" title="General" aria-label="General">
@@ -101,10 +108,35 @@
       <div id="e-error" class="banner error hidden"></div>
 
       <div class="panel glass">
-        <div class="e-stamp" id="e-stamp">—</div>
+        <div class="e-stamp-row">
+          <div class="e-stamp" id="e-stamp">—</div>
+          <button class="chip-clear hidden" id="e-clear">
+            Totales
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+          </button>
+        </div>
         <div class="e-legend" id="e-legend"></div>
-        <div class="e-chart-unit" id="e-unit">W</div>
-        <div id="e-chart" class="chart e-chart"></div>
+        <div class="e-chart-head">
+          <div class="e-chart-unit" id="e-unit">W</div>
+          <div class="e-zoom" id="e-zoom">
+            <button class="zoom-btn" id="e-zoom-out" aria-label="Reducir zoom">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>
+            </button>
+            <button class="e-zoom-val" id="e-zoom-val" aria-label="Restablecer el zoom">1×</button>
+            <button class="zoom-btn" id="e-zoom-in" aria-label="Ampliar zoom">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="e-chart-wrap">
+          <div id="e-chart" class="chart e-chart"></div>
+          <div id="e-gutter" class="e-gutter" aria-hidden="true"></div>
+          <div class="e-busy hidden" id="e-busy" role="status" aria-live="polite">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="sr-only">Cargando datos…</span>
+          </div>
+        </div>
+        <p class="e-zoom-hint">La leyenda muestra el total del periodo · pulsa un punto del gráfico para ver sus valores · pellizca para ampliar el eje del tiempo</p>
         <p class="empty hidden" id="e-empty">
           Sin datos para este periodo. Comprueba los sensores en <b>Ajustes</b>.
         </p>
@@ -306,8 +338,32 @@
       </div>
 
       <div class="panel glass group">
-        <div class="group-head">Energía del día <span class="soft">· resumen de la Home</span></div>
+        <div class="group-head">Contadores de energía <span class="soft">· resumen de la Home</span></div>
         <div class="list" id="energy-sensor-list"></div>
+        <p class="li-note">
+          Contadores en kWh, normalmente acumulados desde el inicio del
+          histórico (<code>total_increasing</code>). El add-on calcula por su
+          cuenta el <b>incremento del día</b> a partir de las estadísticas, así
+          que no necesitas sensores «de hoy».
+        </p>
+        <p class="li-note">
+          El de la casa es <b>opcional</b>: si no tienes un contador de consumo,
+          el add-on integra el <b>sensor de potencia de la casa</b> que hayas
+          configurado en el flujo de energía y, si tampoco lo hay, lo deduce por
+          balance.
+        </p>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Previsión solar <span class="soft">· gráfico de Energía</span></div>
+        <div class="list">
+          <label class="li"><span class="li-label">Sensor de previsión</span><select id="s-forecast"></select></label>
+          <p class="li-note">
+            Compatible con Solcast y Forecast.Solar. La previsión se dibuja
+            como línea punteada en la vista solar cuando el intervalo incluye
+            horas futuras.
+          </p>
+        </div>
       </div>
 
       <div class="panel glass group">

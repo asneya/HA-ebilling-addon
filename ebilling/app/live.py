@@ -9,12 +9,14 @@ del día, para el fondo dinámico.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
 import aiohttp
 
 import datasources
+import series as series_mod
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,13 +28,7 @@ POWER_KEYS = (
     "battery_discharge",
     "home",
 )
-ENERGY_KEYS = (
-    "pv_energy",
-    "grid_import_energy",
-    "grid_export_energy",
-    "battery_charge_energy",
-    "battery_discharge_energy",
-)
+ENERGY_KEYS = series_mod.ENERGY_KEYS
 
 
 def _num(value: Any) -> float | None:
@@ -158,19 +154,25 @@ def _flows(power: dict[str, float]) -> dict[str, float]:
 def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     """Resumen del día: generación y consumo de la casa, por destino/origen.
 
-    Modelo equivalente al de las apps de inversores: lo vertido y lo que carga
-    la batería se atribuyen a la generación, y el resto de la generación va a
-    la casa.
+    Reparto en ``series.split_flows`` (mismo modelo que la pantalla de
+    Energía). Todas las magnitudes de ``energy`` están en Wh.
     """
     gen_total = max(energy.get("pv_energy") or 0.0, 0.0)
-    to_battery = max(energy.get("battery_charge_energy") or 0.0, 0.0)
-    to_grid = max(energy.get("grid_export_energy") or 0.0, 0.0)
-    to_load = max(gen_total - to_battery - to_grid, 0.0)
-
-    from_solar = to_load
-    from_battery = max(energy.get("battery_discharge_energy") or 0.0, 0.0)
-    from_grid = max(energy.get("grid_import_energy") or 0.0, 0.0)
-    home_total = from_solar + from_battery + from_grid
+    flows = series_mod.split_flows(
+        gen_total,
+        energy.get("battery_charge_energy") or 0.0,
+        energy.get("grid_export_energy") or 0.0,
+        energy.get("grid_import_energy") or 0.0,
+        energy.get("battery_discharge_energy") or 0.0,
+        energy.get("home_energy"),
+    )
+    to_load = flows["to_home"]
+    to_battery = flows["to_battery"]
+    to_grid = flows["to_grid"]
+    from_solar = flows["from_solar"]
+    from_battery = flows["from_battery"]
+    from_grid = flows["from_grid"]
+    home_total = flows["home_total"]
 
     def _rows(total: float, items: list[tuple[str, str, float]]) -> list[dict[str, Any]]:
         return [
@@ -209,6 +211,94 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     }
 
 
+# Las estadísticas del día solo cambian cada 5 minutos: se cachean para no
+# abrir un websocket a HA en cada refresco de la Home (cada 20 s).
+_DAILY_TTL = 120.0
+_daily_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": {}}
+
+
+async def daily_energy(
+    settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
+) -> dict[str, float]:
+    """Energía de hoy (Wh) por sensor, calculada desde las estadísticas.
+
+    Los sensores de energía suelen ser contadores acumulados desde el inicio
+    del histórico (``total_increasing``), así que su estado no sirve como total
+    del día: se pide el incremento (``change``) desde la medianoche local.
+
+    Se consulta el periodo de 5 minutos (que va casi al día) y, como respaldo,
+    el bucket diario; si un sensor no tiene estadísticas se usa su estado.
+    """
+    energy_cfg = settings.get("energy_sensors") or {}
+    flow_cfg = settings.get("flow_sensors") or {}
+    ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
+    # Sin contador propio del consumo de la casa, se mide integrando su sensor
+    # de potencia (que ya está configurado en el flujo de energía).
+    home_power = "" if energy_cfg.get("home_energy") else (flow_cfg.get("home") or "")
+    if not ids and not home_power:
+        return {}
+
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    cache_key = f"{start.isoformat()}|{','.join(ids)}|{home_power}"
+    if (
+        _daily_cache["key"] == cache_key
+        and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
+    ):
+        return dict(_daily_cache["value"])
+
+    requests: list[dict[str, Any]] = []
+    if ids:
+        requests.append(
+            {"ids": ids, "start": start, "end": now, "period": "5minute", "types": ["change"]}
+        )
+        requests.append(
+            {"ids": ids, "start": start, "end": now, "period": "day", "types": ["change"]}
+        )
+    power_index = None
+    if home_power:
+        power_index = len(requests)
+        requests.append(
+            {"ids": [home_power], "start": start, "end": now,
+             "period": "5minute", "types": ["mean"]}
+        )
+
+    results: list[dict[str, Any]] = [{} for _ in requests]
+    units: dict[str, str] = {}
+    try:
+        results, units = await series_mod.ws_statistics(settings, requests)
+    except Exception:  # noqa: BLE001 - se degrada al estado actual del sensor
+        _LOGGER.warning("No se pudieron leer las estadísticas del día", exc_info=True)
+
+    detailed = results[0] if ids else {}
+    coarse = results[1] if ids else {}
+
+    out: dict[str, float] = {}
+    for key in ENERGY_KEYS:
+        entity = energy_cfg.get(key)
+        if not entity:
+            continue
+        factor = series_mod._unit_factor(entity, states, "energy", units)
+        buckets = series_mod._extract(detailed, entity, "change", tz, factor)
+        if not buckets:
+            buckets = series_mod._extract(coarse, entity, "change", tz, factor)
+        if buckets:
+            out[key] = sum(buckets.values()) * 1000.0  # kWh → Wh
+        else:
+            fallback = _convert(states.get(entity), "energy")
+            if fallback is not None:
+                out[key] = fallback
+
+    # Consumo de la casa por integración de su potencia media (Wh).
+    if power_index is not None and power_index < len(results):
+        factor = series_mod._unit_factor(home_power, states, "power", units)
+        means = series_mod._extract(results[power_index], home_power, "mean", tz, factor)
+        if means:
+            out["home_energy"] = sum(means.values()) * (5.0 / 60.0)
+
+    _daily_cache.update({"key": cache_key, "at": time.monotonic(), "value": dict(out)})
+    return out
+
+
 async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Payload de /api/live."""
     flow_cfg = settings.get("flow_sensors") or {}
@@ -224,12 +314,8 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
         if value is not None:
             power[key] = value
 
-    energy: dict[str, float] = {}
-    for key in ENERGY_KEYS:
-        entity = energy_cfg.get(key)
-        value = _convert(states.get(entity), "energy") if entity else None
-        if value is not None:
-            energy[key] = value
+    # Totales del día calculados (no el estado del sensor, que es acumulado).
+    energy = await daily_energy(settings, states, now.tzinfo, now)
 
     soc_entity = flow_cfg.get("battery_soc")
     soc = _num((states.get(soc_entity) or {}).get("state")) if soc_entity else None

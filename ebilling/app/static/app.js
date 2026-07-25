@@ -25,14 +25,28 @@ const fmtKwh = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximu
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
+// Indicador de progreso global: una barra fina en la parte superior mientras
+// haya alguna petición en vuelo (HIG: dar señal de espera en toda operación).
+let pending = 0;
+
+function setBusy(delta) {
+  pending = Math.max(0, pending + delta);
+  document.documentElement.classList.toggle("busy", pending > 0);
+}
+
 async function api(path, options = {}) {
-  const resp = await fetch(`api/${path}`, { headers: { "Content-Type": "application/json" }, ...options });
-  if (!resp.ok) {
-    let detail = `Error ${resp.status}`;
-    try { detail = (await resp.json()).detail || detail; } catch (_) { /* noop */ }
-    throw new Error(detail);
+  setBusy(1);
+  try {
+    const resp = await fetch(`api/${path}`, { headers: { "Content-Type": "application/json" }, ...options });
+    if (!resp.ok) {
+      let detail = `Error ${resp.status}`;
+      try { detail = (await resp.json()).detail || detail; } catch (_) { /* noop */ }
+      throw new Error(detail);
+    }
+    return resp.json();
+  } finally {
+    setBusy(-1);
   }
-  return resp.json();
 }
 
 function esc(str) {
@@ -324,19 +338,35 @@ function renderFlow(live) {
 
 /* ========================= ENERGÍA (pantalla de detalle) ========================= */
 
-const eState = { range: "day", view: "overview", offset: 0, data: null, hidden: new Set(), cursor: null };
+const eState = {
+  range: "day",
+  view: "overview",
+  offset: 0,
+  data: null,
+  hidden: new Set(),
+  cursor: null,
+  zoom: 1,        // estiramiento del eje X (1 = ancho del panel)
+  keepScroll: 0,  // scrollLeft a restaurar tras redibujar
+};
+const E_ZOOM_MAX = 12;
 
 async function loadEnergy() {
   const banner = $("#e-error");
   banner.classList.add("hidden");
+  $("#e-busy").classList.remove("hidden");
   try {
     eState.data = await api(`series?view=${eState.view}&range=${eState.range}&offset=${eState.offset}`);
+    // Al entrar en un gráfico todas las series están visibles y sin punto
+    // seleccionado: se muestran los totales del periodo.
+    eState.hidden.clear();
     eState.cursor = null;
     renderEnergy();
   } catch (err) {
     banner.textContent = err.message;
     banner.classList.remove("hidden");
     $("#e-chart").innerHTML = "";
+  } finally {
+    $("#e-busy").classList.add("hidden");
   }
 }
 
@@ -379,15 +409,19 @@ function renderEnergy() {
   $("#e-unit").textContent = d.unit;
   $$(".seg[data-range]").forEach((s) => s.classList.toggle("active", s.dataset.range === eState.range));
   $$(".vt").forEach((v) => v.classList.toggle("active", v.dataset.eview === eState.view));
+  syncPeriodPicker();
+  syncZoomControls();
 
   const hasData = d.x.length && d.series.some((s) => s.values.some((v) => v != null));
   $("#e-empty").classList.toggle("hidden", !!hasData);
-  $("#e-chart").classList.toggle("hidden", !hasData);
+  $(".e-chart-wrap").classList.toggle("hidden", !hasData);
+  $(".e-zoom-hint").classList.toggle("hidden", !hasData);
 
-  // Marca de tiempo: el punto seleccionado o el final del periodo.
+  // Marca de tiempo: el punto seleccionado o el periodo completo.
   const idx = eState.cursor;
-  $("#e-stamp").textContent =
-    idx != null && d.x[idx] ? stampLabel(d.x[idx], eState.range) : d.label;
+  const picked = idx != null && d.x[idx];
+  $("#e-stamp").textContent = picked ? stampLabel(d.x[idx], eState.range) : d.label;
+  $("#e-clear").classList.toggle("hidden", !picked);
 
   renderEnergyLegend();
   if (hasData) renderEnergyChart();
@@ -397,19 +431,22 @@ function renderEnergy() {
 function renderEnergyLegend() {
   const d = eState.data;
   const idx = eState.cursor;
-  $("#e-legend").innerHTML = d.series.map((s) => {
+  // El forecast no tiene leyenda (legend === false).
+  const shown = d.series.filter((s) => s.legend !== false);
+  $("#e-legend").innerHTML = shown.map((s) => {
     const off = eState.hidden.has(s.key);
-    // Con punto seleccionado se muestra su valor; si no, el total del periodo.
-    const atPoint = idx != null ? s.values[idx] : null;
-    const value = idx != null ? fmtValue(atPoint, d.unit) : fmtValue(s.total, d.unit);
-    const suffix = idx == null && s.total_label ? `<small>${s.total_label}</small>` : "";
+    // Con punto seleccionado se muestra su valor instantáneo; si no, el total
+    // de energía del periodo para esa serie.
+    const value = idx != null
+      ? fmtValue(s.values[idx], d.unit)
+      : fmtValue(s.total, s.total_unit || d.unit);
     return `
       <button class="e-serie ${off ? "off" : ""}" data-serie="${esc(s.key)}"
               aria-pressed="${!off}" title="Mostrar u ocultar ${esc(s.label)}">
         <span class="n">${esc(s.label)}</span>
         <span class="v">
           <span class="check" style="background:${esc(s.color)}">${off ? "" : "✓"}</span>
-          <span class="num">${value}${suffix}</span>
+          <span class="num">${value}</span>
         </span>
       </button>`;
   }).join("");
@@ -420,100 +457,241 @@ function renderEnergyLegend() {
   }));
 }
 
+/* --- Selector de periodo con controles nativos --- */
+
+function syncPeriodPicker() {
+  const d = eState.data;
+  const input = $("#e-date");
+  const picker = $("#e-picker");
+  const enabled = eState.range !== "total";
+  picker.classList.toggle("disabled", !enabled);
+  input.disabled = !enabled;
+  if (!enabled || !d) return;
+  // El valor del control es un día del periodo mostrado; el máximo, hoy.
+  input.value = (d.start || "").slice(0, 10);
+  input.max = todayISO();
+}
+
+function todayISO() {
+  const now = new Date();
+  const p = (v) => String(v).padStart(2, "0");
+  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+}
+
+// Desplazamiento (en unidades del rango) entre la fecha elegida y hoy.
+function offsetForDate(value, range) {
+  const [y, m, dd] = value.split("-").map(Number);
+  if (!y || !m || !dd) return null;
+  const picked = new Date(y, m - 1, dd);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === "day") {
+    return Math.round((picked - today) / 86400000);
+  }
+  if (range === "week") {
+    const monday = (dt) => {
+      const out = new Date(dt);
+      out.setDate(out.getDate() - ((out.getDay() + 6) % 7));
+      return out;
+    };
+    return Math.round((monday(picked) - monday(today)) / (7 * 86400000));
+  }
+  if (range === "month") {
+    return (picked.getFullYear() - today.getFullYear()) * 12 + (picked.getMonth() - today.getMonth());
+  }
+  if (range === "year") return picked.getFullYear() - today.getFullYear();
+  return 0;
+}
+
+/* --- Zoom del eje X --- */
+
+function syncZoomControls() {
+  $("#e-zoom-val").textContent = `${eState.zoom < 10 ? eState.zoom.toFixed(1) : Math.round(eState.zoom)}×`;
+  $("#e-zoom-out").disabled = eState.zoom <= 1.001;
+  $("#e-zoom-in").disabled = eState.zoom >= E_ZOOM_MAX - 0.001;
+}
+
+// Cambia el zoom manteniendo fijo el punto del eje que está bajo `focusRatio`
+// (0–1 del ancho visible), como hace el pinch de iOS.
+function setZoom(next, focusRatio) {
+  const box = $("#e-chart");
+  const clamped = Math.max(1, Math.min(E_ZOOM_MAX, next));
+  if (Math.abs(clamped - eState.zoom) < 0.001) return;
+  const view = box.clientWidth || 1;
+  const ratio = focusRatio == null ? 0.5 : focusRatio;
+  const anchor = (box.scrollLeft + view * ratio) / (view * eState.zoom);
+  eState.zoom = clamped;
+  eState.keepScroll = Math.max(0, anchor * view * clamped - view * ratio);
+  renderEnergy();
+}
+
+// Tramos contiguos de valores no nulos: [[indice, valor], …] por tramo.
+function seriesSegments(values) {
+  const out = [];
+  let run = [];
+  values.forEach((v, i) => {
+    if (v == null) { if (run.length) out.push(run); run = []; return; }
+    run.push([i, v]);
+  });
+  if (run.length) out.push(run);
+  return out;
+}
+
+const E_GUTTER = 46;   // ancho reservado al eje Y (fijo, no se desplaza)
+const E_HEIGHT = 268;  // alto del área de gráfico, en px
+
 function renderEnergyChart() {
   const d = eState.data;
+  const box = $("#e-chart");
   const visible = d.series.filter((s) => !eState.hidden.has(s.key));
-  const W = 720, H = 300, padL = 52, padR = 12, padT = 14, padB = 30;
+  const H = E_HEIGHT, padT = 16, padB = 26, padR = 14, plotL = E_GUTTER;
+  const viewW = Math.max(240, box.clientWidth || 320);
+  const W = Math.round(viewW * eState.zoom);
+  const plotR = Math.max(plotL + 40, W - padR);
+
   const values = visible.flatMap((s) => s.values.filter((v) => v != null));
-  const rawMax = Math.max(...values, 0.1) * 1.08;
+  const rawMax = Math.max(...values, 0.1) * 1.06;
   // Paso redondeado para que el eje no muestre cifras arbitrarias.
   const pow = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
-  const yStep = [1, 2, 2.5, 5, 10].map((m) => m * pow).find((v) => v * 4 >= rawMax) || pow * 10;
+  const yStep = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+    .map((m) => m * pow).find((v) => v * 4 >= rawMax) || pow * 10;
   const max = yStep * 4;
   const n = d.x.length;
-  const X = (i) => padL + (n <= 1 ? 0 : (i * (W - padL - padR)) / (n - 1));
+  const X = (i) => plotL + (n <= 1 ? 0 : (i * (plotR - plotL)) / (n - 1));
   const Y = (v) => H - padB - (v / max) * (H - padT - padB);
+  const base = (H - padB).toFixed(1);
 
+  let defs = "";
   let svg = "";
   for (let i = 0; i <= 4; i++) {
-    const val = (max / 4) * i;
-    const y = Y(val);
-    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="currentColor" opacity="0.12"/>`;
-    svg += `<text x="${padL - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="currentColor" opacity="0.55">${fmtNum.format(val)}</text>`;
+    const y = Y((max / 4) * i);
+    svg += `<line x1="${plotL}" y1="${y.toFixed(1)}" x2="${plotR}" y2="${y.toFixed(1)}" stroke="currentColor" opacity="0.12"/>`;
   }
 
-  if (d.chart === "bar") {
-    const groups = visible.length || 1;
-    const slot = (W - padL - padR) / Math.max(n, 1);
-    const bw = Math.max(2, Math.min(22, (slot * 0.68) / groups));
-    visible.forEach((s, gi) => {
-      s.values.forEach((v, i) => {
-        if (v == null || v <= 0) return;
-        const x = padL + slot * i + slot / 2 - (groups * bw) / 2 + gi * bw;
-        const y = Y(v);
-        svg += `<rect class="bar-seg" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - padB - y).toFixed(1)}" rx="2.5" fill="${s.color}"><title>${xLabel(d.x[i], eState.range)} · ${esc(s.label)}: ${fmtValue(v, d.unit)}</title></rect>`;
-      });
+  // Todas las series se pintan como línea con su área translúcida debajo; solo
+  // la previsión va punteada y sin relleno. «Ayer» se dibuja al fondo, con un
+  // área más tenue, para no tapar la curva del día.
+  const ordered = visible.filter((s) => s.key === "yesterday")
+    .concat(visible.filter((s) => s.key !== "yesterday"));
+  ordered.forEach((s, si) => {
+    const dashed = !!s.dashed;  // solo la previsión: el resto, línea con área
+    const faint = s.key === "yesterday";
+    const gid = `eg${si}`;
+    if (!dashed) {
+      defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${esc(s.color)}" stop-opacity="${faint ? 0.16 : 0.34}"/>
+        <stop offset="100%" stop-color="${esc(s.color)}" stop-opacity="0.02"/>
+      </linearGradient>`;
+    }
+    seriesSegments(s.values).forEach((seg) => {
+      const line = seg
+        .map(([i, v], k) => `${k ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
+        .join(" ");
+      if (seg.length === 1) {
+        svg += `<circle cx="${X(seg[0][0]).toFixed(1)}" cy="${Y(seg[0][1]).toFixed(1)}" r="2.8" fill="${esc(s.color)}"/>`;
+        return;
+      }
+      if (!dashed) {
+        svg += `<path d="${line} L${X(seg[seg.length - 1][0]).toFixed(1)},${base} L${X(seg[0][0]).toFixed(1)},${base} Z" fill="url(#${gid})" stroke="none"/>`;
+      }
+      svg += `<path d="${line}" fill="none" stroke="${esc(s.color)}" stroke-width="${dashed || faint ? 1.8 : 2.2}"${dashed ? ' stroke-dasharray="2.5 4.5"' : ""} stroke-linejoin="round" stroke-linecap="round"/>`;
     });
-  } else {
-    visible.forEach((s) => {
-      let path = "", open = false;
-      s.values.forEach((v, i) => {
-        if (v == null) { open = false; return; }
-        path += `${open ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)} `;
-        open = true;
-      });
-      const dash = s.key === "yesterday" ? ` stroke-dasharray="5 4"` : "";
-      svg += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="2"${dash} stroke-linejoin="round" stroke-linecap="round"/>`;
-    });
-  }
+  });
 
   // Cursor: línea vertical con la etiqueta del punto.
   const idx = eState.cursor;
   if (idx != null && d.x[idx]) {
-    const x = d.chart === "bar"
-      ? padL + ((W - padL - padR) / Math.max(n, 1)) * (idx + 0.5)
-      : X(idx);
+    const x = X(idx);
     svg += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H - padB}" stroke="currentColor" opacity="0.55" stroke-width="1.4"/>`;
     visible.forEach((s) => {
       const v = s.values[idx];
-      if (v != null) svg += `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4" fill="${s.color}" stroke="var(--glass)" stroke-width="2"/>`;
+      if (v != null) svg += `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4" fill="${esc(s.color)}" stroke="var(--glass)" stroke-width="2"/>`;
     });
     const anchor = x > W - 90 ? "end" : "start";
-    svg += `<text class="e-cursor-label" x="${(x + (anchor === "end" ? -8 : 8)).toFixed(1)}" y="${padT + 12}" text-anchor="${anchor}">${esc(xLabel(d.x[idx], eState.range))}</text>`;
+    svg += `<text class="e-cursor-label" x="${(x + (anchor === "end" ? -8 : 8)).toFixed(1)}" y="${padT + 11}" text-anchor="${anchor}">${esc(xLabel(d.x[idx], eState.range))}</text>`;
   }
 
-  // Etiquetas del eje X (unas pocas, repartidas).
-  const step = Math.max(1, Math.ceil(n / 6));
+  // Etiquetas del eje X: tantas como quepan sin apelotonarse.
+  const slots = Math.max(2, Math.floor((plotR - plotL) / 58));
+  const step = Math.max(1, Math.ceil(n / slots));
   d.x.forEach((iso, i) => {
     if (i % step && i !== n - 1) return;
-    const x = d.chart === "bar" ? padL + ((W - padL - padR) / Math.max(n, 1)) * (i + 0.5) : X(i);
-    svg += `<text x="${x.toFixed(1)}" y="${H - 9}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">${esc(xLabel(iso, eState.range))}</text>`;
+    svg += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">${esc(xLabel(iso, eState.range))}</text>`;
   });
 
-  const el = $("#e-chart");
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico de ${esc(eState.view)}">${svg}</svg>`;
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
+    aria-label="Gráfico de ${esc(eState.view)}"><defs>${defs}</defs>${svg}</svg>`;
+  box.scrollLeft = eState.keepScroll;
 
-  // Selección de punto por pulsación o arrastre.
-  const svgEl = el.querySelector("svg");
-  const pick = (ev) => {
+  // Eje Y en una capa fija, para que no se desplace con el zoom.
+  let gut = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = Y((max / 4) * i);
+    gut += `<text class="e-ylabel" x="${E_GUTTER - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${fmtNum.format((max / 4) * i)}</text>`;
+  }
+  $("#e-gutter").innerHTML =
+    `<svg width="${E_GUTTER}" height="${H}" viewBox="0 0 ${E_GUTTER} ${H}">${gut}</svg>`;
+
+  bindChartGestures(box, box.querySelector("svg"), { plotL, plotR, n });
+}
+
+// Pulsación para seleccionar un punto, arrastre horizontal para desplazarse y
+// pinza (o ctrl+rueda) para estirar el eje del tiempo.
+function bindChartGestures(box, svgEl, geo) {
+  const { plotL, plotR, n } = geo;
+  const pick = (clientX) => {
     const rect = svgEl.getBoundingClientRect();
-    const px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left) * (W / rect.width);
-    let i;
-    if (d.chart === "bar") {
-      i = Math.floor((px - padL) / ((W - padL - padR) / Math.max(n, 1)));
-    } else {
-      i = Math.round(((px - padL) / (W - padL - padR)) * (n - 1));
-    }
+    const px = clientX - rect.left;
+    let i = Math.round(((px - plotL) / Math.max(plotR - plotL, 1)) * (n - 1));
     i = Math.max(0, Math.min(n - 1, i));
     if (i !== eState.cursor) { eState.cursor = i; renderEnergy(); }
   };
+
+  const pointers = new Map();
+  let pinch = null;
+  let downAt = null;
+
   svgEl.addEventListener("pointerdown", (ev) => {
-    pick(ev);
-    // La captura falla con punteros sintéticos o ya liberados: no es crítica.
-    try { svgEl.setPointerCapture(ev.pointerId); } catch (_) { /* noop */ }
+    pointers.set(ev.pointerId, ev.clientX);
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { dist: Math.abs(a - b) || 1, zoom: eState.zoom, center: (a + b) / 2 };
+      downAt = null;
+      return;
+    }
+    downAt = { x: ev.clientX, y: ev.clientY };
   });
-  svgEl.addEventListener("pointermove", (ev) => { if (ev.buttons) pick(ev); });
-  svgEl.addEventListener("dblclick", () => { eState.cursor = null; renderEnergy(); });
+
+  svgEl.addEventListener("pointermove", (ev) => {
+    if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, ev.clientX);
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const dist = Math.abs(a - b) || 1;
+      const rect = box.getBoundingClientRect();
+      setZoom(pinch.zoom * (dist / pinch.dist), (pinch.center - rect.left) / rect.width);
+      return;
+    }
+    // Con ratón, arrastrar recorre los puntos (scrubbing).
+    if (ev.pointerType === "mouse" && ev.buttons) pick(ev.clientX);
+  });
+
+  const release = (ev) => {
+    pointers.delete(ev.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!downAt) return;
+    const moved = Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y);
+    downAt = null;
+    if (moved < 8) pick(ev.clientX);  // pulsación, no arrastre
+  };
+  svgEl.addEventListener("pointerup", release);
+  svgEl.addEventListener("pointercancel", (ev) => { pointers.delete(ev.pointerId); pinch = null; downAt = null; });
+
+  svgEl.addEventListener("wheel", (ev) => {
+    if (!ev.ctrlKey && !ev.metaKey) return;  // rueda normal: desplazamiento
+    ev.preventDefault();
+    const rect = box.getBoundingClientRect();
+    setZoom(eState.zoom * Math.exp(-ev.deltaY / 220), (ev.clientX - rect.left) / rect.width);
+  }, { passive: false });
 }
 
 function renderEnergyBreakdown() {
@@ -547,13 +725,47 @@ $("#summary-panel").addEventListener("keydown", (e) => {
 });
 $("#energy-back").addEventListener("click", () => showView("home"));
 $$(".seg[data-range]").forEach((b) => b.addEventListener("click", () => {
-  eState.range = b.dataset.range; eState.offset = 0; loadEnergy();
+  eState.range = b.dataset.range;
+  eState.offset = 0;
+  resetZoom();
+  loadEnergy();
 }));
 $$(".vt").forEach((b) => b.addEventListener("click", () => {
-  eState.view = b.dataset.eview; loadEnergy();
+  eState.view = b.dataset.eview;
+  resetZoom();
+  loadEnergy();
 }));
 $("#e-prev").addEventListener("click", () => { eState.offset -= 1; loadEnergy(); });
 $("#e-next").addEventListener("click", () => { if (eState.offset < 0) { eState.offset += 1; loadEnergy(); } });
+
+function resetZoom() {
+  eState.zoom = 1;
+  eState.keepScroll = 0;
+}
+
+// Volver a los totales del periodo tras seleccionar un punto.
+$("#e-clear").addEventListener("click", () => { eState.cursor = null; renderEnergy(); });
+
+// Zoom del eje del tiempo.
+$("#e-zoom-in").addEventListener("click", () => setZoom(eState.zoom * 1.6));
+$("#e-zoom-out").addEventListener("click", () => setZoom(eState.zoom / 1.6));
+$("#e-zoom-val").addEventListener("click", () => { resetZoom(); renderEnergy(); });
+$("#e-chart").addEventListener("scroll", () => { eState.keepScroll = $("#e-chart").scrollLeft; });
+
+// Selector de periodo: control nativo de fecha.
+$("#e-date").addEventListener("change", (ev) => {
+  const offset = offsetForDate(ev.target.value, eState.range);
+  if (offset == null || offset > 0) return;
+  eState.offset = offset;
+  resetZoom();
+  loadEnergy();
+});
+$("#e-picker").addEventListener("click", () => {
+  const input = $("#e-date");
+  if (input.disabled) return;
+  // En escritorio hay que pedir el calendario explícitamente.
+  try { input.showPicker(); } catch (_) { input.focus(); }
+});
 
 /* ========================= BILLING: simulación ========================= */
 
@@ -1131,17 +1343,21 @@ const FLOW_FIELDS = [
   ["battery_soc", "Batería (%)", "percent"],
 ];
 const ENERGY_FIELDS = [
-  ["pv_energy", "Solar hoy", "energy"],
-  ["grid_import_energy", "Importada hoy", "energy"],
-  ["grid_export_energy", "Exportada hoy", "energy"],
-  ["battery_charge_energy", "Carga hoy", "energy"],
-  ["battery_discharge_energy", "Descarga hoy", "energy"],
+  ["pv_energy", "Solar", "energy"],
+  ["grid_import_energy", "Importada", "energy"],
+  ["grid_export_energy", "Exportada", "energy"],
+  ["battery_charge_energy", "Carga", "energy"],
+  ["battery_discharge_energy", "Descarga", "energy"],
+  ["home_energy", "Casa (opcional)", "energy"],
 ];
 
 function optionsFor(kind, selected) {
   const list = (state.grouped && state.grouped[kind]) || [];
   let html = `<option value="">— sin asignar —</option>`;
-  if (!list.length && selected) html += `<option value="${esc(selected)}" selected>${esc(selected)}</option>`;
+  // Se conserva el valor guardado aunque no esté en la lista (entidad no
+  // disponible ahora, o varios sensores separados por comas).
+  if (selected && !list.some((e) => e.entity_id === selected))
+    html += `<option value="${esc(selected)}" selected>${esc(selected)}</option>`;
   html += list.map((e) =>
     `<option value="${esc(e.entity_id)}" ${e.entity_id === selected ? "selected" : ""}>${esc(e.name)}${e.unit ? ` (${esc(e.unit)})` : ""}</option>`).join("");
   return html;
@@ -1157,6 +1373,7 @@ function renderSensorLists() {
       <select data-energy="${key}">${optionsFor(kind, (s.energy_sensors || {})[key] || "")}</select></label>`).join("");
   $("#s-condition").innerHTML = optionsFor("any", s.condition_sensor || "");
   $("#s-temp").innerHTML = optionsFor("temperature", s.temperature_sensor || "");
+  $("#s-forecast").innerHTML = optionsFor("any", s.solar_forecast_sensor || "");
 }
 
 function fillSettings() {
@@ -1264,6 +1481,7 @@ function settingsFromForm() {
     energy_sensors: energy,
     condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
+    solar_forecast_sensor: $("#s-forecast").value,
     influx: {
       version: parseInt($("#s-ifx-version").value, 10) || 2,
       url: $("#s-ifx-url").value.trim(),
