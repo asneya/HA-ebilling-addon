@@ -58,7 +58,9 @@ function esc(str) {
 /* ========================= navegación ========================= */
 
 $$(".tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
-$$(".seg").forEach((seg) => seg.addEventListener("click", () => showSub(seg.dataset.sub)));
+// Solo los segmentos que cambian de subvista (los del rango de Energía también
+// son «.seg» y no deben tocar las subvistas de Facturación).
+$$(".seg[data-sub]").forEach((seg) => seg.addEventListener("click", () => showSub(seg.dataset.sub)));
 
 function showView(name) {
   state.view = name;
@@ -69,16 +71,44 @@ function showView(name) {
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (name === "home") loadLive();
-  if (name === "billing" && !state.simulation) loadSimulation();
-  if (name === "settings") fillSettings();
+  if (name === "billing") {
+    // Facturación entra siempre con una subvista activa (Simulación por
+    // defecto), sin tener que pulsar su segmento.
+    if (!$(".subview.active")) showSub(state.sub || "sim");
+    if (!state.simulation) loadSimulation();
+  }
+  if (name === "settings") {
+    fillSettings();
+    showSettingsPage(null);
+  }
 }
 
 function showSub(name) {
-  $$(".seg").forEach((s) => s.classList.toggle("active", s.dataset.sub === name));
+  state.sub = name;
+  $$(".seg[data-sub]").forEach((s) => s.classList.toggle("active", s.dataset.sub === name));
   $$(".subview").forEach((v) => v.classList.toggle("active", v.id === `sub-${name}`));
   if (name === "detail" && !state.detail) loadDetail();
   if (name === "tariffs") renderTariffsList();
 }
+
+/* Ajustes por niveles: índice → categoría. */
+function showSettingsPage(page) {
+  state.settingsPage = page || null;
+  $$("#view-settings .settings-page").forEach((p) => {
+    p.classList.toggle("active", p.id === `sp-${page || "root"}`);
+  });
+  // El botón de guardar no tiene sentido en el índice ni en la lista de tarifas.
+  const hideSave = !page || page === "tariffs";
+  $("#settings-save-bar").classList.toggle("hidden", hideSave);
+  $("#settings-status").textContent = "";
+  if (page === "tariffs") renderTariffsList();
+  window.scrollTo(0, 0);
+}
+
+$$("[data-settings-page]").forEach((row) =>
+  row.addEventListener("click", () => showSettingsPage(row.dataset.settingsPage)));
+$$(".settings-back").forEach((b) =>
+  b.addEventListener("click", () => showSettingsPage(null)));
 
 /* ========================= HOME: meteorología y fondo ========================= */
 
@@ -512,17 +542,27 @@ function syncZoomControls() {
 }
 
 // Cambia el zoom manteniendo fijo el punto del eje que está bajo `focusRatio`
-// (0–1 del ancho visible), como hace el pinch de iOS.
+// (0–1 del ancho visible), como hace el pinch de iOS. El redibujado se agrupa
+// en un frame de animación: durante un pellizco llegan decenas de eventos y
+// rehacer el gráfico en cada uno lo dejaría a tirones.
+let zoomFrame = 0;
+
 function setZoom(next, focusRatio) {
   const box = $("#e-chart");
   const clamped = Math.max(1, Math.min(E_ZOOM_MAX, next));
-  if (Math.abs(clamped - eState.zoom) < 0.001) return;
+  if (Math.abs(clamped - eState.zoom) < 0.002) return;
   const view = box.clientWidth || 1;
   const ratio = focusRatio == null ? 0.5 : focusRatio;
   const anchor = (box.scrollLeft + view * ratio) / (view * eState.zoom);
   eState.zoom = clamped;
   eState.keepScroll = Math.max(0, anchor * view * clamped - view * ratio);
-  renderEnergy();
+  if (zoomFrame) return;
+  zoomFrame = requestAnimationFrame(() => {
+    zoomFrame = 0;
+    syncZoomControls();
+    // Solo el gráfico: la leyenda y el desglose no dependen del zoom.
+    if (eState.data) renderEnergyChart();
+  });
 }
 
 // Tramos contiguos de valores no nulos: [[indice, valor], …] por tramo.
@@ -632,66 +672,92 @@ function renderEnergyChart() {
   $("#e-gutter").innerHTML =
     `<svg width="${E_GUTTER}" height="${H}" viewBox="0 0 ${E_GUTTER} ${H}">${gut}</svg>`;
 
-  bindChartGestures(box, box.querySelector("svg"), { plotL, plotR, n });
+  // La geometría se guarda para los gestos, que están enlazados una sola vez
+  // al contenedor (el <svg> se recrea en cada dibujado).
+  chartGeo = { plotL, plotR, n };
 }
 
+let chartGeo = { plotL: E_GUTTER, plotR: 0, n: 0 };
+
 // Pulsación para seleccionar un punto, arrastre horizontal para desplazarse y
-// pinza (o ctrl+rueda) para estirar el eje del tiempo.
-function bindChartGestures(box, svgEl, geo) {
-  const { plotL, plotR, n } = geo;
+// pinza (o ⌘/Ctrl + rueda) para estirar el eje del tiempo. Se enlaza una única
+// vez sobre `#e-chart`, que persiste entre dibujados: si los gestos vivieran en
+// el <svg> se perderían en cuanto el primer paso del pellizco lo sustituyera.
+function initChartGestures() {
+  const box = $("#e-chart");
+  const pointers = new Map();
+  let pinch = null;
+  let drag = null;
+
   const pick = (clientX) => {
+    const svgEl = box.querySelector("svg");
+    if (!svgEl || chartGeo.n < 1) return;
     const rect = svgEl.getBoundingClientRect();
-    const px = clientX - rect.left;
-    let i = Math.round(((px - plotL) / Math.max(plotR - plotL, 1)) * (n - 1));
-    i = Math.max(0, Math.min(n - 1, i));
+    const span = Math.max(chartGeo.plotR - chartGeo.plotL, 1);
+    let i = Math.round(((clientX - rect.left - chartGeo.plotL) / span) * (chartGeo.n - 1));
+    i = Math.max(0, Math.min(chartGeo.n - 1, i));
     if (i !== eState.cursor) { eState.cursor = i; renderEnergy(); }
   };
 
-  const pointers = new Map();
-  let pinch = null;
-  let downAt = null;
+  const distance = () => {
+    const xs = [...pointers.values()];
+    return Math.max(Math.abs(xs[0] - xs[1]), 1);
+  };
 
-  svgEl.addEventListener("pointerdown", (ev) => {
+  box.addEventListener("pointerdown", (ev) => {
     pointers.set(ev.pointerId, ev.clientX);
     if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      pinch = { dist: Math.abs(a - b) || 1, zoom: eState.zoom, center: (a + b) / 2 };
-      downAt = null;
+      const xs = [...pointers.values()];
+      pinch = { dist: distance(), zoom: eState.zoom, center: (xs[0] + xs[1]) / 2 };
+      drag = null;
       return;
     }
-    downAt = { x: ev.clientX, y: ev.clientY };
+    if (pointers.size > 2) return;
+    drag = { x: ev.clientX, scroll: box.scrollLeft, moved: false };
+    try { box.setPointerCapture(ev.pointerId); } catch (_) { /* no crítico */ }
   });
 
-  svgEl.addEventListener("pointermove", (ev) => {
-    if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, ev.clientX);
-    if (pinch && pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      const dist = Math.abs(a - b) || 1;
+  box.addEventListener("pointermove", (ev) => {
+    if (!pointers.has(ev.pointerId)) return;
+    pointers.set(ev.pointerId, ev.clientX);
+    if (pinch && pointers.size >= 2) {
       const rect = box.getBoundingClientRect();
-      setZoom(pinch.zoom * (dist / pinch.dist), (pinch.center - rect.left) / rect.width);
+      setZoom(pinch.zoom * (distance() / pinch.dist), (pinch.center - rect.left) / rect.width);
       return;
     }
-    // Con ratón, arrastrar recorre los puntos (scrubbing).
-    if (ev.pointerType === "mouse" && ev.buttons) pick(ev.clientX);
+    if (!drag) return;
+    const dx = ev.clientX - drag.x;
+    if (Math.abs(dx) > 6) drag.moved = true;
+    if (ev.pointerType === "mouse") {
+      if (ev.buttons) pick(ev.clientX);  // con ratón, arrastrar recorre los puntos
+    } else if (drag.moved) {
+      box.scrollLeft = drag.scroll - dx;  // con el dedo, arrastrar desplaza el eje
+    }
   });
 
   const release = (ev) => {
     pointers.delete(ev.pointerId);
     if (pointers.size < 2) pinch = null;
-    if (!downAt) return;
-    const moved = Math.hypot(ev.clientX - downAt.x, ev.clientY - downAt.y);
-    downAt = null;
-    if (moved < 8) pick(ev.clientX);  // pulsación, no arrastre
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    if (!moved && !pointers.size) pick(ev.clientX);  // pulsación, no arrastre
   };
-  svgEl.addEventListener("pointerup", release);
-  svgEl.addEventListener("pointercancel", (ev) => { pointers.delete(ev.pointerId); pinch = null; downAt = null; });
+  box.addEventListener("pointerup", release);
+  box.addEventListener("pointercancel", (ev) => {
+    pointers.delete(ev.pointerId);
+    if (pointers.size < 2) pinch = null;
+    drag = null;
+  });
 
-  svgEl.addEventListener("wheel", (ev) => {
+  box.addEventListener("wheel", (ev) => {
     if (!ev.ctrlKey && !ev.metaKey) return;  // rueda normal: desplazamiento
     ev.preventDefault();
     const rect = box.getBoundingClientRect();
-    setZoom(eState.zoom * Math.exp(-ev.deltaY / 220), (ev.clientX - rect.left) / rect.width);
+    setZoom(eState.zoom * Math.exp(-ev.deltaY / 180), (ev.clientX - rect.left) / rect.width);
   }, { passive: false });
+
+  box.addEventListener("scroll", () => { eState.keepScroll = box.scrollLeft; });
 }
 
 function renderEnergyBreakdown() {
@@ -750,7 +816,7 @@ $("#e-clear").addEventListener("click", () => { eState.cursor = null; renderEner
 $("#e-zoom-in").addEventListener("click", () => setZoom(eState.zoom * 1.6));
 $("#e-zoom-out").addEventListener("click", () => setZoom(eState.zoom / 1.6));
 $("#e-zoom-val").addEventListener("click", () => { resetZoom(); renderEnergy(); });
-$("#e-chart").addEventListener("scroll", () => { eState.keepScroll = $("#e-chart").scrollLeft; });
+initChartGestures();
 
 // Selector de periodo: control nativo de fecha.
 $("#e-date").addEventListener("change", (ev) => {
@@ -1376,6 +1442,19 @@ function renderSensorLists() {
   $("#s-forecast").innerHTML = optionsFor("any", s.solar_forecast_sensor || "");
 }
 
+// Resumen de cada categoría en el índice de Ajustes.
+function renderSettingsIndex(s) {
+  const SOURCES = { demo: "Demostración", homeassistant: "Home Assistant", influxdb: "InfluxDB" };
+  $("#nav-sub-source").textContent = SOURCES[s.source] || "Sin configurar";
+  const n = (state.config?.tariffs || []).length;
+  $("#nav-sub-tariffs").textContent = n === 1 ? "1 tarifa" : `${n} tarifas`;
+  $("#nav-sub-contract").textContent =
+    `${fmtNum.format(s.contracted_power?.p1 ?? 0)} / ${fmtNum.format(s.contracted_power?.p2 ?? 0)} kW · ciclo el día ${s.billing_day ?? 1}`;
+  $("#nav-sub-publish").textContent = s.export_sensors === false
+    ? "Desactivado"
+    : `Cada ${s.sensor_update_minutes ?? 5} min`;
+}
+
 function fillSettings() {
   const s = state.config?.settings;
   if (!s) return;
@@ -1390,6 +1469,7 @@ function fillSettings() {
   $("#s-export-sensors").checked = s.export_sensors !== false;
   $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
   $("#s-energy-counters").value = s.energy_counters || "auto";
+  renderSettingsIndex(s);
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
   $("#s-ifx-url").value = ifx.url || "";
@@ -1610,16 +1690,29 @@ async function reloadConfig() { state.config = await api("config"); }
 
 /* ========================= arranque ========================= */
 
+function hideBoot() {
+  const boot = $("#boot");
+  if (!boot || boot.classList.contains("done")) return;
+  boot.classList.add("done");
+  // Se retira del árbol al acabar la transición, para no capturar pulsaciones.
+  setTimeout(() => boot.remove(), 600);
+}
+
 (async function init() {
   document.body.dataset.view = "home";
   try {
+    $("#boot-text").textContent = "Cargando la configuración…";
     await reloadConfig();
   } catch (err) {
+    $("#boot-text").textContent = `No se pudo cargar la configuración: ${err.message}`;
     $("#flow-empty").textContent = `No se pudo cargar la configuración: ${err.message}`;
     $("#flow-empty").classList.remove("hidden");
+    setTimeout(hideBoot, 2500);
     return;
   }
+  $("#boot-text").textContent = "Leyendo los sensores…";
   await loadLive();
+  hideBoot();
   loadSimulation();
   // Refresco en vivo: la Home cada 20 s, el resto cada minuto.
   setInterval(() => { if (state.view === "home") loadLive(); }, 20000);
