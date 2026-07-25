@@ -244,28 +244,22 @@ function renderSummary(gen, home, meters) {
 
 /* Las columnas reparten la energía por origen y destino, y «Desde la red» es
    solo la parte de la importación que ha consumido la casa: si parte de lo
-   importado ha ido a cargar la batería, no cuadra con el contador. Se muestran
-   las lecturas de la red y se explica la diferencia. */
+   importado ha ido a cargar la batería, no cuadra con el contador. Las lecturas
+   de la red ya están en el nodo de la red del diagrama, justo encima, así que
+   aquí solo se explica la diferencia cuando existe. */
 function renderSummaryMeters(home, meters) {
   const box = $("#summary-meters");
-  if (!meters || meters.grid_import == null) { box.classList.add("hidden"); return; }
-  box.classList.remove("hidden");
-
   const notes = [];
-  if ((meters.grid_to_battery || 0) >= 0.05) {
-    notes.push(`${fmtNum.format(meters.grid_to_battery)} kWh de lo importado fue a cargar la batería`);
+  if ((meters?.grid_to_battery || 0) >= 0.05) {
+    notes.push(`${fmtNum.format(meters.grid_to_battery)} kWh de lo importado fue a cargar la batería, así que no lo consumió la casa`);
   }
-  if ((meters.battery_to_grid || 0) >= 0.05) {
+  if ((meters?.battery_to_grid || 0) >= 0.05) {
     notes.push(`${fmtNum.format(meters.battery_to_grid)} kWh de lo vertido salió de la batería`);
   }
-
-  box.innerHTML = `
-    <div class="sum-meters-row">
-      <span class="sum-meters-title">Contadores de red hoy</span>
-      <span class="sum-meter"><i class="arrow">→</i>${fmtNum.format(meters.grid_import)} kWh importada</span>
-      <span class="sum-meter"><i class="arrow">←</i>${fmtNum.format(meters.grid_export)} kWh exportada</span>
-    </div>
-    ${notes.length ? `<p class="sum-meters-note">${esc(notes.join(" · "))}</p>` : ""}`;
+  box.classList.toggle("hidden", !notes.length);
+  box.innerHTML = notes.length
+    ? `<p class="sum-meters-note">${esc(notes.join(" · "))}</p>`
+    : "";
 }
 
 /* ------------- diagrama de flujo ------------- */

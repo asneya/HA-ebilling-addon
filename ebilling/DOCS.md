@@ -21,12 +21,12 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
   anillo alrededor de la casa y en el resumen de energía.
 
   Ojo con una diferencia que despista: en el resumen, **«Desde la red» no es lo
-  que marca tu contador de importada**, sino la parte de esa importación que ha
-  consumido la casa. Si parte de lo importado ha ido a **cargar la batería**, esa
-  parte no la consume la casa y la diferencia es justo esa. Por eso, al pie del
-  resumen se muestran los **contadores de red del día** y, cuando hay diferencia,
-  la frase que la explica (p. ej. «1 kWh de lo importado fue a cargar la
-  batería»).
+  que marca tu contador de importada** (que tienes en el nodo de la red, justo
+  encima), sino la parte de esa importación que ha consumido la casa. Si parte de
+  lo importado ha ido a **cargar la batería**, esa parte no la consume la casa y
+  la diferencia es justo esa. Cuando ocurre, al pie del resumen aparece la frase
+  que lo explica («1,09 kWh de lo importado fue a cargar la batería, así que no
+  lo consumió la casa»).
 
 ### Medidores bidireccionales
 

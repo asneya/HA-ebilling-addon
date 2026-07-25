@@ -294,14 +294,13 @@ body[data-view="energy"] .bg-scrim {
 .sum-bar i { display: block; border-radius: 7px; min-width: 4px; transition: width .5s ease; }
 .sum-row + .sum-row { margin-top: 16px; }
 
-/* Lecturas de la red del día: permiten cuadrar «Desde la red» (solo la parte
-   de la importación que ha consumido la casa) con el contador. */
-.sum-meters { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--sep); }
-.sum-meters-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
-.sum-meters-title { font-size: 12.5px; font-weight: 600; color: var(--ink-3); flex: 1 1 100%; }
-.sum-meter { font-size: 14px; font-weight: 600; color: var(--ink-2); display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
-.sum-meter .arrow { font-style: normal; color: var(--imp); font-weight: 700; }
-.sum-meters-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-3); }
+/* Nota que explica por qué «Desde la red» no es el contador de importada (parte
+   de esa importación pudo ir a la batería, y eso no lo consume la casa). */
+.sum-meters { margin-top: 18px; padding-top: 13px; border-top: 1px solid var(--sep); }
+.sum-meters-note {
+  margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
 .sum-label { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--ink-2); }
 .sum-label i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .sum-line { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
