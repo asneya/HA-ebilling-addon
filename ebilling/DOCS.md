@@ -28,6 +28,27 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
   la frase que la explica (p. ej. «1 kWh de lo importado fue a cargar la
   batería»).
 
+### Cómo se calcula el reparto
+
+Los contadores dan lo que entra y sale por cada punto, pero **ninguno mide el
+reparto**: no existe un sensor «solar → casa». Hay que deducirlo, y el resultado
+depende de *cuándo* pasa cada cosa, así que el reparto se hace **intervalo a
+intervalo** y luego se suma:
+
+| Pantalla | Resolución del reparto |
+|---|---|
+| Home y rango de día | 5 minutos |
+| Semana y mes | 1 hora |
+| Año y total | el bucket del gráfico (mes o año) |
+
+Hacerlo de una vez sobre el total del día da resultados muy distintos y peores.
+Ejemplo real: batería cargada **de la red** de 00:00 a 03:00 (6 kWh) y sol de
+10:00 a 16:00 (24 kWh, de los que 12 se vierten). Sobre el total del día el
+reparto cree que la batería la cargó el sol («a la batería 6 kWh, desde la red
+7,5 kWh»); intervalo a intervalo sale lo que de verdad pasó: «a la batería 0,
+desde solar 12, desde la red 1,5» y «6 kWh de lo importado fue a cargar la
+batería».
+
   El **fondo representa el momento del día** (noche, amanecer, día, atardecer,
   a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
   nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la
