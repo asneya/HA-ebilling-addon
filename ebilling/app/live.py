@@ -467,11 +467,13 @@ async def daily_energy(
     # signo invertido, o un reinicio que las estadísticas cuentan como
     # incremento negativo). La energía es una magnitud: nunca es negativa.
     #
-    # El consumo de la casa se puede deducir por balance, así que un valor
-    # inválido se descarta y lo calcula el reparto (mejor que un cero que no
-    # cuadraría con el resumen). Los demás no tienen alternativa: a cero.
-    if (out.get("home_energy") or 0.0) < 0:
-        del out["home_energy"]
+    # El consumo de la casa se puede deducir por balance, así que un contador
+    # que no suma nada se descarta y lo calcula el reparto (mejor que un cero
+    # que no cuadraría con el resumen): una casa que no consume nada en todo el
+    # día no existe, y a las 00:05 el balance da lo mismo, casi nada. Los demás
+    # no tienen alternativa: a cero.
+    if (out.get("home_energy") or 0.0) <= 0:
+        out.pop("home_energy", None)
     out = {key: max(value, 0.0) for key, value in out.items()}
 
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)

@@ -58,9 +58,12 @@ tal:
   contador que se ha **reiniciado** (los diarios lo hacen cada medianoche) o que
   ha dado una lectura menor que la anterior. También se recorta a cero; si se
   sumara, restaría del total del día.
-- Si el **contador del consumo de la casa** resulta inservible (su total sale
-  negativo), se descarta y el consumo se **deduce por balance** (lo que hace
-  cuando no hay contador). Así el círculo de la casa y el resumen coinciden.
+- Si el **contador del consumo de la casa** resulta inservible (no suma nada en
+  el periodo, porque no está configurado o porque el sensor está invertido y se
+  ha recortado a cero), se descarta y el consumo se **deduce por balance**. Esa
+  decisión se toma **una vez por periodo**, no intervalo a intervalo: o manda el
+  contador en todos, o se deduce en todos. Así el círculo de la casa, el resumen
+  y el total del gráfico dicen siempre lo mismo.
 
 Si ves un cero donde esperas consumo, revisa el signo del sensor en Ajustes: casi
 siempre es un sensor de la casa o de la red configurado al revés.
@@ -85,6 +88,11 @@ reparto cree que la batería la cargó el sol («a la batería 6 kWh, desde la r
 7,5 kWh»); intervalo a intervalo sale lo que de verdad pasó: «a la batería 0,
 desde solar 12, desde la red 1,5» y «6 kWh de lo importado fue a cargar la
 batería».
+
+Esa resolución vale tanto para el desglose como para **la línea del consumo de la
+casa** del gráfico: se reparte con el intervalo fino y se agrupa después en los
+buckets del gráfico. Por eso el total de la leyenda y el del desglose son la
+misma cifra.
 
   El **fondo representa el momento del día** (noche, amanecer, día, atardecer,
   a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
