@@ -458,6 +458,19 @@ function renderEnergy() {
   renderEnergyBreakdown();
 }
 
+// Sobre los colores claros (ámbar, oliva, turquesa) la marca de verificación
+// blanca casi no se ve: se decide por luminancia relativa.
+function isLightColor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ""));
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] > 0.42;
+}
+
 function renderEnergyLegend() {
   const d = eState.data;
   const idx = eState.cursor;
@@ -475,7 +488,8 @@ function renderEnergyLegend() {
               aria-pressed="${!off}" title="Mostrar u ocultar ${esc(s.label)}">
         <span class="n">${esc(s.label)}</span>
         <span class="v">
-          <span class="check" style="background:${esc(s.color)}">${off ? "" : "✓"}</span>
+          <span class="check ${isLightColor(s.color) ? "on-light" : ""}"
+                style="background:${esc(s.color)}">${off ? "" : "✓"}</span>
           <span class="num">${value}</span>
         </span>
       </button>`;
@@ -656,7 +670,7 @@ function renderEnergyChart() {
   const step = Math.max(1, Math.ceil(n / slots));
   d.x.forEach((iso, i) => {
     if (i % step && i !== n - 1) return;
-    svg += `<text x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55">${esc(xLabel(iso, eState.range))}</text>`;
+    svg += `<text class="e-axis" x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(xLabel(iso, eState.range))}</text>`;
   });
 
   box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
@@ -992,7 +1006,7 @@ function gridAxis(max, padL, padB, padT, width, height) {
     const val = (max / 4) * i;
     const y = height - padB - (val / max) * (height - padT - padB);
     svg += `<line x1="${padL}" y1="${y}" x2="${width}" y2="${y}" stroke="currentColor" opacity="0.12"/>`;
-    svg += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="currentColor" opacity="0.55">${val.toFixed(1)}</text>`;
+    svg += `<text x="${padL - 6}" y="${y + 4}" class="c-axis" text-anchor="end">${val.toFixed(1)}</text>`;
   }
   return svg;
 }
@@ -1013,7 +1027,7 @@ function renderDailyChart(daily) {
       svg += `<rect class="bar-seg" x="${x}" y="${y}" width="${bw}" height="${Math.max(h, 0)}" rx="3" fill="${PCOLOR[p]}"><title>${d.date} · ${p}: ${fmtNum.format(d[p])} kWh</title></rect>`;
     }
     if (daily.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${x + bw / 2}" y="${height - 8}" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">${d.date.slice(8)}</text>`;
+      svg += `<text x="${x + bw / 2}" y="${height - 8}" class="c-axis" text-anchor="middle">${d.date.slice(8)}</text>`;
     }
   });
   c.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
@@ -1081,7 +1095,7 @@ function renderDailyDetail(days) {
     const eh = d.export * scale;
     svg += `<rect class="bar-seg" data-day="${d.date}" x="${x + iw + 2}" y="${height - padB - eh}" width="${ew}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR}" style="cursor:pointer"><title>${d.date} · exportada: ${fmtNum.format(d.export)} kWh</title></rect>`;
     if (days.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${x + gw / 2}" y="${height - 8}" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">${d.date.slice(8)}</text>`;
+      svg += `<text x="${x + gw / 2}" y="${height - 8}" class="c-axis" text-anchor="middle">${d.date.slice(8)}</text>`;
     }
   });
   c.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
@@ -1112,7 +1126,7 @@ function cumulativeChart(container, points, step) {
   if (last.export > 0) svg += line("export", ECOLOR);
   points.forEach((p, i) => {
     if (points.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${X(i)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.55">${p.label}</text>`;
+      svg += `<text x="${X(i)}" y="${height - 8}" class="c-axis" text-anchor="middle">${p.label}</text>`;
     }
   });
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
@@ -1154,7 +1168,7 @@ function renderHourly(date) {
     svg += `<rect class="bar-seg" x="${x}" y="${height - padB - ih}" width="${bw}" height="${Math.max(ih, 0)}" rx="3" fill="${h.period ? PCOLOR[h.period] : "#8e97ad"}"><title>${String(h.hour).padStart(2, "0")}:00 · ${fmtNum.format(h.kwh)} kWh</title></rect>`;
     const eh = h.export * scale;
     svg += `<rect class="bar-seg" x="${x + bw + 3}" y="${height - padB - eh}" width="${bw}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR}"><title>${String(h.hour).padStart(2, "0")}:00 · exportada ${fmtNum.format(h.export)} kWh</title></rect>`;
-    if (i % 2 === 0) svg += `<text x="${x + group / 2}" y="${height - 8}" text-anchor="middle" font-size="9" fill="currentColor" opacity="0.55">${h.hour}</text>`;
+    if (i % 2 === 0) svg += `<text x="${x + group / 2}" y="${height - 8}" class="c-axis sm" text-anchor="middle">${h.hour}</text>`;
   });
   $("#d-hourly").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
 

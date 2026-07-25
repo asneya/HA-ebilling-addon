@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.1
+
+### Cambios
+
+- **Tipografía propia**: la interfaz usa **Inter** (SIL OFL), empaquetada con el
+  add-on como subconjunto latino de 64 kB y servida en local, sin depender de la
+  fuente del sistema ni de ninguna petición externa. Cuerpo base de 15 → **16 px**
+  con interlineado 1,5, y jerarquía revisada: títulos algo menores y mejor
+  compensados de espaciado, y **todo el texto pequeño más grande** (etiquetas de
+  campo 13,5 → 15 px, notas 12 → 13 px, ejes de los gráficos 10-11 → 11,5 px).
+  Cifras con ancho fijo (`tabular-nums`) en ejes y leyendas.
+- **Contraste corregido en toda la app**, con los valores medidos sobre los
+  píxeles reales compuestos. Los problemas eran:
+  - **Texto blanco sobre el cielo**: daba **1,3:1** con el cielo claro del
+    mediodía (el mínimo legible es 4,5:1). El velo del fondo pasa a ser
+    permanente y **más fuerte donde el cielo es claro** (arriba y abajo del
+    degradado): el peor caso queda en **4,6:1** y el cielo se compensa con más
+    saturación para no perder el color de la hora.
+  - **Etiquetas de los controles segmentados**: eran blancas sobre una pista
+    clara. Ahora van en tinta oscura, como en iOS (**9:1**).
+  - **Grises secundarios**: `#7c869e` sobre las tarjetas daba 2,8:1; ahora
+    `#566072` y superficies más opacas (0,62 → 0,88) dan **≥4,9:1** con
+    cualquiera de los fondos, incluido el nocturno con el sistema en modo claro.
+  - **Chip de meteorología**: llevaba texto blanco sobre superficie clara; ahora
+    tiene su propia superficie oscura (**18,9:1**).
+  - **Ejes de los gráficos**: usaban `currentColor` al 55 %; ahora un color
+    propio con contraste garantizado.
+  - La **marca de verificación** de la leyenda se pinta oscura sobre las series
+    de color claro (ámbar, oliva, turquesa), donde en blanco no se veía.
+
 ## 0.17.0
 
 ### Corregido
