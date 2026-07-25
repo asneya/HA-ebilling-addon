@@ -44,6 +44,7 @@ COLORS = {
     "grid_import": "#6b8afd",
     "grid_export": "#a78bfa",
     "yesterday": "#5ab8b0",
+    "forecast": "#ffc94d",
     "to_home": "#c9c443",
     "to_battery": "#61b87f",
     "to_grid": "#7d92f0",
@@ -130,6 +131,36 @@ def _row_time(raw: Any, tz) -> datetime:
     return datetime.fromisoformat(str(raw)).astimezone(tz)
 
 
+def _num(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number else None  # descarta NaN
+
+
+def _parse_dt(raw: Any, tz) -> datetime | None:
+    """Fecha de un atributo de forecast (ISO, «YYYY-MM-DD HH:MM:SS» o epoch)."""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return datetime.fromtimestamp(float(raw), tz)
+    text = str(raw).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    if " " in text and "T" not in text:
+        text = text.replace(" ", "T", 1)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=tz)
+    return parsed.astimezone(tz)
+
+
 def _unit_factor(
     entity: str, states: dict[str, Any], kind: str, units: dict[str, str] | None = None
 ) -> float:
@@ -164,6 +195,142 @@ def _extract(
         except (TypeError, ValueError):
             continue
         out[_row_time(row.get("start"), tz).isoformat()] = number
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Previsión de generación solar
+# ---------------------------------------------------------------------------
+
+# Claves de valor de potencia habituales en los atributos de forecast, con el
+# factor para llevarlas a W.
+_FORECAST_POWER_KEYS = (
+    ("pv_estimate", 1000.0),   # Solcast (kW)
+    ("pv_estimate50", 1000.0),
+    ("watts", 1.0),            # Forecast.Solar (W)
+    ("power", 1.0),
+    ("power_kw", 1000.0),
+)
+
+
+def _forecast_states(settings: dict[str, Any], states: dict[str, Any]) -> list[dict[str, Any]]:
+    """Estados de los sensores de previsión configurados (hoy y mañana).
+
+    Se admite una lista de sensores separados por comas para poder encadenar
+    «hoy» y «mañana», como los exponen Solcast o Forecast.Solar.
+    """
+    raw = settings.get("solar_forecast_sensor") or ""
+    ids = [item.strip() for item in str(raw).split(",") if item.strip()]
+    return [states[i] for i in ids if i in states]
+
+
+def forecast_power(states_list: list[dict[str, Any]], tz) -> list[tuple[datetime, float]]:
+    """Curva de potencia prevista (W), ordenada por hora."""
+    points: dict[datetime, float] = {}
+    for state in states_list:
+        attrs = state.get("attributes") or {}
+        for key in ("detailedForecast", "detailedHourly", "forecast"):
+            rows = attrs.get(key)
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                moment = _parse_dt(
+                    row.get("period_start")
+                    or row.get("datetime")
+                    or row.get("period")
+                    or row.get("start"),
+                    tz,
+                )
+                if moment is None:
+                    continue
+                for name, factor in _FORECAST_POWER_KEYS:
+                    value = _num(row.get(name))
+                    if value is not None:
+                        points.setdefault(moment, value * factor)
+                        break
+        watts = attrs.get("watts")
+        if isinstance(watts, dict):
+            for raw_key, raw_value in watts.items():
+                moment = _parse_dt(raw_key, tz)
+                value = _num(raw_value)
+                if moment is not None and value is not None:
+                    points.setdefault(moment, value)
+    return sorted(points.items())
+
+
+def forecast_daily(states_list: list[dict[str, Any]], tz) -> dict[datetime, float]:
+    """Energía prevista por día (kWh), indexada por medianoche local."""
+    out: dict[datetime, float] = {}
+    for state in states_list:
+        attrs = state.get("attributes") or {}
+        days = attrs.get("wh_days")
+        if isinstance(days, dict):
+            for raw_key, raw_value in days.items():
+                moment = _parse_dt(raw_key, tz)
+                value = _num(raw_value)
+                if moment is not None and value is not None:
+                    out.setdefault(_midnight(moment), value / 1000.0)
+    if out:
+        return out
+    # Sin wh_days: se integra la curva de potencia por días.
+    points = forecast_power(states_list, tz)
+    for index, (moment, watts) in enumerate(points):
+        if index + 1 < len(points):
+            hours = (points[index + 1][0] - moment).total_seconds() / 3600.0
+        else:
+            hours = 0.5
+        hours = min(max(hours, 0.0), 3.0)
+        day = _midnight(moment)
+        out[day] = out.get(day, 0.0) + watts * hours / 1000.0
+    return out
+
+
+def _midnight(moment: datetime) -> datetime:
+    return moment.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _interpolate(points: list[tuple[datetime, float]], grid: list[datetime]) -> dict[str, float]:
+    """Interpola la curva de previsión sobre la rejilla del eje X."""
+    if not points:
+        return {}
+    out: dict[str, float] = {}
+    index = 0
+    for moment in grid:
+        if moment < points[0][0] or moment > points[-1][0]:
+            continue
+        while index + 1 < len(points) and points[index + 1][0] < moment:
+            index += 1
+        left_t, left_v = points[index]
+        if index + 1 >= len(points):
+            out[moment.isoformat()] = left_v
+            continue
+        right_t, right_v = points[index + 1]
+        span = (right_t - left_t).total_seconds()
+        ratio = 0.0 if span <= 0 else (moment - left_t).total_seconds() / span
+        out[moment.isoformat()] = left_v + (right_v - left_v) * max(min(ratio, 1.0), 0.0)
+    return out
+
+
+def _day_grid(start: datetime, end: datetime) -> list[datetime]:
+    """Medianoches locales de [start, end) (robusto ante cambios de hora)."""
+    out: list[datetime] = []
+    day = _midnight(start)
+    while day < end:
+        out.append(day)
+        day = _midnight(day + timedelta(hours=27))
+    return out
+
+
+def _grid(start: datetime, end: datetime, minutes: int) -> list[datetime]:
+    """Rejilla regular de buckets [start, end)."""
+    out: list[datetime] = []
+    step = timedelta(minutes=minutes)
+    moment = start
+    while moment < end:
+        out.append(moment)
+        moment += step
     return out
 
 
@@ -206,18 +373,45 @@ def window(range_key: str, offset: int, tz, now: datetime) -> tuple[datetime, da
 # ---------------------------------------------------------------------------
 
 
-def _series(key: str, label: str, values: list[float | None], total: float | None = None) -> dict[str, Any]:
+def _series(
+    key: str,
+    label: str,
+    values: list[float | None],
+    total: float | None = None,
+    *,
+    total_unit: str = "kWh",
+    dashed: bool = False,
+    legend: bool = True,
+) -> dict[str, Any]:
     return {
         "key": key,
         "label": label,
         "color": COLORS.get(key, "#8e97ad"),
         "values": [None if v is None else round(v, 3) for v in values],
         "total": None if total is None else round(total, 2),
+        "total_unit": total_unit,
+        "dashed": dashed,
+        "legend": legend,
     }
 
 
 def _align(x_keys: list[str], data: dict[str, float]) -> list[float | None]:
     return [data.get(k) for k in x_keys]
+
+
+def _sorted_keys(keys) -> list[str]:
+    """Ordena claves ISO por instante real (los cambios de hora varían el UTC
+    offset, así que ordenar el texto no siempre coincide).
+
+    En el rango «total» las claves son años («2026»): se ordenan como texto.
+    """
+    def key(item: str):
+        try:
+            return (0, datetime.fromisoformat(item).timestamp())
+        except ValueError:
+            return (1, item)
+
+    return sorted(keys, key=key)
 
 
 def _sum(values: list[float | None]) -> float:
@@ -286,10 +480,10 @@ async def build(
     energy = settings.get("energy_sensors") or {}
 
     if range_key == "day":
-        payload = await _build_power(settings, states, view, flow, start, end, tz, label)
+        payload = await _build_power(settings, states, view, flow, start, end, tz, now)
     else:
         payload = await _build_energy(
-            settings, states, view, energy, start, end, period, range_key, tz, label
+            settings, states, view, energy, start, end, period, range_key, tz, now
         )
 
     payload.update(
@@ -314,7 +508,7 @@ async def _build_power(
     start: datetime,
     end: datetime,
     tz,
-    label: str,
+    now: datetime,
 ) -> dict[str, Any]:
     """Vista de día: potencia media en W, con la curva de ayer."""
     wanted: list[tuple[str, str, str]] = []  # (clave, etiqueta, sensor)
@@ -329,9 +523,26 @@ async def _build_power(
         wanted.append(("grid_import", "Importada", flow.get("grid_import", "")))
         wanted.append(("grid_export", "Exportada", flow.get("grid_export", "")))
 
+    # Previsión de generación: solo si el intervalo alcanza tiempo futuro.
+    forecast_points: list[tuple[datetime, float]] = []
+    if view == "solar" and end > now:
+        forecast_points = forecast_power(_forecast_states(settings, states), tz)
+        forecast_points = [p for p in forecast_points if start <= p[0] <= end]
+
     ids = [sensor for _k, _l, sensor in wanted if sensor]
-    if not ids:
+    if not ids and not forecast_points:
         return {"unit": "W", "chart": "line", "x": [], "series": [], "breakdown": None}
+
+    if not ids:
+        grid = _grid(start, end, 5)
+        values = _interpolate(forecast_points, grid)
+        x_keys = [moment.isoformat() for moment in grid]
+        forecast = _series(
+            "forecast", "Previsión", _align(x_keys, values),
+            dashed=True, legend=False, total_unit="kWh",
+        )
+        return {"unit": "W", "chart": "line", "x": x_keys,
+                "series": [forecast], "breakdown": None}
 
     requests = [
         {"ids": ids, "start": start, "end": end, "period": "5minute", "types": ["mean"]}
@@ -369,7 +580,10 @@ async def _build_power(
         factor = _unit_factor(sensor, states, "power", units)
         extracted.append((key, label_s, _extract(main, sensor, "mean", tz, factor)))
 
-    x_keys = sorted({k for _k, _l, data in extracted for k in data})
+    # El eje cubre el día completo (00–24) aunque falten datos futuros.
+    keys = {moment.isoformat() for moment in _grid(start, end, 5)}
+    keys.update(k for _k, _l, data in extracted for k in data)
+    x_keys = _sorted_keys(keys)
     series = [
         _series(key, label_s, _align(x_keys, data))
         for key, label_s, data in extracted
@@ -385,12 +599,35 @@ async def _build_power(
         }
         series.append(_series("yesterday", "Ayer", _align(x_keys, shifted)))
 
-    # Los totales de la leyenda en vista de día son la media/última potencia:
-    # se muestra el valor del punto seleccionado en el frontend.
+    # El total de la leyenda es la energía del periodo (integral de la potencia
+    # media de cada bucket de 5 minutos), no el máximo.
     for item in series:
-        values = [v for v in item["values"] if v is not None]
-        item["total"] = round(max(values), 1) if values else 0.0
-        item["total_label"] = "máx."
+        energy_kwh = _sum(item["values"]) * (5.0 / 60.0) / 1000.0
+        item["total"] = round(energy_kwh, 2)
+        item["total_label"] = "total"
+        item["total_unit"] = "kWh"
+
+    if forecast_points:
+        grid = [datetime.fromisoformat(k) for k in x_keys]
+        values = _interpolate(forecast_points, grid)
+        # Solo la parte futura (desde el bucket en curso, para que la línea
+        # punteada enlace con la real); del pasado ya informa la serie medida.
+        cut = now - timedelta(
+            minutes=now.minute % 5, seconds=now.second, microseconds=now.microsecond
+        )
+        future = {
+            moment.isoformat(): values[moment.isoformat()]
+            for moment in grid
+            if moment >= cut and moment.isoformat() in values
+        }
+        if future:
+            series.append(
+                _series(
+                    "forecast", "Previsión", _align(x_keys, future),
+                    total=_sum(_align(x_keys, future)) * (5.0 / 60.0) / 1000.0,
+                    dashed=True, legend=False,
+                )
+            )
 
     breakdown = None
     if energy_index is not None:
@@ -427,14 +664,14 @@ async def _build_energy(
     period: str,
     range_key: str,
     tz,
-    label: str,
+    now: datetime,
 ) -> dict[str, Any]:
     """Semana / mes / año / total: energía en kWh por bucket."""
     keys = ("pv_energy", "grid_import_energy", "grid_export_energy",
             "battery_charge_energy", "battery_discharge_energy")
     ids = [energy.get(k) for k in keys if energy.get(k)]
     if not ids:
-        return {"unit": "kWh", "chart": "bar", "x": [], "series": [], "breakdown": None}
+        return {"unit": "kWh", "chart": "line", "x": [], "series": [], "breakdown": None}
 
     results, units = await ws_statistics(
         settings,
@@ -462,7 +699,23 @@ async def _build_energy(
             grouped[key] = acc
         data = grouped
 
-    x_keys = sorted({k for buckets in data.values() for k in buckets})
+    # Previsión de generación para los buckets futuros (solo semana y mes, que
+    # es el alcance de los integradores de forecast).
+    fc_daily: dict[str, float] = {}
+    if view == "solar" and end > now and range_key in ("week", "month"):
+        for day, kwh in forecast_daily(_forecast_states(settings, states), tz).items():
+            if start <= day < end and day >= _midnight(now):
+                fc_daily[day.isoformat()] = kwh
+
+    # Buckets con datos reales: el resto del eje queda como hueco (None) para no
+    # dibujar ceros en los días que aún no han ocurrido.
+    known = {k for buckets in data.values() for k in buckets}
+    bucket_keys = set(known)
+    bucket_keys.update(fc_daily)
+    if range_key in ("week", "month"):
+        # Eje completo: la semana o el mes entero, aunque aún no haya datos.
+        bucket_keys.update(moment.isoformat() for moment in _day_grid(start, end))
+    x_keys = _sorted_keys(bucket_keys)
 
     def get(key: str) -> list[float]:
         return [max(data.get(key, {}).get(x, 0.0), 0.0) for x in x_keys]
@@ -478,30 +731,47 @@ async def _build_energy(
     series: list[dict[str, Any]] = []
     breakdown_rows = _breakdown_rows(view, to_home, to_battery, to_grid, bd, from_grid)
 
+    mask = [x in known for x in x_keys]
+
+    def line(key: str, label: str, values: list[float]) -> dict[str, Any]:
+        gaps = [v if ok else None for v, ok in zip(values, mask)]
+        return _series(key, label, gaps, _sum(values))
+
     if view == "solar":
-        series = [_series("solar", "Solar", pv, _sum(pv))]
+        series = [line("solar", "Solar", pv)]
     elif view == "home":
-        series = [_series("home", "Casa", home_total, _sum(home_total))]
+        series = [line("home", "Casa", home_total)]
     elif view == "battery":
         series = [
-            _series("battery_charge", "Carga", bc, _sum(bc)),
-            _series("battery_discharge", "Descarga", bd, _sum(bd)),
+            line("battery_charge", "Carga", bc),
+            line("battery_discharge", "Descarga", bd),
         ]
     elif view == "grid":
         series = [
-            _series("grid_import", "Importada", gi, _sum(gi)),
-            _series("grid_export", "Exportada", ge, _sum(ge)),
+            line("grid_import", "Importada", gi),
+            line("grid_export", "Exportada", ge),
         ]
     else:  # overview
         series = [
-            _series("solar", "Solar", pv, _sum(pv)),
-            _series("home", "Casa", home_total, _sum(home_total)),
-            _series("grid_import", "Importada", gi, _sum(gi)),
-            _series("grid_export", "Exportada", ge, _sum(ge)),
+            line("solar", "Solar", pv),
+            line("home", "Casa", home_total),
+            line("grid_import", "Importada", gi),
+            line("grid_export", "Exportada", ge),
         ]
 
     breakdown = _make_breakdown(breakdown_rows)
 
     for item in series:
         item["total_label"] = "total"
-    return {"unit": "kWh", "chart": "bar", "x": x_keys, "series": series, "breakdown": breakdown}
+        item["total_unit"] = "kWh"
+
+    if fc_daily:
+        series.append(
+            _series(
+                "forecast", "Previsión", _align(x_keys, fc_daily),
+                total=_sum(_align(x_keys, fc_daily)), dashed=True, legend=False,
+            )
+        )
+
+    return {"unit": "kWh", "chart": "line", "x": x_keys, "series": series,
+            "breakdown": breakdown}
