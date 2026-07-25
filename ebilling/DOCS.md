@@ -3,7 +3,10 @@
 ## La aplicación
 
 La interfaz está organizada en tres pestañas, con estética de app iOS
-(superficies translúcidas «glass») y fondo dinámico:
+(superficies translúcidas «glass») y fondo dinámico. Usa la tipografía **Inter**
+(SIL OFL), empaquetada con el add-on y servida en local, y una paleta cuyos
+contrastes están verificados para superar el nivel **AA** (4,5:1) sobre
+cualquiera de los fondos, tanto en modo claro como oscuro:
 
 - **Home** — el diagrama de **flujo de energía** en vivo (solar, red, batería y
   casa) y debajo el **resumen de energía del día**: generación repartida en «a
