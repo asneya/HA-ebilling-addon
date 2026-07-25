@@ -2,6 +2,16 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.3
+
+### Cambios
+
+- El resumen de energía **ya no repite los contadores de la red**: sus lecturas
+  están en el nodo de la red del diagrama, justo encima. Al pie solo queda la
+  frase que explica la diferencia cuando existe («1,09 kWh de lo importado fue a
+  cargar la batería, así que no lo consumió la casa»), y si no hay diferencia no
+  se muestra nada.
+
 ## 0.18.2
 
 ### Cambios
