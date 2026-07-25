@@ -2,6 +2,29 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.5
+
+### Corregido
+
+- **La casa aparecía en negativo.** La potencia y la energía son magnitudes: no
+  pueden ser negativas. Salían de tres sitios y los tres estaban abiertos:
+  - la **potencia** se mostraba tal cual la daba el sensor, así que un sensor
+    con el signo invertido (o un medidor neto puesto en la casilla del consumo)
+    pintaba «−1,42 kW» en el círculo de la casa;
+  - un **incremento negativo de un contador** —que no es energía negativa, es un
+    contador que se ha reiniciado, algo que los diarios hacen cada medianoche—
+    se sumaba al total y lo restaba;
+  - el consumo calculado **integrando la potencia de la casa** arrastraba el
+    signo de las medias negativas.
+- Ahora se recorta a cero en los tres caminos, y si el contador del consumo de
+  la casa resulta inservible (total negativo) se **descarta y el consumo se
+  deduce por balance**, que es lo que ya hacía el resumen: así el círculo de la
+  casa y el resumen dicen lo mismo en lugar de un 0 que no cuadraba.
+- Comprobado con un Home Assistant de prueba que mete negativos a propósito
+  (sensor de la casa invertido y contadores que se reinician tres veces al día):
+  ni un solo número por debajo de cero en la Home ni en los cinco rangos del
+  gráfico de energía, con las cinco vistas.
+
 ## 0.18.4
 
 ### Corregido

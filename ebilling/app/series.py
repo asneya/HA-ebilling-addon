@@ -485,6 +485,18 @@ def split_signed_buckets(
         data[neg] = {k: (-v if v < 0 else 0.0) for k, v in buckets.items()}
 
 
+def clamp_buckets(data: dict[str, dict[str, float]]) -> None:
+    """Recorta a cero los incrementos negativos de los contadores.
+
+    Un `change` negativo no es energía negativa: es un contador que se ha
+    reiniciado (los diarios lo hacen a medianoche) o un sensor que ha dado un
+    valor menor que el anterior. Si se sumara, restaría del total. Los pares
+    bidireccionales tienen que haberse repartido por signo **antes** de esto.
+    """
+    for key, buckets in data.items():
+        data[key] = {k: (v if v > 0 else 0.0) for k, v in buckets.items()}
+
+
 def split_signed_values(values: dict[str, float], cfg: dict[str, str], pairs) -> None:
     """Igual que ``split_signed_buckets`` pero con un único valor por clave."""
     for pos, neg in pairs:
@@ -792,6 +804,7 @@ async def _build_power(
             factor = _unit_factor(sensor, states, "energy", units)
             by_key[key] = _extract(result, sensor, "change", tz, factor)
         split_signed_buckets(by_key, energy_cfg, ENERGY_PAIRS)
+        clamp_buckets(by_key)
         return ({k: sum(v.values()) for k, v in by_key.items()}, by_key)
 
     # El reparto se hace bucket a bucket: sobre el total del día se perdería a
@@ -902,6 +915,7 @@ async def _build_energy(
             factor = _unit_factor(sensor, states, "energy", units)
             out[key] = _extract(result, sensor, "change", tz, factor)
         split_signed_buckets(out, energy, ENERGY_PAIRS)
+        clamp_buckets(out)
         return out
 
     fine = extract_all(results[fine_index]) if fine_index is not None else {}
