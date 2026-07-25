@@ -2,6 +2,18 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.3
+
+### Corregido
+
+- **El interruptor de «Publicar sensores» (y el de «Proyección fin de ciclo») se
+  veía roto**: una regla genérica `input[type="checkbox"] { width: 18px; height:
+  18px }` ganaba en especificidad y aplastaba la pista a 18 px, con lo que el
+  círculo de 22 px se salía y parecía un elemento a medio cargar. Además, la
+  pista apagada usaba un negro al 12 % que sobre la superficie clara no se veía.
+  Ahora el interruptor mide 46×28, la pista apagada tiene color propio en claro y
+  oscuro, y el círculo responde al pulsarlo.
+
 ## 0.17.2
 
 ### Cambios
