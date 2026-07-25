@@ -2,6 +2,25 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.4
+
+### Corregido
+
+- **En el rango de día, los totales de la leyenda no salían de tus contadores**:
+  se calculaban **integrando la curva de potencia** en pasos de 5 minutos, que es
+  una aproximación (las medias se comen los picos y cualquier hueco del sensor se
+  pierde). Por eso la generación solar del gráfico no coincidía con el sensor —ni
+  con lo que mostraban semana o mes, que sí usan el contador—. Medido con un
+  contador un 12 % por encima de la integral: la leyenda decía 24,0 kWh y el
+  sensor 26,88.
+- Ahora **cada serie del rango de día toma su total del contador que le
+  corresponde** (solar, importada, exportada, carga, descarga y casa), incluida
+  la curva de **ayer**, que usa el contador del día anterior. La curva sigue
+  siendo la potencia y el valor de un punto seleccionado sigue en W.
+- Si una serie no tiene contador configurado (el consumo de la casa, por
+  ejemplo), se integra su potencia como antes; la previsión solar siempre se
+  integra, porque no hay contador de algo que no ha pasado.
+
 ## 0.18.3
 
 ### Cambios

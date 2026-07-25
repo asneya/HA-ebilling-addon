@@ -456,6 +456,18 @@ ENERGY_PAIRS = (
 )
 
 
+# Contador de energía que corresponde a cada serie de potencia: el total de la
+# leyenda sale de ahí, no de integrar la curva.
+SERIES_COUNTER = {
+    "solar": "pv_energy",
+    "home": "home_energy",
+    "battery_charge": "battery_charge_energy",
+    "battery_discharge": "battery_discharge_energy",
+    "grid_import": "grid_import_energy",
+    "grid_export": "grid_export_energy",
+}
+
+
 def shares_sensor(cfg: dict[str, str], pos: str, neg: str) -> bool:
     """¿Las dos direcciones del par salen del mismo sensor?"""
     return bool(cfg.get(pos)) and cfg.get(pos) == cfg.get(neg)
@@ -680,21 +692,30 @@ async def _build_power(
                 "types": ["mean"],
             }
         )
-    # Energía del día, para el desglose que acompaña al gráfico.
+    # Energía del día: para el desglose y, sobre todo, para los totales de la
+    # leyenda. La curva del gráfico es potencia, pero su total en kWh tiene que
+    # ser el del contador, no la integral de la potencia (que es una
+    # aproximación y no coincidiría con el sensor ni con los demás rangos).
     energy_cfg = settings.get("energy_sensors") or {}
     energy_keys = ENERGY_KEYS
     energy_ids = [energy_cfg.get(k) for k in energy_keys if energy_cfg.get(k)]
     energy_index = None
+    yesterday_index = None
     # El día en curso se resuelve con los mismos totales que la Home (más
     # abajo); para días pasados se piden aquí, en pasos de 5 minutos (no el
     # bucket diario, que se consolida por horas).
     is_today = end > now
-    wants_breakdown = bool(energy_ids) and view in ("solar", "home", "overview")
-    if wants_breakdown and not is_today:
+    if energy_ids and not is_today:
         energy_index = len(requests)
         requests.append(
             {"ids": energy_ids, "start": start, "end": end,
              "period": "5minute", "types": ["change"]}
+        )
+    if energy_ids and show_yesterday:
+        yesterday_index = len(requests)
+        requests.append(
+            {"ids": energy_ids, "start": start - timedelta(days=1),
+             "end": end - timedelta(days=1), "period": "5minute", "types": ["change"]}
         )
 
     results, units = await ws_statistics(settings, requests)
@@ -735,11 +756,7 @@ async def _build_power(
         }
         series.append(_series("yesterday", "Ayer", _align(x_keys, shifted)))
 
-    # El total de la leyenda es la energía del periodo (integral de la potencia
-    # media de cada bucket de 5 minutos), no el máximo.
     for item in series:
-        energy_kwh = _sum(item["values"]) * (5.0 / 60.0) / 1000.0
-        item["total"] = round(energy_kwh, 2)
         item["total_label"] = "total"
         item["total_unit"] = "kWh"
 
@@ -765,19 +782,24 @@ async def _build_power(
                 )
             )
 
-    # El reparto se hace bucket a bucket: sobre el total del día se perdería a
-    # qué hora ocurre cada cosa (una carga de red de madrugada parecería solar).
-    flows: dict[str, float] | None = None
-    if energy_index is not None:
-        raw = results[energy_index]
+    def counters(result: dict[str, Any]) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
+        """(total por clave, valor por bucket) de los contadores de energía."""
         by_key: dict[str, dict[str, float]] = {}
         for key in energy_keys:
             sensor = energy_cfg.get(key)
             if not sensor:
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
-            by_key[key] = _extract(raw, sensor, "change", tz, factor)
+            by_key[key] = _extract(result, sensor, "change", tz, factor)
         split_signed_buckets(by_key, energy_cfg, ENERGY_PAIRS)
+        return ({k: sum(v.values()) for k, v in by_key.items()}, by_key)
+
+    # El reparto se hace bucket a bucket: sobre el total del día se perdería a
+    # qué hora ocurre cada cosa (una carga de red de madrugada parecería solar).
+    flows: dict[str, float] | None = None
+    totals: dict[str, float] = {}
+    if energy_index is not None:
+        totals, by_key = counters(results[energy_index])
         per_bucket: dict[str, dict[str, float]] = {}
         for key, buckets in by_key.items():
             for iso, value in buckets.items():
@@ -794,14 +816,26 @@ async def _build_power(
         ]
         if parts:
             flows = {k: sum(p[k] for p in parts) for k in parts[0]}
-    elif wants_breakdown and is_today:
-        # Mismo reparto que la Home (cacheado allí), para que las dos pantallas
-        # muestren exactamente lo mismo. Import local: `live` importa este módulo.
+    elif energy_ids and is_today:
+        # Mismos totales y mismo reparto que la Home (cacheados allí), para que
+        # las dos pantallas coincidan. Import local: `live` importa este módulo.
         import live  # noqa: PLC0415
 
         daily = await live.daily_energy(settings, states, tz, now)
+        totals = {k: v / 1000.0 for k, v in daily["totals"].items()}
         if daily["flows"]:
             flows = {k: v / 1000.0 for k, v in daily["flows"].items()}
+
+    # Total de la leyenda: el contador de esa magnitud. La integral de la
+    # potencia solo se usa como respaldo (series sin contador, como la previsión
+    # o el consumo de la casa si no está configurado).
+    yesterday_totals = counters(results[yesterday_index])[0] if yesterday_index is not None else {}
+    for item in series:
+        integral = _sum(item["values"]) * (5.0 / 60.0) / 1000.0
+        source = yesterday_totals if item["key"] == "yesterday" else totals
+        key = SERIES_COUNTER.get(wanted[0][0] if item["key"] == "yesterday" else item["key"])
+        counter = source.get(key) if key else None
+        item["total"] = round(counter if counter is not None else integral, 2)
 
     breakdown = _make_breakdown(_breakdown_rows(view, [flows])) if flows else None
 
