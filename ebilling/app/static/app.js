@@ -321,10 +321,15 @@ function renderFlow(live) {
     }
   }
 
-  const kwhOf = (block, key) => {
-    const row = block.rows.find((r) => r.key === key);
-    return row ? `${fmtNum.format(row.kwh)} kWh` : "0 kWh";
+  // Cada nodo del diagrama muestra su propio contador del día (lo que ha
+  // pasado por ese punto), no la atribución por fuentes: esa vive en el anillo
+  // de la casa y en el resumen de energía.
+  const m = e.meters || {};
+  const kwh = (key, fallback) => {
+    const v = m[key] != null ? m[key] : fallback;
+    return `${fmtNum.format(v || 0)} kWh`;
   };
+  const homeDay = m.home != null ? m.home : e.home.total;
   const soc = p.battery_soc;
   const fill = soc != null ? (12.6 * Math.max(0, Math.min(100, soc))) / 100 : 0;
 
@@ -335,25 +340,25 @@ function renderFlow(live) {
         <circle cx="${FN.solar.x}" cy="${FN.solar.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.solar}" stroke-width="2.5"/>
         ${fIcon(FN.solar.x, FN.solar.y - 14, "solar", FLOW_COLORS.solar, 1.05)}
         <text class="pf-val" x="${FN.solar.x}" y="${FN.solar.y + 9}" text-anchor="middle">${pW(p.pv || 0)}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.solar.x}" y="${FN.solar.y + 24}" text-anchor="middle">${fmtNum.format(e.generation.total)} kWh</text>
+        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.solar.x}" y="${FN.solar.y + 24}" text-anchor="middle">${kwh("pv", e.generation.total)}</text>
       </g>
       <g>
         <circle cx="${FN.grid.x}" cy="${FN.grid.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.grid}" stroke-width="2.5"/>
         ${fIcon(FN.grid.x, FN.grid.y - 20, "grid", FLOW_COLORS.grid, 0.95)}
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.grid.x}" y="${FN.grid.y + 3}" text-anchor="middle">← ${kwhOf(e.generation, "to_grid")}</text>
-        <text class="pf-io" style="fill:${FLOW_COLORS.grid}" x="${FN.grid.x}" y="${FN.grid.y + 20}" text-anchor="middle">→ ${kwhOf(e.home, "from_grid")}</text>
+        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.grid.x}" y="${FN.grid.y + 3}" text-anchor="middle">← ${kwh("grid_export")}</text>
+        <text class="pf-io" style="fill:${FLOW_COLORS.grid}" x="${FN.grid.x}" y="${FN.grid.y + 20}" text-anchor="middle">→ ${kwh("grid_import")}</text>
       </g>
       <g>
         <circle cx="${FN.battery.x}" cy="${FN.battery.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.battery}" stroke-width="2.5"/>
         ${fIcon(FN.battery.x, FN.battery.y - 20, "battery", FLOW_COLORS.battery, 0.95)}
-        <text class="pf-io" style="fill:${FLOW_COLORS.battery}" x="${FN.battery.x}" y="${FN.battery.y + 3}" text-anchor="middle">↓ ${kwhOf(e.home, "from_battery")}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.battery.x}" y="${FN.battery.y + 20}" text-anchor="middle">↑ ${kwhOf(e.generation, "to_battery")}</text>
+        <text class="pf-io" style="fill:${FLOW_COLORS.battery}" x="${FN.battery.x}" y="${FN.battery.y + 3}" text-anchor="middle">↓ ${kwh("battery_discharge")}</text>
+        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.battery.x}" y="${FN.battery.y + 20}" text-anchor="middle">↑ ${kwh("battery_charge")}</text>
       </g>
       <g>
         ${ring}
         ${fIcon(FN.home.x, FN.home.y - 14, "home", inkColor, 0.95)}
         <text class="pf-val" x="${FN.home.x}" y="${FN.home.y + 9}" text-anchor="middle">${pW(p.home || 0)}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.home.x}" y="${FN.home.y + 24}" text-anchor="middle">${fmtNum.format(e.home.total)} kWh</text>
+        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.home.x}" y="${FN.home.y + 24}" text-anchor="middle">${fmtNum.format(homeDay)} kWh</text>
       </g>
       <text class="pf-lbl" x="${FN.solar.x}" y="${FN.solar.y - NR - 11}" text-anchor="middle">Solar</text>
       <text class="pf-lbl" x="${FN.grid.x}" y="${FN.grid.y + NR + 20}" text-anchor="middle">Red</text>

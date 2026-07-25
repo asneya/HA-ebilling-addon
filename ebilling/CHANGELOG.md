@@ -2,6 +2,37 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.4
+
+### Corregido
+
+- **En el círculo de la red, el valor de energía importada no era el de tu
+  contador.** Los dos números del nodo venían del *reparto* del consumo por
+  fuentes: `←` coincidía con el sensor de exportada (porque casi siempre lo
+  vertido es menor que lo generado), pero `→` mostraba «cuánta de la energía que
+  ha consumido la casa venía de la red», que puede ser muy distinto de lo que ha
+  cruzado el contador (la importación que va a cargar la batería, por ejemplo, no
+  la consume la casa). Auditado con contadores del día de valores conocidos y
+  distintos: con 4 kWh exportados y 3 importados, el círculo mostraba `← 4` y
+  `→ 1`.
+- Ahora **cada círculo muestra el contador del día de su propio punto**: red `←`
+  exportada y `→` importada, batería `↑` carga y `↓` descarga, solar su
+  generación y casa su consumo. El **reparto por fuentes** sigue donde
+  corresponde: el anillo de la casa y el resumen de energía. `api/live` expone
+  las lecturas del día en `energy.meters`.
+
+## 0.17.3
+
+### Corregido
+
+- **El interruptor de «Publicar sensores» (y el de «Proyección fin de ciclo») se
+  veía roto**: una regla genérica `input[type="checkbox"] { width: 18px; height:
+  18px }` ganaba en especificidad y aplastaba la pista a 18 px, con lo que el
+  círculo de 22 px se salía y parecía un elemento a medio cargar. Además, la
+  pista apagada usaba un negro al 12 % que sobre la superficie clara no se veía.
+  Ahora el interruptor mide 46×28, la pista apagada tiene color propio en claro y
+  oscuro, y el círculo responde al pulsarlo.
+
 ## 0.17.2
 
 ### Cambios

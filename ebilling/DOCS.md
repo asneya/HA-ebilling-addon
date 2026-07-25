@@ -12,6 +12,14 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
   casa) y debajo el **resumen de energía del día**: generación repartida en «a
   la casa / a la batería / a la red» y consumo de la casa en «desde solar /
   desde batería / desde la red», con barras y porcentajes.
+
+  Dentro de cada círculo del diagrama se muestra su **potencia instantánea** en
+  grande y **el contador del día de ese mismo punto** en pequeño: en la red,
+  `←` la energía exportada y `→` la importada; en la batería, `↑` la carga y `↓`
+  la descarga. Son las lecturas de tus sensores, sin reparto. El **reparto por
+  fuentes** (de dónde viene el consumo, a dónde va la generación) está en el
+  anillo alrededor de la casa y en el resumen de energía.
+
   El **fondo representa el momento del día** (noche, amanecer, día, atardecer,
   a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
   nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la
