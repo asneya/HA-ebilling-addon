@@ -2,6 +2,15 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.2
+
+### Cambios
+
+- En el **círculo de la casa** del flujo de energía, la **potencia instantánea**
+  pasa a ser el dato grande y el acumulado del día el pequeño, igual que en el
+  de generación: el dato principal de un diagrama de flujo es el instantáneo.
+  Corregido tanto en la Home del add-on como en la **tarjeta de Lovelace**.
+
 ## 0.17.1
 
 ### Cambios

@@ -315,7 +315,7 @@ class EBillingPowerFlow extends HTMLElement {
     if (E.svg) {
       E.svg.setAttribute(
         "aria-label",
-        `Solar ${pfFmt(f.solar)}. Casa ${pfEnergyFmt(homeTotal)} hoy, ${pfFmt(f.home)} ahora. ` +
+        `Solar ${pfFmt(f.solar)}. Casa ${pfFmt(f.home)} ahora, ${pfEnergyFmt(homeTotal)} hoy. ` +
         `Red: ${io(g.feedin, g.energy)} exportada, ${io(g.tohome, g.energy)} importada. ` +
         `Batería: ${io(b.feedin, b.energy)} carga, ${io(b.tohome, b.energy)} descarga.`
       );
@@ -417,8 +417,8 @@ class EBillingPowerFlow extends HTMLElement {
         <circle cx="${H.x}" cy="${H.y}" r="${R}" fill="var(--card-background-color)"/>
         <g class="pf-ring"></g>
         ${pfIcon(H.x, H.y - 16, "home", hc, 0.95)}
-        <text class="pf-val" data-el="home_total" x="${H.x}" y="${H.y + 8}" text-anchor="middle">—</text>
-        <text class="pf-io" style="fill:${muted}" data-el="home_power" x="${H.x}" y="${H.y + 24}" text-anchor="middle">—</text>
+        <text class="pf-val" data-el="home_power" x="${H.x}" y="${H.y + 9}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:${muted}" data-el="home_total" x="${H.x}" y="${H.y + 24}" text-anchor="middle">—</text>
       </g>`;
 
     const nodeLabels = [S, G, H, B].map((n) => {
@@ -595,7 +595,7 @@ if (!customElements.get("ebilling-power-flow")) {
     preview: true,
   });
 
-  console.info("%c eBilling-power-flow %c v0.12 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+  console.info("%c eBilling-power-flow %c v0.13 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
 }
 
 })();
