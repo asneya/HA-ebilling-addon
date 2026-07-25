@@ -144,7 +144,11 @@ Se abre pulsando el **resumen de energía** de la Home.
   translúcida**. El eje llega hasta el final del periodo: los buckets que aún no
   han ocurrido quedan como hueco.
 - **Leyenda**: cada serie se activa y desactiva pulsándola, y muestra el
-  **total de energía del periodo**. Al **pulsar un punto del gráfico** todas
+  **total de energía del periodo**, tomado del **contador** de esa magnitud (el
+  mismo número que ves en tus sensores y en los demás rangos), no de integrar la
+  curva de potencia. Si una serie no tiene contador configurado —el consumo de la
+  casa, por ejemplo— sí se integra su potencia, y la previsión solar siempre se
+  integra. Al **pulsar un punto del gráfico** todas
   pasan a mostrar el valor de ese instante; el botón **Totales** vuelve a los
   totales del periodo.
 - **Zoom del eje del tiempo**: pellizca con dos dedos (o `⌘`/`Ctrl` + rueda del
