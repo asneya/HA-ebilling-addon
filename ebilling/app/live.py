@@ -407,6 +407,7 @@ async def daily_energy(
             factor = series_mod._unit_factor(entity, states, "energy", units)
             by_key[key] = series_mod._extract(detailed, entity, "change", tz, factor)
     series_mod.split_signed_buckets(by_key, energy_cfg, series_mod.ENERGY_PAIRS)
+    series_mod.clamp_buckets(by_key)
     signed_keys = {
         key
         for pos, neg in series_mod.ENERGY_PAIRS
@@ -453,10 +454,25 @@ async def daily_energy(
     if power_index is not None and power_index < len(results):
         factor = series_mod._unit_factor(home_power, states, "power", units)
         means = series_mod._extract(results[power_index], home_power, "mean", tz, factor)
-        if means:
+        # Si el sensor está invertido (integral negativa) no vale como medida:
+        # se deja sin poner y el consumo se deduce por balance más abajo. Si
+        # solo hay algún bucket negativo, se recorta para que no reste.
+        if means and sum(means.values()) > 0:
+            means = {iso: max(watts, 0.0) for iso, watts in means.items()}
             out["home_energy"] = sum(means.values()) * (5.0 / 60.0)
             for iso, watts in means.items():
                 per_bucket.setdefault(iso, {})["home_energy"] = watts * (5.0 / 60.0) / 1000.0
+
+    # Último filtro: un contador puede dar un total negativo (sensor con el
+    # signo invertido, o un reinicio que las estadísticas cuentan como
+    # incremento negativo). La energía es una magnitud: nunca es negativa.
+    #
+    # El consumo de la casa se puede deducir por balance, así que un valor
+    # inválido se descarta y lo calcula el reparto (mejor que un cero que no
+    # cuadraría con el resumen). Los demás no tienen alternativa: a cero.
+    if (out.get("home_energy") or 0.0) < 0:
+        del out["home_energy"]
+    out = {key: max(value, 0.0) for key, value in out.items()}
 
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
     value = {"totals": out, "flows": flows}
@@ -481,6 +497,11 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
             power[key] = value
     # Un medidor bidireccional asignado a las dos casillas se reparte por signo.
     series_mod.split_signed_values(power, flow_cfg, series_mod.POWER_PAIRS)
+    # Ninguna de estas magnitudes puede ser negativa: la casa no genera, el
+    # sol no consume. Un valor negativo es un sensor con el signo invertido o
+    # un medidor neto puesto en una sola casilla, y se recorta a cero antes de
+    # que llegue a pantalla.
+    power = {k: max(v, 0.0) for k, v in power.items()}
 
     # Totales del día y reparto por buckets (el estado del sensor no vale como
     # total cuando el contador es acumulado).

@@ -43,6 +43,28 @@ siempre de las estadísticas y el reparto por signo se hace **antes** de agrupar
 con un contador así, semana, mes y año se calculan con resolución horaria. En
 **Total** (diez años) se reparte por días y las cifras son aproximadas.
 
+### Valores negativos
+
+La potencia y la energía que muestra el add-on son **magnitudes**: nunca son
+negativas. Un valor negativo en un sensor significa otra cosa y se trata como
+tal:
+
+- En un **par bidireccional** (el mismo sensor en las dos casillas) el signo es
+  la dirección y se usa para separarlas, como se explica arriba.
+- Fuera de un par, un valor negativo es un **sensor con el signo invertido** o un
+  medidor neto puesto en una sola casilla: **se recorta a cero**, porque la casa
+  no genera ni el sol consume.
+- Un **incremento negativo de un contador** no es energía negativa: es un
+  contador que se ha **reiniciado** (los diarios lo hacen cada medianoche) o que
+  ha dado una lectura menor que la anterior. También se recorta a cero; si se
+  sumara, restaría del total del día.
+- Si el **contador del consumo de la casa** resulta inservible (su total sale
+  negativo), se descarta y el consumo se **deduce por balance** (lo que hace
+  cuando no hay contador). Así el círculo de la casa y el resumen coinciden.
+
+Si ves un cero donde esperas consumo, revisa el signo del sensor en Ajustes: casi
+siempre es un sensor de la casa o de la red configurado al revés.
+
 ### Cómo se calcula el reparto
 
 Los contadores dan lo que entra y sale por cada punto, pero **ninguno mide el
