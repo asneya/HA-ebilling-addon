@@ -163,8 +163,9 @@ el valor.
 En el círculo de la **casa** se muestra la **potencia instantánea** y, debajo y
 más pequeño, el **total consumido hoy** (kWh), igual que en el de solar. En los
 círculos de **red** y **batería**
-aparecen dos valores con flecha: **← feed-in** (exportar a red / cargar
-batería) y **→ hacia la casa** (importar / descargar) — con los totales de
+aparecen dos valores con flecha: en la red, **←** lo exportado y **→** lo
+importado; en la batería, **↑** la descarga (en rojo, sale) y **↓** la carga (en
+verde, entra) — con los totales de
 energía diaria si los configuras, o la potencia actual si no.
 
 **Anillo de la casa**: alrededor del nodo de la casa se dibuja un donut que

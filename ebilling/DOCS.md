@@ -15,8 +15,8 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
 
   Dentro de cada círculo del diagrama se muestra su **potencia instantánea** en
   grande y **el contador del día de ese mismo punto** en pequeño: en la red,
-  `←` la energía exportada y `→` la importada; en la batería, `↑` la carga y `↓`
-  la descarga. Son las lecturas de tus sensores, sin reparto. El **reparto por
+  `←` la energía exportada y `→` la importada; en la batería, `↑` la descarga
+  (en rojo, sale de la batería) y `↓` la carga (en verde, entra). Son las lecturas de tus sensores, sin reparto. El **reparto por
   fuentes** (de dónde viene el consumo, a dónde va la generación) está en el
   anillo alrededor de la casa y en el resumen de energía.
 

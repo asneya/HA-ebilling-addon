@@ -277,9 +277,10 @@ class EBillingPowerFlow extends HTMLElement {
     if (E.grid_in) E.grid_in.textContent = `← ${io(g.feedin, g.energy)}`;
     if (E.grid_out) E.grid_out.textContent = `→ ${io(g.tohome, g.energy)}`;
 
+    // La descarga sale de la batería (flecha arriba) y la carga entra (abajo).
     const b = this._inOut("battery_charge_energy", "battery_discharge_energy", "battery_charge", "battery_discharge");
-    if (E.bat_out) E.bat_out.textContent = `↓ ${io(b.tohome, b.energy)}`;
-    if (E.bat_in) E.bat_in.textContent = `↑ ${io(b.feedin, b.energy)}`;
+    if (E.bat_out) E.bat_out.textContent = `↑ ${io(b.tohome, b.energy)}`;
+    if (E.bat_in) E.bat_in.textContent = `↓ ${io(b.feedin, b.energy)}`;
 
     // Nivel de carga dibujado dentro del icono de la batería.
     const soc = this._watts("battery_soc");
@@ -410,8 +411,8 @@ class EBillingPowerFlow extends HTMLElement {
       <g>
         <circle cx="${B.x}" cy="${B.y}" r="${R}" fill="var(--card-background-color)" stroke="${bc}" stroke-width="2.5"/>
         ${pfIcon(B.x, B.y - 19, "battery", bc, 0.95)}
-        <text class="pf-io" style="fill:${bc}" data-el="bat_out" x="${B.x}" y="${B.y + 6}" text-anchor="middle">—</text>
-        <text class="pf-io" style="fill:${muted}" data-el="bat_in" x="${B.x}" y="${B.y + 22}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:var(--error-color, #e5484d)" data-el="bat_out" x="${B.x}" y="${B.y + 6}" text-anchor="middle">—</text>
+        <text class="pf-io" style="fill:${bc}" data-el="bat_in" x="${B.x}" y="${B.y + 22}" text-anchor="middle">—</text>
       </g>
       <g>
         <circle cx="${H.x}" cy="${H.y}" r="${R}" fill="var(--card-background-color)"/>
@@ -595,7 +596,7 @@ if (!customElements.get("ebilling-power-flow")) {
     preview: true,
   });
 
-  console.info("%c eBilling-power-flow %c v0.13 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+  console.info("%c eBilling-power-flow %c v0.14 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
 }
 
 })();

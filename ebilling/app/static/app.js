@@ -378,8 +378,8 @@ function renderFlow(live) {
       <g>
         <circle cx="${FN.battery.x}" cy="${FN.battery.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.battery}" stroke-width="2.5"/>
         ${fIcon(FN.battery.x, FN.battery.y - 20, "battery", FLOW_COLORS.battery, 0.95)}
-        <text class="pf-io" style="fill:${FLOW_COLORS.battery}" x="${FN.battery.x}" y="${FN.battery.y + 3}" text-anchor="middle">↓ ${kwh("battery_discharge")}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.battery.x}" y="${FN.battery.y + 20}" text-anchor="middle">↑ ${kwh("battery_charge")}</text>
+        <text class="pf-io" style="fill:var(--bad)" x="${FN.battery.x}" y="${FN.battery.y + 3}" text-anchor="middle">↑ ${kwh("battery_discharge")}</text>
+        <text class="pf-io" style="fill:${FLOW_COLORS.battery}" x="${FN.battery.x}" y="${FN.battery.y + 20}" text-anchor="middle">↓ ${kwh("battery_charge")}</text>
       </g>
       <g>
         ${ring}
