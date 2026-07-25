@@ -28,6 +28,21 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
   la frase que la explica (p. ej. «1 kWh de lo importado fue a cargar la
   batería»).
 
+### Medidores bidireccionales
+
+Muchos inversores y medidores dan un **único sensor con signo** en lugar de dos:
+la red en **+ importación / − exportación** y la batería en **+ carga /
+− descarga**. En ese caso, **asigna el mismo sensor a las dos casillas del par**
+(tanto en el flujo de energía como en los contadores): el add-on separa las dos
+direcciones por el signo.
+
+Con un **contador neto** de energía hay un detalle importante: su estado (el
+neto) no sirve para ninguna de las dos direcciones, así que los totales salen
+siempre de las estadísticas y el reparto por signo se hace **antes** de agrupar
+(en un bucket de un día el neto ya está sumado y el signo se pierde). Por eso,
+con un contador así, semana, mes y año se calculan con resolución horaria. En
+**Total** (diez años) se reparte por días y las cifras son aproximadas.
+
 ### Cómo se calcula el reparto
 
 Los contadores dan lo que entra y sale por cada punto, pero **ninguno mide el
