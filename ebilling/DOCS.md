@@ -20,6 +20,14 @@ cualquiera de los fondos, tanto en modo claro como oscuro:
   fuentes** (de dónde viene el consumo, a dónde va la generación) está en el
   anillo alrededor de la casa y en el resumen de energía.
 
+  Ojo con una diferencia que despista: en el resumen, **«Desde la red» no es lo
+  que marca tu contador de importada**, sino la parte de esa importación que ha
+  consumido la casa. Si parte de lo importado ha ido a **cargar la batería**, esa
+  parte no la consume la casa y la diferencia es justo esa. Por eso, al pie del
+  resumen se muestran los **contadores de red del día** y, cuando hay diferencia,
+  la frase que la explica (p. ej. «1 kWh de lo importado fue a cargar la
+  batería»).
+
   El **fondo representa el momento del día** (noche, amanecer, día, atardecer,
   a partir de `sun.sun`) y las **condiciones meteorológicas** (nubes, lluvia,
   nieve, niebla). En la esquina superior se muestra el **icono del tiempo** y la

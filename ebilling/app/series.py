@@ -481,6 +481,11 @@ def split_flows(
         "from_battery": from_battery,
         "from_grid": from_grid,
         "home_total": home_total,
+        # Partes que no pasan por la casa ni por la generación, y que explican
+        # la diferencia entre los contadores de la red y el reparto:
+        # lo importado que acaba en la batería y lo vertido que no es solar.
+        "grid_to_battery": grid_to_battery,
+        "battery_to_grid": max(export - to_grid, 0.0),
     }
 
 

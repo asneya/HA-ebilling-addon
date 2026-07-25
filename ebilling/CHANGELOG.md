@@ -2,6 +2,23 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.5
+
+### Cambios
+
+- **El resumen de energía deja claro por qué «Desde la red» no es el contador de
+  importada.** No era un error de cálculo: la columna reparte el consumo de la
+  casa por origen, y «Desde la red» es solo la parte de la importación que ha
+  consumido la casa; lo que se importa para **cargar la batería** no lo consume
+  la casa. Auditado con datos coherentes (entra 10 solar + 5 importada +
+  2 descarga = sale 8 exportada + 3 carga + 6 casa): el reparto es exacto y la
+  diferencia de 1 kWh es justo lo que la red cargó en la batería.
+- Al pie del resumen se muestran ahora los **contadores de red del día**
+  (importada y exportada) y, cuando no cuadran con el reparto, **la frase que lo
+  explica** («1 kWh de lo importado fue a cargar la batería», «X kWh de lo
+  vertido salió de la batería»). `api/live` expone esos residuos en
+  `energy.meters.grid_to_battery` y `energy.meters.battery_to_grid`.
+
 ## 0.17.4
 
 ### Corregido

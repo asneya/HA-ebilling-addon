@@ -188,6 +188,10 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     }
     if energy.get("home_energy") is not None:
         meters["home"] = _kwh("home_energy")
+    # Lo importado que fue a la batería y lo vertido que salió de ella: son la
+    # diferencia entre los contadores de la red y el reparto del consumo.
+    meters["grid_to_battery"] = round(flows["grid_to_battery"] / 1000.0, 2)
+    meters["battery_to_grid"] = round(flows["battery_to_grid"] / 1000.0, 2)
 
     def _rows(total: float, items: list[tuple[str, str, float]]) -> list[dict[str, Any]]:
         return [
