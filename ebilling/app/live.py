@@ -151,21 +151,26 @@ def _flows(power: dict[str, float]) -> dict[str, float]:
     }
 
 
-def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
+def _energy_summary(
+    energy: dict[str, float], flows: dict[str, float] | None = None
+) -> dict[str, Any]:
     """Resumen del día: generación y consumo de la casa, por destino/origen.
 
-    Reparto en ``series.split_flows`` (mismo modelo que la pantalla de
-    Energía). Todas las magnitudes de ``energy`` están en Wh.
+    ``energy`` son los totales del día en Wh y ``flows`` el reparto ya sumado
+    bucket a bucket (lo normal). Si no hay reparto por buckets se calcula sobre
+    los totales, que es menos preciso cuando la batería se carga de la red a
+    horas en las que también hay sol.
     """
     gen_total = max(energy.get("pv_energy") or 0.0, 0.0)
-    flows = series_mod.split_flows(
-        gen_total,
-        energy.get("battery_charge_energy") or 0.0,
-        energy.get("grid_export_energy") or 0.0,
-        energy.get("grid_import_energy") or 0.0,
-        energy.get("battery_discharge_energy") or 0.0,
-        energy.get("home_energy"),
-    )
+    if flows is None:
+        flows = series_mod.split_flows(
+            gen_total,
+            energy.get("battery_charge_energy") or 0.0,
+            energy.get("grid_export_energy") or 0.0,
+            energy.get("grid_import_energy") or 0.0,
+            energy.get("battery_discharge_energy") or 0.0,
+            energy.get("home_energy"),
+        )
     to_load = flows["to_home"]
     to_battery = flows["to_battery"]
     to_grid = flows["to_grid"]
@@ -263,22 +268,56 @@ def _states_energy(
     return out
 
 
+def _accumulate_flows(
+    buckets: dict[str, dict[str, float]], measured_home: bool
+) -> dict[str, float] | None:
+    """Reparte cada bucket por separado y suma los resultados (Wh).
+
+    Hacer el reparto una sola vez sobre el total del día pierde la correlación
+    temporal: si la batería se carga de la red de madrugada y hay sol al
+    mediodía, sobre los totales esa carga parece solar. Bucket a bucket (5
+    minutos) las dos cosas no se solapan y el reparto sale bien. Los datos ya
+    vienen descargados, así que no cuesta ninguna petición extra.
+    """
+    if not buckets:
+        return None
+    keys = ("to_home", "to_battery", "to_grid", "from_solar", "from_battery",
+            "from_grid", "home_total", "grid_to_battery", "battery_to_grid")
+    acc = dict.fromkeys(keys, 0.0)
+    for values in buckets.values():
+        split = series_mod.split_flows(
+            values.get("pv_energy", 0.0),
+            values.get("battery_charge_energy", 0.0),
+            values.get("grid_export_energy", 0.0),
+            values.get("grid_import_energy", 0.0),
+            values.get("battery_discharge_energy", 0.0),
+            values.get("home_energy") if measured_home else None,
+        )
+        for key in keys:
+            acc[key] += split[key]
+    return {key: value * 1000.0 for key, value in acc.items()}  # kWh → Wh
+
+
 async def daily_energy(
     settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
-) -> dict[str, float]:
-    """Energía de hoy (Wh) por sensor.
+) -> dict[str, Any]:
+    """Energía de hoy: ``{"totals": Wh por clave, "flows": reparto en Wh}``.
 
-    Según el ajuste ``energy_counters``:
+    Los totales, según el ajuste ``energy_counters``:
 
     - ``daily``: los sensores ya miden el día en curso, así que se lee su
-      estado directamente (sin consultar estadísticas).
+      estado directamente, que va al segundo.
     - ``lifetime``: son contadores acumulados desde el inicio del histórico
       (``total_increasing``), así que se pide el incremento (``change``) desde
       la medianoche local, en pasos de 5 minutos y con el bucket diario como
       respaldo.
     - ``auto`` (por defecto): se calcula el incremento y se compara con el
-      estado; si coinciden, el sensor ya es del día y se usa su estado, que va
-      al segundo.
+      estado; si coinciden, el sensor ya es del día y se usa su estado.
+
+    El **reparto** (qué parte de la generación va a cada sitio y de dónde viene
+    el consumo) no lo mide ningún sensor: no existe un contador «solar→casa».
+    Se deduce, y se hace bucket a bucket para no perder la hora a la que ocurre
+    cada cosa. ``flows`` es ``None`` si no hay estadísticas con las que hacerlo.
     """
     energy_cfg = settings.get("energy_sensors") or {}
     flow_cfg = settings.get("flow_sensors") or {}
@@ -288,12 +327,7 @@ async def daily_energy(
     # de potencia (que ya está configurado en el flujo de energía).
     home_power = "" if energy_cfg.get("home_energy") else (flow_cfg.get("home") or "")
     if not ids and not home_power:
-        return {}
-
-    # Contadores del día declarados y con consumo de casa propio: nada que
-    # consultar, se leen los estados y listo.
-    if mode == "daily" and not home_power:
-        return _states_energy(energy_cfg, states)
+        return {"totals": {}, "flows": None}
 
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{home_power}"
@@ -301,14 +335,17 @@ async def daily_energy(
         _daily_cache["key"] == cache_key
         and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
     ):
-        cached = dict(_daily_cache["value"])
+        cached = {"totals": dict(_daily_cache["value"]["totals"]),
+                  "flows": _daily_cache["value"]["flows"]}
         if mode == "daily":
-            # El estado va al segundo; solo la casa (integral) viene cacheada.
-            cached.update(_states_energy(energy_cfg, states))
+            # El estado va al segundo; el reparto viene cacheado.
+            cached["totals"].update(_states_energy(energy_cfg, states))
         return cached
 
     requests: list[dict[str, Any]] = []
-    if ids and mode != "daily":
+    if ids:
+        # Los buckets de 5 minutos se piden también en modo «daily»: los
+        # totales salen del estado, pero el reparto necesita el detalle.
         requests.append(
             {"ids": ids, "start": start, "end": now, "period": "5minute", "types": ["change"]}
         )
@@ -330,22 +367,25 @@ async def daily_energy(
     except Exception:  # noqa: BLE001 - se degrada al estado actual del sensor
         _LOGGER.warning("No se pudieron leer las estadísticas del día", exc_info=True)
 
-    stats_requested = bool(ids) and mode != "daily"
-    detailed = results[0] if stats_requested else {}
-    coarse = results[1] if stats_requested else {}
+    detailed = results[0] if ids else {}
+    coarse = results[1] if ids else {}
 
     out: dict[str, float] = {}
+    # Valor por bucket de cada contador, para repartir sin perder la hora.
+    per_bucket: dict[str, dict[str, float]] = {}
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
         if not entity:
             continue
         state_value = _convert(states.get(entity), "energy")
+        factor = series_mod._unit_factor(entity, states, "energy", units)
+        buckets = series_mod._extract(detailed, entity, "change", tz, factor)
+        for iso, value in buckets.items():
+            per_bucket.setdefault(iso, {})[key] = value
         if mode == "daily":
             if state_value is not None:
                 out[key] = state_value
             continue
-        factor = series_mod._unit_factor(entity, states, "energy", units)
-        buckets = series_mod._extract(detailed, entity, "change", tz, factor)
         if not buckets:
             buckets = series_mod._extract(coarse, entity, "change", tz, factor)
         if not buckets:
@@ -367,9 +407,14 @@ async def daily_energy(
         means = series_mod._extract(results[power_index], home_power, "mean", tz, factor)
         if means:
             out["home_energy"] = sum(means.values()) * (5.0 / 60.0)
+            for iso, watts in means.items():
+                per_bucket.setdefault(iso, {})["home_energy"] = watts * (5.0 / 60.0) / 1000.0
 
-    _daily_cache.update({"key": cache_key, "at": time.monotonic(), "value": dict(out)})
-    return out
+    flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
+    value = {"totals": out, "flows": flows}
+    _daily_cache.update({"key": cache_key, "at": time.monotonic(),
+                         "value": {"totals": dict(out), "flows": flows}})
+    return value
 
 
 async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
@@ -387,8 +432,10 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
         if value is not None:
             power[key] = value
 
-    # Totales del día calculados (no el estado del sensor, que es acumulado).
-    energy = await daily_energy(settings, states, now.tzinfo, now)
+    # Totales del día y reparto por buckets (el estado del sensor no vale como
+    # total cuando el contador es acumulado).
+    daily = await daily_energy(settings, states, now.tzinfo, now)
+    energy = daily["totals"]
 
     soc_entity = flow_cfg.get("battery_soc")
     soc = _num((states.get(soc_entity) or {}).get("state")) if soc_entity else None
@@ -406,7 +453,7 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
             "battery_soc": round(soc, 1) if soc is not None else None,
         },
         "flows": {k: round(v, 1) for k, v in flows.items()},
-        "energy": _energy_summary(energy),
+        "energy": _energy_summary(energy, daily["flows"]),
         "has_battery": bool(
             flow_cfg.get("battery_charge") or flow_cfg.get("battery_discharge")
         ),

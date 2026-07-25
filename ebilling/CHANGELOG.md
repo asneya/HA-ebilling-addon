@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.0
+
+### Cambios
+
+- **El reparto de energía se calcula intervalo a intervalo, no sobre el total
+  del día.** Los contadores dicen lo que entra y sale por cada punto, pero
+  ninguno mide el reparto (no existe un sensor «solar → casa»): hay que
+  deducirlo, y el resultado depende de *cuándo* pasa cada cosa. Hacerlo una sola
+  vez sobre los totales del día perdía esa información.
+
+  Ejemplo medido: batería cargada **de la red** de 00:00 a 03:00 (6 kWh) y sol de
+  10:00 a 16:00 (24 kWh, 12 vertidos).
+
+  | | Sobre el total del día | Intervalo a intervalo |
+  |---|---|---|
+  | Generación → a la casa | 6,0 kWh | **12,0 kWh** |
+  | Generación → a la batería | 6,0 kWh | **0,0 kWh** |
+  | Casa ← desde solar | 6,0 kWh | **12,0 kWh** |
+  | Casa ← desde la red | 7,5 kWh | **1,6 kWh** |
+  | Importado que fue a la batería | 0,0 kWh | **6,0 kWh** |
+
+  Resolución del reparto: **5 minutos** en la Home y en el rango de día, **1
+  hora** en semana y mes, y el bucket del gráfico en año y total (donde serían
+  miles de intervalos). No supone ninguna petición extra a Home Assistant en la
+  Home ni en el rango de día: esos datos ya se descargaban y se estaban
+  desaprovechando al sumarlos antes de repartir.
+- En el modo **«los contadores ya son del día en curso»**, los totales siguen
+  saliendo del estado del sensor (van al segundo) y ahora se piden además las
+  estadísticas para poder repartir con detalle.
+
 ## 0.17.5
 
 ### Cambios

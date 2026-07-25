@@ -701,43 +701,41 @@ async def _build_power(
                 )
             )
 
-    totals: dict[str, float] | None = None
+    # El reparto se hace bucket a bucket: sobre el total del día se perdería a
+    # qué hora ocurre cada cosa (una carga de red de madrugada parecería solar).
+    flows: dict[str, float] | None = None
     if energy_index is not None:
         raw = results[energy_index]
-        totals = {}
+        per_bucket: dict[str, dict[str, float]] = {}
         for key in energy_keys:
             sensor = energy_cfg.get(key)
             if not sensor:
-                totals[key] = 0.0
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
-            totals[key] = sum(_extract(raw, sensor, "change", tz, factor).values())
+            for iso, value in _extract(raw, sensor, "change", tz, factor).items():
+                per_bucket.setdefault(iso, {})[key] = value
+        measured = bool(energy_cfg.get("home_energy"))
+        parts = [
+            split_flows(
+                v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
+                v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
+                v.get("battery_discharge_energy", 0.0),
+                v.get("home_energy") if measured else None,
+            )
+            for v in per_bucket.values()
+        ]
+        if parts:
+            flows = {k: sum(p[k] for p in parts) for k in parts[0]}
     elif wants_breakdown and is_today:
-        # Mismos totales que la Home (cacheados allí), para que las dos
-        # pantallas muestren exactamente lo mismo. Import local: `live` importa
-        # este módulo.
+        # Mismo reparto que la Home (cacheado allí), para que las dos pantallas
+        # muestren exactamente lo mismo. Import local: `live` importa este módulo.
         import live  # noqa: PLC0415
 
-        wh = await live.daily_energy(settings, states, tz, now)
-        totals = {key: (wh.get(key) or 0.0) / 1000.0 for key in energy_keys}
+        daily = await live.daily_energy(settings, states, tz, now)
+        if daily["flows"]:
+            flows = {k: v / 1000.0 for k, v in daily["flows"].items()}
 
-    breakdown = None
-    if totals is not None:
-        # Consumo de la casa medido: su contador si existe y, si no, la integral
-        # de su sensor de potencia (el total que ya calcula la leyenda).
-        home_serie = next((item for item in series if item["key"] == "home"), None)
-        home_measured = totals.get("home_energy") or (
-            home_serie["total"] if home_serie else None
-        )
-        flows = split_flows(
-            totals["pv_energy"],
-            totals["battery_charge_energy"],
-            totals["grid_export_energy"],
-            totals["grid_import_energy"],
-            totals["battery_discharge_energy"],
-            home_measured,
-        )
-        breakdown = _make_breakdown(_breakdown_rows(view, [flows]))
+    breakdown = _make_breakdown(_breakdown_rows(view, [flows])) if flows else None
 
     return {"unit": "W", "chart": "line", "x": x_keys, "series": series, "breakdown": breakdown}
 
@@ -760,10 +758,21 @@ async def _build_energy(
     if not ids:
         return {"unit": "kWh", "chart": "line", "x": [], "series": [], "breakdown": None}
 
-    results, units = await ws_statistics(
-        settings,
-        [{"ids": ids, "start": start, "end": end, "period": period, "types": ["change"]}],
-    )
+    requests = [
+        {"ids": ids, "start": start, "end": end, "period": period, "types": ["change"]}
+    ]
+    # El desglose se reparte por horas, no por el bucket del gráfico: con
+    # buckets de un día, una carga de batería desde la red de madrugada se
+    # confunde con la solar del mediodía. En año y total serían miles de
+    # buckets, así que ahí se reparte con el mismo bucket del gráfico.
+    fine_index = None
+    if view in ("solar", "home", "overview") and range_key in ("week", "month"):
+        fine_index = len(requests)
+        requests.append(
+            {"ids": ids, "start": start, "end": end, "period": "hour", "types": ["change"]}
+        )
+
+    results, units = await ws_statistics(settings, requests)
     raw = results[0]
 
     data: dict[str, dict[str, float]] = {}
@@ -818,7 +827,29 @@ async def _build_energy(
     home_total = [item["home_total"] for item in flows]
 
     series: list[dict[str, Any]] = []
-    breakdown_rows = _breakdown_rows(view, flows)
+    # Para el desglose se usa el reparto horario si se ha pedido; si no, el del
+    # propio bucket del gráfico.
+    fine_flows = flows
+    if fine_index is not None:
+        hourly: dict[str, dict[str, float]] = {}
+        for key in keys:
+            sensor = energy.get(key)
+            if not sensor:
+                continue
+            factor = _unit_factor(sensor, states, "energy", units)
+            for iso, value in _extract(results[fine_index], sensor, "change", tz, factor).items():
+                hourly.setdefault(iso, {})[key] = value
+        if hourly:
+            fine_flows = [
+                split_flows(
+                    v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
+                    v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
+                    v.get("battery_discharge_energy", 0.0),
+                    v.get("home_energy") if measured else None,
+                )
+                for v in hourly.values()
+            ]
+    breakdown_rows = _breakdown_rows(view, fine_flows)
 
     mask = [x in known for x in x_keys]
 
