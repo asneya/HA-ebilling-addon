@@ -31,7 +31,7 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 | Grupo | Sensores |
 |---|---|
 | Flujo de energía (W/kW) | producción solar, importación y exportación de red, carga y descarga de batería, consumo de la casa (opcional) y % de batería (opcional) |
-| Contadores de energía (kWh) | solar, importada, exportada, carga y descarga |
+| Contadores de energía (kWh) | solar, importada, exportada, carga, descarga y **casa** (opcional) |
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
 | Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
 
@@ -41,9 +41,20 @@ que sean contadores acumulados desde el inicio del histórico
 medianoche** a partir de las estadísticas de largo plazo. Si un contador no
 tiene estadísticas, se usa su estado actual como último recurso.
 
-El consumo de la casa se calcula por balance si no defines su sensor. El
-reparto del resumen atribuye a la generación lo vertido y lo que carga la
-batería, y el resto a la casa (mismo modelo que las apps de inversores).
+El **consumo de la casa** se toma, por este orden:
+
+1. Su **contador de energía** (kWh), si lo indicas en *Contadores de energía →
+   Casa*.
+2. La **integral de su sensor de potencia**, el que ya configuras en el flujo de
+   energía: no hace falta ningún ajuste extra.
+3. Por **balance**, si no tienes ninguno de los dos.
+
+El reparto atribuye a la generación lo vertido y lo que carga la batería, y el
+resto a la casa (mismo modelo que las apps de inversores); lo que carga la
+batería por encima de lo generado se atribuye a la red. Cuando el consumo está
+medido, los orígenes (solar, batería, red) se reparten hasta cubrir exactamente
+ese total, así que los porcentajes siempre suman 100 %. Es el mismo cálculo en la
+Home y en la pantalla de Energía.
 
 ## Pantalla «Energía»
 

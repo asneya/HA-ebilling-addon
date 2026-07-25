@@ -34,6 +34,18 @@ MESES_ABR = ("ene", "feb", "mar", "abr", "may", "jun", "jul",
 RANGES = ("day", "week", "month", "year", "total")
 VIEWS = ("overview", "solar", "home", "battery", "grid")
 
+# Contadores de energía configurables. «home_energy» es opcional: si no está,
+# el consumo de la casa se mide integrando su sensor de potencia o, en último
+# término, se deduce por balance.
+ENERGY_KEYS = (
+    "pv_energy",
+    "grid_import_energy",
+    "grid_export_energy",
+    "battery_charge_energy",
+    "battery_discharge_energy",
+    "home_energy",
+)
+
 COLORS = {
     "solar": "#f5a524",
     "home": "#c9c443",
@@ -418,27 +430,77 @@ def _sum(values: list[float | None]) -> float:
     return sum(v for v in values if v is not None)
 
 
+def split_flows(
+    pv: float,
+    charge: float,
+    export: float,
+    imported: float,
+    discharge: float,
+    home_measured: float | None = None,
+) -> dict[str, float]:
+    """Reparte la energía de un periodo entre destinos y orígenes.
 
-def _breakdown_rows(
-    view: str,
-    to_home: list[float],
-    to_battery: list[float],
-    to_grid: list[float],
-    discharge: list[float],
-    from_grid: list[float],
-) -> list[tuple[str, str, float]]:
+    Modelo de las apps de inversores: de la generación se atribuye primero lo
+    vertido y lo que carga la batería, y el resto va a la casa; lo que carga la
+    batería por encima de lo generado viene de la red.
+
+    Si hay una **medida directa del consumo de la casa** (``home_measured``) se
+    usa como total y los orígenes se reparten hasta cubrirlo, de modo que las
+    filas siempre suman exactamente el total. Sin ella, el consumo se deduce
+    por balance.
+
+    Todas las magnitudes en la misma unidad (kWh o Wh).
+    """
+    pv = max(pv or 0.0, 0.0)
+    charge = max(charge or 0.0, 0.0)
+    export = max(export or 0.0, 0.0)
+    imported = max(imported or 0.0, 0.0)
+    discharge = max(discharge or 0.0, 0.0)
+
+    to_grid = min(export, pv)
+    to_battery = min(charge, max(pv - to_grid, 0.0))
+    to_home = max(pv - to_grid - to_battery, 0.0)
+    grid_to_battery = max(charge - to_battery, 0.0)
+
+    if home_measured is not None and home_measured > 0:
+        home_total = home_measured
+        from_solar = min(to_home, home_total)
+        from_battery = min(discharge, max(home_total - from_solar, 0.0))
+        from_grid = max(home_total - from_solar - from_battery, 0.0)
+    else:
+        from_solar = to_home
+        from_battery = discharge
+        from_grid = max(imported - grid_to_battery, 0.0)
+        home_total = from_solar + from_battery + from_grid
+
+    return {
+        "to_home": to_home,
+        "to_battery": to_battery,
+        "to_grid": to_grid,
+        "from_solar": from_solar,
+        "from_battery": from_battery,
+        "from_grid": from_grid,
+        "home_total": home_total,
+    }
+
+
+
+def _breakdown_rows(view: str, flows: list[dict[str, float]]) -> list[tuple[str, str, float]]:
     """Filas del desglose según la vista (vacío para batería y red)."""
+    def total(key: str) -> float:
+        return sum(item[key] for item in flows)
+
     if view == "solar":
         return [
-            ("to_home", "A la casa", _sum(to_home)),
-            ("to_battery", "A la batería", _sum(to_battery)),
-            ("to_grid", "A la red", _sum(to_grid)),
+            ("to_home", "A la casa", total("to_home")),
+            ("to_battery", "A la batería", total("to_battery")),
+            ("to_grid", "A la red", total("to_grid")),
         ]
     if view in ("home", "overview"):
         return [
-            ("from_solar", "Desde solar", _sum(to_home)),
-            ("from_battery", "Desde batería", _sum(discharge)),
-            ("from_grid", "Desde la red", _sum(from_grid)),
+            ("from_solar", "Desde solar", total("from_solar")),
+            ("from_battery", "Desde batería", total("from_battery")),
+            ("from_grid", "Desde la red", total("from_grid")),
         ]
     return []
 
@@ -560,14 +622,16 @@ async def _build_power(
         )
     # Energía del día, para el desglose que acompaña al gráfico.
     energy_cfg = settings.get("energy_sensors") or {}
-    energy_keys = ("pv_energy", "grid_import_energy", "grid_export_energy",
-                   "battery_charge_energy", "battery_discharge_energy")
+    energy_keys = ENERGY_KEYS
     energy_ids = [energy_cfg.get(k) for k in energy_keys if energy_cfg.get(k)]
     energy_index = None
     if energy_ids and view in ("solar", "home", "overview"):
         energy_index = len(requests)
+        # En pasos de 5 minutos (no el bucket diario, que se consolida por horas
+        # y en el día en curso puede ir hasta una hora por detrás).
         requests.append(
-            {"ids": energy_ids, "start": start, "end": end, "period": "day", "types": ["change"]}
+            {"ids": energy_ids, "start": start, "end": end,
+             "period": "5minute", "types": ["change"]}
         )
 
     results, units = await ws_statistics(settings, requests)
@@ -640,16 +704,21 @@ async def _build_power(
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
             totals[key] = sum(_extract(raw, sensor, "change", tz, factor).values())
-        pv_e = max(totals["pv_energy"], 0.0)
-        to_grid = min(max(totals["grid_export_energy"], 0.0), pv_e)
-        to_battery = min(max(totals["battery_charge_energy"], 0.0), max(pv_e - to_grid, 0.0))
-        to_home = max(pv_e - to_grid - to_battery, 0.0)
-        grid_to_battery = max(max(totals["battery_charge_energy"], 0.0) - to_battery, 0.0)
-        from_grid = max(max(totals["grid_import_energy"], 0.0) - grid_to_battery, 0.0)
-        discharge = max(totals["battery_discharge_energy"], 0.0)
-        breakdown = _make_breakdown(
-            _breakdown_rows(view, [to_home], [to_battery], [to_grid], [discharge], [from_grid])
+        # Consumo de la casa medido: su contador si existe y, si no, la integral
+        # de su sensor de potencia (el total que ya calcula la leyenda).
+        home_serie = next((item for item in series if item["key"] == "home"), None)
+        home_measured = totals.get("home_energy") or (
+            home_serie["total"] if home_serie else None
         )
+        flows = split_flows(
+            totals["pv_energy"],
+            totals["battery_charge_energy"],
+            totals["grid_export_energy"],
+            totals["grid_import_energy"],
+            totals["battery_discharge_energy"],
+            home_measured,
+        )
+        breakdown = _make_breakdown(_breakdown_rows(view, [flows]))
 
     return {"unit": "W", "chart": "line", "x": x_keys, "series": series, "breakdown": breakdown}
 
@@ -667,8 +736,7 @@ async def _build_energy(
     now: datetime,
 ) -> dict[str, Any]:
     """Semana / mes / año / total: energía en kWh por bucket."""
-    keys = ("pv_energy", "grid_import_energy", "grid_export_energy",
-            "battery_charge_energy", "battery_discharge_energy")
+    keys = ENERGY_KEYS
     ids = [energy.get(k) for k in keys if energy.get(k)]
     if not ids:
         return {"unit": "kWh", "chart": "line", "x": [], "series": [], "breakdown": None}
@@ -720,16 +788,18 @@ async def _build_energy(
     def get(key: str) -> list[float]:
         return [max(data.get(key, {}).get(x, 0.0), 0.0) for x in x_keys]
 
-    pv, gi, ge, bc, bd = (get(k) for k in keys)
-    # Reparto por bucket con el mismo modelo que la Home.
-    to_grid = [min(g, p) for g, p in zip(ge, pv)]
-    to_battery = [min(c, max(p - tg, 0.0)) for c, p, tg in zip(bc, pv, to_grid)]
-    to_home = [max(p - tg - tb, 0.0) for p, tg, tb in zip(pv, to_grid, to_battery)]
-    from_grid = [max(i - max(c - tb, 0.0), 0.0) for i, c, tb in zip(gi, bc, to_battery)]
-    home_total = [a + b + c for a, b, c in zip(to_home, bd, from_grid)]
+    pv, gi, ge, bc, bd, home_e = (get(k) for k in keys)
+    # Reparto por bucket con el mismo modelo que la Home. Si hay contador de
+    # consumo de la casa, se usa como medida directa del total.
+    measured = bool(energy.get("home_energy"))
+    flows = [
+        split_flows(p, c, e, i, d, h if measured else None)
+        for p, c, e, i, d, h in zip(pv, bc, ge, gi, bd, home_e)
+    ]
+    home_total = [item["home_total"] for item in flows]
 
     series: list[dict[str, Any]] = []
-    breakdown_rows = _breakdown_rows(view, to_home, to_battery, to_grid, bd, from_grid)
+    breakdown_rows = _breakdown_rows(view, flows)
 
     mask = [x in known for x in x_keys]
 

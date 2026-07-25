@@ -1348,6 +1348,7 @@ const ENERGY_FIELDS = [
   ["grid_export_energy", "Exportada", "energy"],
   ["battery_charge_energy", "Carga", "energy"],
   ["battery_discharge_energy", "Descarga", "energy"],
+  ["home_energy", "Casa (opcional)", "energy"],
 ];
 
 function optionsFor(kind, selected) {

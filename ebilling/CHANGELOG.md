@@ -17,9 +17,16 @@ Todas las versiones relevantes del add-on eBilling.
   quedan como hueco.
 - Los valores guardados en los selectores de sensores se conservan aunque la
   entidad no esté en la lista (no disponible en ese momento).
-- El **reparto del resumen de la Home** ya no puede sumar más que el total: lo
-  que carga la batería por encima de lo generado se atribuye a la red (antes,
-  con contadores diarios reales, los porcentajes podían pasar del 100 %).
+- El **consumo de la casa se mide, no se deduce**: si tienes configurado su
+  sensor de potencia (en el flujo de energía) se integra para obtener los kWh
+  del día; si además tienes un contador de consumo en kWh, puedes indicarlo en
+  *Contadores de energía → Casa*. Solo se deduce por balance cuando no hay
+  ninguno de los dos.
+- El **reparto** ya no puede sumar más que el total: lo que carga la batería por
+  encima de lo generado se atribuye a la red y los orígenes del consumo se
+  reparten hasta cubrir exactamente el total (antes, con contadores diarios
+  reales, los porcentajes podían pasar del 100 %). El modelo es ahora **el mismo
+  en la Home y en la pantalla de Energía** (`series.split_flows`).
 - Los totales del día se leen del periodo de **5 minutos** (así van casi al día,
   sin esperar a que se consolide la hora) y se **cachean 2 minutos**, para no
   abrir una conexión con Home Assistant en cada refresco de la Home.

@@ -73,6 +73,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "grid_export_energy": "",
         "battery_charge_energy": "",
         "battery_discharge_energy": "",
+        # Opcional: si no se define, el consumo de la casa se mide integrando
+        # su sensor de potencia (flow_sensors.home).
+        "home_energy": "",
     },
     # Meteorología del fondo de la Home: dos sensores independientes, uno con
     # la condición (texto) y otro con la temperatura exterior.
