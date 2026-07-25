@@ -525,8 +525,13 @@ def split_flows(
 
     Si hay una **medida directa del consumo de la casa** (``home_measured``) se
     usa como total y los orígenes se reparten hasta cubrirlo, de modo que las
-    filas siempre suman exactamente el total. Sin ella, el consumo se deduce
-    por balance.
+    filas siempre suman exactamente el total. Sin ella (``None``), el consumo se
+    deduce por balance.
+
+    Un cero **sí** es una medida: si en ese intervalo el contador dice que la
+    casa no ha consumido, no hay que deducir nada. Deducirlo hacía que la suma
+    de los intervalos se pasara del total del contador. Quien llama es el que
+    decide si el contador sirve, y pasa ``None`` cuando no.
 
     Todas las magnitudes en la misma unidad (kWh o Wh).
     """
@@ -541,7 +546,7 @@ def split_flows(
     to_home = max(pv - to_grid - to_battery, 0.0)
     grid_to_battery = max(charge - to_battery, 0.0)
 
-    if home_measured is not None and home_measured > 0:
+    if home_measured is not None and home_measured >= 0:
         home_total = home_measured
         from_solar = min(to_home, home_total)
         from_battery = min(discharge, max(home_total - from_solar, 0.0))
@@ -807,17 +812,17 @@ async def _build_power(
         clamp_buckets(by_key)
         return ({k: sum(v.values()) for k, v in by_key.items()}, by_key)
 
-    # El reparto se hace bucket a bucket: sobre el total del día se perdería a
-    # qué hora ocurre cada cosa (una carga de red de madrugada parecería solar).
-    flows: dict[str, float] | None = None
-    totals: dict[str, float] = {}
-    if energy_index is not None:
-        totals, by_key = counters(results[energy_index])
+    def flows_from(by_key: dict[str, dict[str, float]]) -> dict[str, float] | None:
+        """Reparto sumado a partir de los incrementos por bucket."""
         per_bucket: dict[str, dict[str, float]] = {}
         for key, buckets in by_key.items():
             for iso, value in buckets.items():
                 per_bucket.setdefault(iso, {})[key] = value
-        measured = bool(energy_cfg.get("home_energy"))
+        # El contador de la casa sirve si suma algo en el periodo. Si no (no está
+        # configurado, o el sensor está invertido y se ha recortado a cero), el
+        # consumo se deduce por balance en todos los intervalos, no en unos sí y
+        # en otros no: mezclar las dos cosas descuadraba el total.
+        measured = sum((by_key.get("home_energy") or {}).values()) > 0
         parts = [
             split_flows(
                 v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
@@ -827,8 +832,17 @@ async def _build_power(
             )
             for v in per_bucket.values()
         ]
-        if parts:
-            flows = {k: sum(p[k] for p in parts) for k in parts[0]}
+        if not parts:
+            return None
+        return {k: sum(p[k] for p in parts) for k in parts[0]}
+
+    # El reparto se hace bucket a bucket: sobre el total del día se perdería a
+    # qué hora ocurre cada cosa (una carga de red de madrugada parecería solar).
+    flows: dict[str, float] | None = None
+    totals: dict[str, float] = {}
+    if energy_index is not None:
+        totals, by_key = counters(results[energy_index])
+        flows = flows_from(by_key)
     elif energy_ids and is_today:
         # Mismos totales y mismo reparto que la Home (cacheados allí), para que
         # las dos pantallas coincidan. Import local: `live` importa este módulo.
@@ -839,15 +853,29 @@ async def _build_power(
         if daily["flows"]:
             flows = {k: v / 1000.0 for k, v in daily["flows"].items()}
 
-    # Total de la leyenda: el contador de esa magnitud. La integral de la
-    # potencia solo se usa como respaldo (series sin contador, como la previsión
-    # o el consumo de la casa si no está configurado).
-    yesterday_totals = counters(results[yesterday_index])[0] if yesterday_index is not None else {}
+    # Total de la leyenda, por orden de preferencia:
+    #
+    #  1. El contador de esa magnitud.
+    #  2. Para la casa sin contador (o con uno inservible), el total que deduce
+    #     el reparto por balance: es el mismo que muestra «Origen del consumo»
+    #     justo debajo, así que las dos cifras coinciden.
+    #  3. La integral de la potencia, que es una aproximación y solo queda para
+    #     la previsión (no hay contador de algo que aún no ha pasado).
+    yesterday_totals: dict[str, float] = {}
+    yesterday_flows: dict[str, float] | None = None
+    if yesterday_index is not None:
+        yesterday_totals, yesterday_by_key = counters(results[yesterday_index])
+        yesterday_flows = flows_from(yesterday_by_key)
     for item in series:
         integral = _sum(item["values"]) * (5.0 / 60.0) / 1000.0
-        source = yesterday_totals if item["key"] == "yesterday" else totals
-        key = SERIES_COUNTER.get(wanted[0][0] if item["key"] == "yesterday" else item["key"])
+        is_yesterday = item["key"] == "yesterday"
+        base = wanted[0][0] if is_yesterday else item["key"]
+        source = yesterday_totals if is_yesterday else totals
+        key = SERIES_COUNTER.get(base)
         counter = source.get(key) if key else None
+        if base == "home" and not counter:
+            deduced = (yesterday_flows if is_yesterday else flows) or {}
+            counter = deduced.get("home_total")
         item["total"] = round(counter if counter is not None else integral, 2)
 
     breakdown = _make_breakdown(_breakdown_rows(view, [flows])) if flows else None
@@ -955,34 +983,49 @@ async def _build_energy(
         return [max(data.get(key, {}).get(x, 0.0), 0.0) for x in x_keys]
 
     pv, gi, ge, bc, bd, home_e = (get(k) for k in keys)
-    # Reparto por bucket con el mismo modelo que la Home. Si hay contador de
-    # consumo de la casa, se usa como medida directa del total.
-    measured = bool(energy.get("home_energy"))
+    # Reparto por bucket con el mismo modelo que la Home. El contador de la casa
+    # se usa como medida directa del total si suma algo en el periodo; si no (no
+    # está configurado, o el sensor está invertido y se ha recortado a cero), el
+    # consumo se deduce por balance en todos los intervalos por igual.
+    measured = sum(home_e) > 0
     flows = [
         split_flows(p, c, e, i, d, h if measured else None)
         for p, c, e, i, d, h in zip(pv, bc, ge, gi, bd, home_e)
     ]
-    home_total = [item["home_total"] for item in flows]
 
-    series: list[dict[str, Any]] = []
-    # Para el desglose se usa el reparto de los buckets finos si se han pedido;
-    # si no, el del propio bucket del gráfico.
+    # Si se han pedido buckets finos, el reparto se hace sobre ellos y luego se
+    # agrupa en los buckets del gráfico: es más exacto (una carga de red de
+    # madrugada no se confunde con el sol del mediodía) y, sobre todo, la línea
+    # de la casa sale del **mismo** reparto que el desglose, así que su total
+    # coincide con «Origen del consumo» en lugar de contradecirlo.
     fine_flows = flows
+    fine_home: dict[str, float] | None = None
     if fine:
         by_moment: dict[str, dict[str, float]] = {}
         for key, buckets in fine.items():
             for iso, value in buckets.items():
                 by_moment.setdefault(iso, {})[key] = max(value, 0.0)
         if by_moment:
-            fine_flows = [
-                split_flows(
+            per_moment = {
+                iso: split_flows(
                     v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
                     v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
                     v.get("battery_discharge_energy", 0.0),
                     v.get("home_energy") if measured else None,
                 )
-                for v in by_moment.values()
-            ]
+                for iso, v in by_moment.items()
+            }
+            fine_flows = list(per_moment.values())
+            fine_home = _group_buckets(
+                {iso: f["home_total"] for iso, f in per_moment.items()}, period, range_key
+            )
+
+    if fine_home is not None:
+        home_total = [fine_home.get(x, 0.0) for x in x_keys]
+    else:
+        home_total = [item["home_total"] for item in flows]
+
+    series: list[dict[str, Any]] = []
     breakdown_rows = _breakdown_rows(view, fine_flows)
 
     mask = [x in known for x in x_keys]

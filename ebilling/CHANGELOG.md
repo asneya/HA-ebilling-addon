@@ -2,6 +2,32 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.6
+
+### Corregido
+
+- **El total de la casa en los gráficos no coincidía con «Origen del consumo»**,
+  que sí estaba bien. Eran dos causas distintas:
+  - En el **rango de día**, el total de la leyenda caía a la integral de la curva
+    de potencia cuando no había contador del consumo (o el sensor estaba
+    invertido), y esa integral es cero. Ahora usa el total que deduce el reparto
+    por balance, el mismo que muestra el desglose: la leyenda decía 0 kWh y el
+    desglose 3,17.
+  - En **semana y mes**, la línea de la casa se calculaba sobre los buckets del
+    gráfico (días) mientras el desglose usaba los finos (horas). Dos repartos
+    distintos, dos cifras distintas: 336 kWh frente a 105. Ahora la línea sale
+    del reparto fino y se agrupa después, así que es la misma cifra —y más
+    exacta, que es la razón de repartir intervalo a intervalo—.
+- **Un cero del contador de la casa ya cuenta como medida.** Antes, en un
+  intervalo en el que el contador decía 0 se deducía el consumo por balance, lo
+  que inventaba consumo y hacía que la suma se pasara del contador (19,04 kWh
+  frente a los 18,48 del sensor). Ahora la decisión se toma una vez por periodo:
+  si el contador suma algo, manda el contador en todos los intervalos; si no
+  suma nada (no está configurado o el sensor está invertido), se deduce por
+  balance en todos por igual, sin mezclar.
+- Con esto, **el total de la casa coincide en los cinco rangos** con el desglose
+  y, cuando hay contador, es exactamente el del contador.
+
 ## 0.18.5
 
 ### Corregido
