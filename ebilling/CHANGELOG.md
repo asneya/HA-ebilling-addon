@@ -2,6 +2,16 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.2
+
+### Cambios
+
+- En el círculo de la batería del flujo de energía, **las flechas estaban al
+  revés**: ahora la **descarga apunta hacia arriba y en rojo** (energía que sale
+  de la batería hacia otro elemento) y la **carga hacia abajo y en verde**
+  (energía que entra). Corregido en la Home del add-on y en la **tarjeta de
+  Lovelace**.
+
 ## 0.18.1
 
 ### Corregido
