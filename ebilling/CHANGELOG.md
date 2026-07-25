@@ -17,6 +17,12 @@ Todas las versiones relevantes del add-on eBilling.
   quedan como hueco.
 - Los valores guardados en los selectores de sensores se conservan aunque la
   entidad no esté en la lista (no disponible en ese momento).
+- El **reparto del resumen de la Home** ya no puede sumar más que el total: lo
+  que carga la batería por encima de lo generado se atribuye a la red (antes,
+  con contadores diarios reales, los porcentajes podían pasar del 100 %).
+- Los totales del día se leen del periodo de **5 minutos** (así van casi al día,
+  sin esperar a que se consolide la hora) y se **cachean 2 minutos**, para no
+  abrir una conexión con Home Assistant en cada refresco de la Home.
 
 ### Nuevo
 

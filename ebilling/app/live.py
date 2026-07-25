@@ -9,6 +9,7 @@ del día, para el fondo dinámico.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from typing import Any
 
@@ -164,13 +165,19 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     la casa.
     """
     gen_total = max(energy.get("pv_energy") or 0.0, 0.0)
-    to_battery = max(energy.get("battery_charge_energy") or 0.0, 0.0)
-    to_grid = max(energy.get("grid_export_energy") or 0.0, 0.0)
-    to_load = max(gen_total - to_battery - to_grid, 0.0)
+    charge = max(energy.get("battery_charge_energy") or 0.0, 0.0)
+    export = max(energy.get("grid_export_energy") or 0.0, 0.0)
+    imported = max(energy.get("grid_import_energy") or 0.0, 0.0)
+
+    # El reparto de la generación no puede superar lo generado: lo que carga la
+    # batería por encima de eso viene de la red (típico de las madrugadas).
+    to_grid = min(export, gen_total)
+    to_battery = min(charge, max(gen_total - to_grid, 0.0))
+    to_load = max(gen_total - to_grid - to_battery, 0.0)
 
     from_solar = to_load
     from_battery = max(energy.get("battery_discharge_energy") or 0.0, 0.0)
-    from_grid = max(energy.get("grid_import_energy") or 0.0, 0.0)
+    from_grid = max(imported - max(charge - to_battery, 0.0), 0.0)
     home_total = from_solar + from_battery + from_grid
 
     def _rows(total: float, items: list[tuple[str, str, float]]) -> list[dict[str, Any]]:
@@ -210,6 +217,12 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     }
 
 
+# Las estadísticas del día solo cambian cada 5 minutos: se cachean para no
+# abrir un websocket a HA en cada refresco de la Home (cada 20 s).
+_DAILY_TTL = 120.0
+_daily_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": {}}
+
+
 async def daily_energy(
     settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
 ) -> dict[str, float]:
@@ -217,22 +230,36 @@ async def daily_energy(
 
     Los sensores de energía suelen ser contadores acumulados desde el inicio
     del histórico (``total_increasing``), así que su estado no sirve como total
-    del día: se pide el incremento (``change``) desde la medianoche local. Si
-    un sensor no tiene estadísticas se recurre a su estado actual.
+    del día: se pide el incremento (``change``) desde la medianoche local.
+
+    Se consulta el periodo de 5 minutos (que va casi al día) y, como respaldo,
+    el bucket diario; si un sensor no tiene estadísticas se usa su estado.
     """
     energy_cfg = settings.get("energy_sensors") or {}
     ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
     if not ids:
         return {}
+
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    raw: dict[str, Any] = {}
+    cache_key = f"{start.isoformat()}|{','.join(ids)}"
+    if (
+        _daily_cache["key"] == cache_key
+        and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
+    ):
+        return dict(_daily_cache["value"])
+
+    detailed: dict[str, Any] = {}
+    coarse: dict[str, Any] = {}
     units: dict[str, str] = {}
     try:
         results, units = await series_mod.ws_statistics(
             settings,
-            [{"ids": ids, "start": start, "end": now, "period": "day", "types": ["change"]}],
+            [
+                {"ids": ids, "start": start, "end": now, "period": "5minute", "types": ["change"]},
+                {"ids": ids, "start": start, "end": now, "period": "day", "types": ["change"]},
+            ],
         )
-        raw = results[0]
+        detailed, coarse = results[0], results[1]
     except Exception:  # noqa: BLE001 - se degrada al estado actual del sensor
         _LOGGER.warning("No se pudieron leer las estadísticas del día", exc_info=True)
 
@@ -242,13 +269,17 @@ async def daily_energy(
         if not entity:
             continue
         factor = series_mod._unit_factor(entity, states, "energy", units)
-        buckets = series_mod._extract(raw, entity, "change", tz, factor)
+        buckets = series_mod._extract(detailed, entity, "change", tz, factor)
+        if not buckets:
+            buckets = series_mod._extract(coarse, entity, "change", tz, factor)
         if buckets:
             out[key] = sum(buckets.values()) * 1000.0  # kWh → Wh
         else:
             fallback = _convert(states.get(entity), "energy")
             if fallback is not None:
                 out[key] = fallback
+
+    _daily_cache.update({"key": cache_key, "at": time.monotonic(), "value": dict(out)})
     return out
 
 
