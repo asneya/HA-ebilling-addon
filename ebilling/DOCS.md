@@ -19,10 +19,21 @@ La interfaz está organizada en tres pestañas, con estética de app iOS
   [Pantalla «Energía»](#pantalla-energía).
 - **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
   desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
-- **Ajustes** — todo lo configurable, agrupado: fuente de datos, sensores del
-  flujo, sensores de energía del día, meteorología, **tarifas**, contrato y
-  publicación de sensores en Home Assistant. Las tarifas se gestionan tanto
-  aquí como desde Facturación (es la misma lista).
+- **Ajustes** — un **índice por categorías** (como los Ajustes de iOS), cada una
+  con su propia pantalla:
+
+  | Sección | Categorías |
+  |---|---|
+  | Datos | Fuente de datos |
+  | Sensores | Flujo de energía · Contadores de energía · Previsión solar · Meteorología |
+  | Facturación | Tarifas · Contrato y ciclo |
+  | Integración | Sensores en Home Assistant |
+
+  Cada fila resume lo que hay configurado. Las tarifas se gestionan tanto aquí
+  como desde Facturación (es la misma lista).
+
+Al abrir el add-on se muestra una **pantalla de carga** mientras se leen la
+configuración y los sensores; desaparece en cuanto llegan los datos.
 
 ### Sensores que necesita la Home
 
@@ -82,9 +93,10 @@ Se abre pulsando el **resumen de energía** de la Home.
   pasan a mostrar el valor de ese instante; el botón **Totales** vuelve a los
   totales del periodo.
 - **Zoom del eje del tiempo**: pellizca con dos dedos (o `⌘`/`Ctrl` + rueda del
-  ratón) para estirar el eje X, arrastra para desplazarte y pulsa el indicador
-  `1.0×` para restablecerlo. También hay botones **−** y **+**. El eje Y se
-  mantiene fijo.
+  ratón) para estirar el eje X; el zoom sigue a los dedos de forma continua.
+  Arrastra con un dedo para desplazarte por el eje y pulsa el indicador `1.0×`
+  para restablecerlo; también hay botones **−** y **+**. El eje Y se mantiene
+  fijo. Con ratón, arrastrar recorre los puntos.
 - **Previsión de generación**: en la vista solar, si el intervalo incluye horas
   futuras y has configurado un sensor de previsión, se dibuja como **línea
   punteada** (sin entrada en la leyenda). Se admiten los atributos de **Solcast**

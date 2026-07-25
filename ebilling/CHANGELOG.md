@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.17.0
+
+### Corregido
+
+- **El zoom con los dedos ya es fluido.** Los gestos estaban enlazados al `<svg>`
+  del gráfico, que se recrea en cada dibujado: el primer paso del pellizco lo
+  sustituía y el gesto se perdía, así que cada pellizco daba un único salto de
+  zoom. Ahora viven en el contenedor, que persiste, el zoom sigue a los dedos de
+  forma continua (y al juntarlos vuelve a reducirse) y el redibujado se agrupa en
+  un frame de animación. Arrastrar con un dedo desplaza el eje y una pulsación
+  limpia sigue seleccionando el punto.
+- **Facturación aparece con la simulación cargada** sin pulsar su segmento. El
+  listener de subvistas se aplicaba a *todos* los `.seg`, incluidos los del rango
+  de la pantalla de Energía: usar «Semana» o «Mes» desactivaba las subvistas de
+  Facturación y la dejaba en blanco.
+
+### Nuevo
+
+- **Pantalla de carga inicial**: mientras se leen la configuración y los
+  sensores, la app muestra una tarjeta «glass» con el logo, un indicador de
+  progreso circular y el paso en curso, en lugar de dejar ver las tarjetas a
+  medio construir. Desaparece con una transición cuando llegan los datos.
+- **Ajustes organizados por niveles**, al estilo de los Ajustes de iOS: un índice
+  con cuatro secciones (Datos · Sensores · Facturación · Integración) y ocho
+  categorías, cada una con su propia pantalla y su botón de volver. Cada fila
+  muestra un resumen de lo que hay configurado (fuente activa, número de tarifas,
+  potencias y día de ciclo, estado de los sensores publicados).
+- La **barra de guardar** queda adherida sobre la barra de pestañas, siempre
+  visible y sin quedar tapada por ella.
+
 ## 0.16.1
 
 ### Nuevo
