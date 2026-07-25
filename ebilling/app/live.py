@@ -171,6 +171,33 @@ def _energy_summary(
             energy.get("battery_discharge_energy") or 0.0,
             energy.get("home_energy"),
         )
+    else:
+        # El reparto por buckets suma lo mismo que el total del día salvo los
+        # últimos minutos (el estado del sensor va por delante de las
+        # estadísticas). Se reescala para que cada columna cuadre exactamente
+        # con su contador, que es con lo que el usuario compara.
+        #
+        # Si los buckets se quedan muy por debajo del total (estadísticas
+        # incompletas o inexistentes para algún sensor), reescalar daría una
+        # falsa precisión: se vuelve al reparto sobre los totales.
+        bucket_gen = flows["to_home"] + flows["to_battery"] + flows["to_grid"]
+        if gen_total > 0 and bucket_gen < gen_total * 0.5:
+            return _energy_summary(energy, None)
+        flows = dict(flows)
+
+        def _rescale(parts: tuple[str, ...], target: float | None) -> float:
+            total = sum(flows[key] for key in parts)
+            if target is not None and target > 0 and total > 0:
+                factor = target / total
+                for key in parts:
+                    flows[key] *= factor
+                return target
+            return total
+
+        _rescale(("to_home", "to_battery", "to_grid"), gen_total if gen_total > 0 else None)
+        flows["home_total"] = _rescale(
+            ("from_solar", "from_battery", "from_grid"), energy.get("home_energy")
+        )
     to_load = flows["to_home"]
     to_battery = flows["to_battery"]
     to_grid = flows["to_grid"]
@@ -370,23 +397,44 @@ async def daily_energy(
     detailed = results[0] if ids else {}
     coarse = results[1] if ids else {}
 
+    # Incremento por bucket de cada contador (kWh). Los pares que comparten un
+    # sensor bidireccional se reparten por signo: su estado (un contador neto)
+    # no sirve para ninguna de las dos direcciones.
+    by_key: dict[str, dict[str, float]] = {}
+    for key in ENERGY_KEYS:
+        entity = energy_cfg.get(key)
+        if entity:
+            factor = series_mod._unit_factor(entity, states, "energy", units)
+            by_key[key] = series_mod._extract(detailed, entity, "change", tz, factor)
+    series_mod.split_signed_buckets(by_key, energy_cfg, series_mod.ENERGY_PAIRS)
+    signed_keys = {
+        key
+        for pos, neg in series_mod.ENERGY_PAIRS
+        if series_mod.shares_sensor(energy_cfg, pos, neg)
+        for key in (pos, neg)
+    }
+
     out: dict[str, float] = {}
-    # Valor por bucket de cada contador, para repartir sin perder la hora.
     per_bucket: dict[str, dict[str, float]] = {}
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
         if not entity:
             continue
-        state_value = _convert(states.get(entity), "energy")
-        factor = series_mod._unit_factor(entity, states, "energy", units)
-        buckets = series_mod._extract(detailed, entity, "change", tz, factor)
+        buckets = by_key.get(key) or {}
         for iso, value in buckets.items():
             per_bucket.setdefault(iso, {})[key] = value
+        if key in signed_keys:
+            # Solo las estadísticas separan las dos direcciones.
+            if buckets:
+                out[key] = sum(buckets.values()) * 1000.0
+            continue
+        state_value = _convert(states.get(entity), "energy")
         if mode == "daily":
             if state_value is not None:
                 out[key] = state_value
             continue
         if not buckets:
+            factor = series_mod._unit_factor(entity, states, "energy", units)
             buckets = series_mod._extract(coarse, entity, "change", tz, factor)
         if not buckets:
             if state_value is not None:
@@ -431,6 +479,8 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
         value = _convert(states.get(entity), "power") if entity else None
         if value is not None:
             power[key] = value
+    # Un medidor bidireccional asignado a las dos casillas se reparte por signo.
+    series_mod.split_signed_values(power, flow_cfg, series_mod.POWER_PAIRS)
 
     # Totales del día y reparto por buckets (el estado del sensor no vale como
     # total cuando el contador es acumulado).

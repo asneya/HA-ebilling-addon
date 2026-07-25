@@ -2,6 +2,34 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.1
+
+### Corregido
+
+- **Sensores bidireccionales**: muchos medidores e inversores dan un **único
+  sensor con signo** (+ importa / − exporta, + carga / − descarga) en vez de dos
+  separados. Al asignarlo a las dos casillas, el add-on lo leía **dos veces** y
+  recortaba los negativos a cero, de modo que importación y exportación salían
+  **idénticas** y aparecían **cifras negativas** en los gráficos. Reproducido con
+  un medidor de red bidireccional: `grid_import` y `grid_export` daban ambos
+  −2.000 W y 0,5 kWh. Ahora se **reparte por signo** en toda la cadena (flujo,
+  resumen, contadores y los cinco rangos del gráfico): con un día real de 18 kWh
+  importados y 12 exportados, todas las pantallas muestran 18 y 12.
+  - Con un **contador neto** de energía, el estado del sensor (el neto) no sirve
+    para ninguna de las dos direcciones: los totales salen siempre de las
+    estadísticas, y el reparto por signo se hace **antes** de agrupar en el
+    bucket del gráfico (un bucket de un día ya viene sumado y el signo se
+    pierde). Por eso semana, mes y año bajan a horas. En **Total** (diez años) se
+    reparte por días, así que ahí las cifras son aproximadas.
+- **Nunca se dibujan magnitudes negativas** en los gráficos: un valor negativo en
+  un sensor de un solo sentido se trata como cero, en lugar de restar del total
+  de la leyenda.
+- **Las filas del resumen suman exactamente su total**, que a su vez es el del
+  contador: el reparto por intervalos se reescala para absorber los minutos que
+  las estadísticas van por detrás del estado. Si las estadísticas cubren menos de
+  la mitad del total (recorder incompleto), se vuelve al reparto sobre totales en
+  vez de dar una precisión falsa.
+
 ## 0.18.0
 
 ### Cambios

@@ -325,6 +325,21 @@ def _interpolate(points: list[tuple[datetime, float]], grid: list[datetime]) -> 
     return out
 
 
+def _group_buckets(
+    buckets: dict[str, float], period: str, range_key: str
+) -> dict[str, float]:
+    """Agrupa buckets finos en los del gráfico (día, mes o año)."""
+    out: dict[str, float] = {}
+    for iso, value in buckets.items():
+        if range_key == "total":
+            key = iso[:4]
+        else:
+            moment = _midnight(datetime.fromisoformat(iso))
+            key = (moment.replace(day=1) if period == "month" else moment).isoformat()
+        out[key] = out.get(key, 0.0) + value
+    return out
+
+
 def _day_grid(start: datetime, end: datetime) -> list[datetime]:
     """Medianoches locales de [start, end) (robusto ante cambios de hora)."""
     out: list[datetime] = []
@@ -428,6 +443,46 @@ def _sorted_keys(keys) -> list[str]:
 
 def _sum(values: list[float | None]) -> float:
     return sum(v for v in values if v is not None)
+
+
+# Pares de sentido opuesto. Muchos medidores e inversores exponen un único
+# sensor con signo (+ importa / − exporta, + carga / − descarga) en lugar de dos
+# sensores separados: si el mismo sensor está en las dos casillas, se reparte
+# por signo en vez de leerlo dos veces.
+POWER_PAIRS = (("grid_import", "grid_export"), ("battery_charge", "battery_discharge"))
+ENERGY_PAIRS = (
+    ("grid_import_energy", "grid_export_energy"),
+    ("battery_charge_energy", "battery_discharge_energy"),
+)
+
+
+def shares_sensor(cfg: dict[str, str], pos: str, neg: str) -> bool:
+    """¿Las dos direcciones del par salen del mismo sensor?"""
+    return bool(cfg.get(pos)) and cfg.get(pos) == cfg.get(neg)
+
+
+def split_signed_buckets(
+    data: dict[str, dict[str, float]], cfg: dict[str, str], pairs
+) -> None:
+    """Reparte por signo, bucket a bucket, los pares que comparten sensor."""
+    for pos, neg in pairs:
+        if not shares_sensor(cfg, pos, neg):
+            continue
+        buckets = dict(data.get(pos) or {})
+        data[pos] = {k: (v if v > 0 else 0.0) for k, v in buckets.items()}
+        data[neg] = {k: (-v if v < 0 else 0.0) for k, v in buckets.items()}
+
+
+def split_signed_values(values: dict[str, float], cfg: dict[str, str], pairs) -> None:
+    """Igual que ``split_signed_buckets`` pero con un único valor por clave."""
+    for pos, neg in pairs:
+        if not shares_sensor(cfg, pos, neg):
+            continue
+        raw = values.get(pos)
+        if raw is None:
+            continue
+        values[pos] = raw if raw > 0 else 0.0
+        values[neg] = -raw if raw < 0 else 0.0
 
 
 def split_flows(
@@ -652,13 +707,22 @@ async def _build_power(
         factor = _unit_factor(sensor, states, "power", units)
         extracted.append((key, label_s, _extract(main, sensor, "mean", tz, factor)))
 
+    # Un sensor bidireccional en las dos casillas se reparte por signo; en el
+    # resto, un valor negativo no es una magnitud válida y se trata como cero
+    # (si no, el gráfico y su total saldrían por debajo de cero).
+    curves = {key: data for key, _l, data in extracted}
+    split_signed_buckets(curves, flow, POWER_PAIRS)
+    curves = {
+        key: {k: max(v, 0.0) for k, v in data.items()} for key, data in curves.items()
+    }
+
     # El eje cubre el día completo (00–24) aunque falten datos futuros.
     keys = {moment.isoformat() for moment in _grid(start, end, 5)}
-    keys.update(k for _k, _l, data in extracted for k in data)
+    keys.update(k for data in curves.values() for k in data)
     x_keys = _sorted_keys(keys)
     series = [
-        _series(key, label_s, _align(x_keys, data))
-        for key, label_s, data in extracted
+        _series(key, label_s, _align(x_keys, curves.get(key) or {}))
+        for key, label_s, _data in extracted
     ]
 
     if show_yesterday and len(results) > 1 and ids:
@@ -666,7 +730,7 @@ async def _build_power(
         yday = _extract(results[1], ids[0], "mean", tz, factor)
         # Se desplaza un día para superponerla sobre el mismo eje horario.
         shifted = {
-            (datetime.fromisoformat(k) + timedelta(days=1)).isoformat(): v
+            (datetime.fromisoformat(k) + timedelta(days=1)).isoformat(): max(v, 0.0)
             for k, v in yday.items()
         }
         series.append(_series("yesterday", "Ayer", _align(x_keys, shifted)))
@@ -706,13 +770,17 @@ async def _build_power(
     flows: dict[str, float] | None = None
     if energy_index is not None:
         raw = results[energy_index]
-        per_bucket: dict[str, dict[str, float]] = {}
+        by_key: dict[str, dict[str, float]] = {}
         for key in energy_keys:
             sensor = energy_cfg.get(key)
             if not sensor:
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
-            for iso, value in _extract(raw, sensor, "change", tz, factor).items():
+            by_key[key] = _extract(raw, sensor, "change", tz, factor)
+        split_signed_buckets(by_key, energy_cfg, ENERGY_PAIRS)
+        per_bucket: dict[str, dict[str, float]] = {}
+        for key, buckets in by_key.items():
+            for iso, value in buckets.items():
                 per_bucket.setdefault(iso, {})[key] = value
         measured = bool(energy_cfg.get("home_energy"))
         parts = [
@@ -761,39 +829,61 @@ async def _build_energy(
     requests = [
         {"ids": ids, "start": start, "end": end, "period": period, "types": ["change"]}
     ]
-    # El desglose se reparte por horas, no por el bucket del gráfico: con
-    # buckets de un día, una carga de batería desde la red de madrugada se
-    # confunde con la solar del mediodía. En año y total serían miles de
-    # buckets, así que ahí se reparte con el mismo bucket del gráfico.
+    # Buckets más finos que los del gráfico. Hacen falta para dos cosas:
+    #
+    #  - El desglose: con buckets de un día, una carga de batería desde la red
+    #    de madrugada se confunde con la solar del mediodía.
+    #  - Los sensores bidireccionales: en un bucket de un día un contador neto
+    #    ya viene sumado (+6 = 18 importados − 12 exportados) y el signo ya no
+    #    permite separar las dos direcciones.
+    #
+    # En año y total, una resolución horaria serían miles de buckets, así que se
+    # baja solo a día (mejor que el mes del gráfico, aunque no exacto).
+    signed = any(shares_sensor(energy, pos, neg) for pos, neg in ENERGY_PAIRS)
+    wants_fine = signed or view in ("solar", "home", "overview")
+    fine_period = None
+    if wants_fine and range_key in ("week", "month"):
+        fine_period = "hour"
+    elif signed and range_key == "year":
+        fine_period = "hour"   # ~8.760 buckets: es el precio de separar el signo
+    elif signed and range_key == "total":
+        fine_period = "day"    # 10 años por horas serían inviables: aproximado
     fine_index = None
-    if view in ("solar", "home", "overview") and range_key in ("week", "month"):
+    if fine_period:
         fine_index = len(requests)
         requests.append(
-            {"ids": ids, "start": start, "end": end, "period": "hour", "types": ["change"]}
+            {"ids": ids, "start": start, "end": end, "period": fine_period, "types": ["change"]}
         )
 
     results, units = await ws_statistics(settings, requests)
     raw = results[0]
 
-    data: dict[str, dict[str, float]] = {}
-    for key in keys:
-        sensor = energy.get(key)
-        if not sensor:
-            data[key] = {}
-            continue
-        factor = _unit_factor(sensor, states, "energy", units)
-        data[key] = _extract(raw, sensor, "change", tz, factor)
+    def extract_all(result: dict[str, Any]) -> dict[str, dict[str, float]]:
+        out: dict[str, dict[str, float]] = {}
+        for key in keys:
+            sensor = energy.get(key)
+            if not sensor:
+                out[key] = {}
+                continue
+            factor = _unit_factor(sensor, states, "energy", units)
+            out[key] = _extract(result, sensor, "change", tz, factor)
+        split_signed_buckets(out, energy, ENERGY_PAIRS)
+        return out
 
-    # En «total» los meses se agrupan por año.
-    if range_key == "total":
-        grouped: dict[str, dict[str, float]] = {}
-        for key, buckets in data.items():
-            acc: dict[str, float] = {}
-            for iso, value in buckets.items():
-                year = iso[:4]
-                acc[year] = acc.get(year, 0.0) + value
-            grouped[key] = acc
-        data = grouped
+    fine = extract_all(results[fine_index]) if fine_index is not None else {}
+    data = extract_all(raw)
+    if signed and fine:
+        # Con sensor bidireccional, el gráfico se construye agrupando los
+        # buckets finos ya separados por signo (el bucket grueso no sirve).
+        data = {
+            key: _group_buckets(buckets, period, range_key)
+            for key, buckets in fine.items()
+        }
+
+    # En «total» los meses se agrupan por año (ya hecho si venían de los finos).
+    if range_key == "total" and not (signed and fine):
+        data = {key: _group_buckets(buckets, period, range_key)
+                for key, buckets in data.items()}
 
     # Previsión de generación para los buckets futuros (solo semana y mes, que
     # es el alcance de los integradores de forecast).
@@ -827,19 +917,15 @@ async def _build_energy(
     home_total = [item["home_total"] for item in flows]
 
     series: list[dict[str, Any]] = []
-    # Para el desglose se usa el reparto horario si se ha pedido; si no, el del
-    # propio bucket del gráfico.
+    # Para el desglose se usa el reparto de los buckets finos si se han pedido;
+    # si no, el del propio bucket del gráfico.
     fine_flows = flows
-    if fine_index is not None:
-        hourly: dict[str, dict[str, float]] = {}
-        for key in keys:
-            sensor = energy.get(key)
-            if not sensor:
-                continue
-            factor = _unit_factor(sensor, states, "energy", units)
-            for iso, value in _extract(results[fine_index], sensor, "change", tz, factor).items():
-                hourly.setdefault(iso, {})[key] = value
-        if hourly:
+    if fine:
+        by_moment: dict[str, dict[str, float]] = {}
+        for key, buckets in fine.items():
+            for iso, value in buckets.items():
+                by_moment.setdefault(iso, {})[key] = max(value, 0.0)
+        if by_moment:
             fine_flows = [
                 split_flows(
                     v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
@@ -847,7 +933,7 @@ async def _build_energy(
                     v.get("battery_discharge_energy", 0.0),
                     v.get("home_energy") if measured else None,
                 )
-                for v in hourly.values()
+                for v in by_moment.values()
             ]
     breakdown_rows = _breakdown_rows(view, fine_flows)
 
