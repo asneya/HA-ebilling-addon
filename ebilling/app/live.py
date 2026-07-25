@@ -174,6 +174,21 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
     from_grid = flows["from_grid"]
     home_total = flows["home_total"]
 
+    # Lecturas del día tal cual, sin reparto: son lo que muestran los nodos del
+    # diagrama de flujo (un nodo representa un contador, no una atribución).
+    def _kwh(key: str) -> float:
+        return round(max(energy.get(key) or 0.0, 0.0) / 1000.0, 2)
+
+    meters = {
+        "pv": round(gen_total / 1000.0, 2),
+        "grid_import": _kwh("grid_import_energy"),
+        "grid_export": _kwh("grid_export_energy"),
+        "battery_charge": _kwh("battery_charge_energy"),
+        "battery_discharge": _kwh("battery_discharge_energy"),
+    }
+    if energy.get("home_energy") is not None:
+        meters["home"] = _kwh("home_energy")
+
     def _rows(total: float, items: list[tuple[str, str, float]]) -> list[dict[str, Any]]:
         return [
             {
@@ -208,6 +223,7 @@ def _energy_summary(energy: dict[str, float]) -> dict[str, Any]:
                 ],
             ),
         },
+        "meters": meters,
     }
 
 
