@@ -2,6 +2,19 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.19.2
+
+### Corregido
+
+- **La versión del add-on salía como «—» en Ajustes.** Se leía del `config.yaml`
+  en la ruta que tiene en el repositorio, pero dentro del contenedor la
+  aplicación vive en `/opt/app` y ese fichero no está un nivel por encima, así
+  que no se encontraba nunca en una instalación real.
+- Ahora se busca en tres sitios, por orden: la variable `EBILLING_VERSION` que
+  el `Dockerfile` fija desde el `BUILD_VERSION` que pasa Home Assistant, el
+  `config.yaml` copiado dentro de la imagen, y la ruta del repositorio para
+  cuando se ejecuta en desarrollo.
+
 ## 0.19.1
 
 ### Corregido
