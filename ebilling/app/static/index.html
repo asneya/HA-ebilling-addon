@@ -389,6 +389,13 @@
             <span class="nav-txt"><b>Apariencia</b><small id="nav-sub-theme">—</small></span>
             <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
           </button>
+          <button class="nav-row" data-settings-page="diagnostics">
+            <span class="nav-ico" style="--ico:#ff9f0a">
+              <svg viewBox="0 0 24 24"><path d="M3 13h3.5l2-5 3 10 2.5-7 1.7 4h5.3"/></svg>
+            </span>
+            <span class="nav-txt"><b>Diagnóstico</b><small>¿Cuadran tus contadores?</small></span>
+            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+          </button>
         </div>
 
         <div class="group-label">Integración</div>
@@ -577,6 +584,41 @@
             Si acabas de actualizar y sigues viendo lo de antes, comprueba aquí
             que la versión es la que esperas: Home Assistant necesita reiniciar
             el add-on para aplicar una actualización.
+          </p>
+        </div>
+      </div>
+      </div>
+
+      <!-- ---- nivel 2: diagnóstico ---- -->
+      <div class="settings-page" id="sp-diagnostics">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Diagnóstico</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+      <div class="panel glass group">
+        <div class="group-head">Balance de energía de hoy</div>
+        <div id="diag-body">
+          <p class="li-note">Leyendo los sensores…</p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Cómo se lee</div>
+        <div class="list">
+          <p class="li-note">
+            Todo lo que entra en la instalación tiene que salir por algún sitio.
+            Si <b>entra</b> y <b>sale</b> no coinciden, uno de los sensores no
+            está midiendo lo que crees, y ningún reparto puede arreglar eso:
+            <b>sobra</b> energía (entra más de lo que sale) si el consumo de la
+            casa se queda corto o si la descarga y la importación se cuentan de
+            más; <b>falta</b> al contrario.
+          </p>
+          <p class="li-note">
+            Al lado de cada cifra se indica de dónde sale: el <b>estado del
+            sensor</b>, sus <b>estadísticas</b> del recorder, o la <b>integral de
+            su potencia</b> cuando no hay contador que leer.
           </p>
         </div>
       </div>

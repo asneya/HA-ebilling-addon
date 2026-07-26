@@ -220,8 +220,18 @@ def _energy_summary(
         meters["home"] = _kwh("home_energy")
     # Lo importado que fue a la batería y lo vertido que salió de ella: son la
     # diferencia entre los contadores de la red y el reparto del consumo.
-    meters["grid_to_battery"] = round(flows["grid_to_battery"] / 1000.0, 2)
-    meters["battery_to_grid"] = round(flows["battery_to_grid"] / 1000.0, 2)
+    #
+    # Se calculan **restando del contador** en lugar de sumar el reparto por
+    # intervalos, para que las tres cifras que se ven en pantalla cuadren entre
+    # sí: el nodo de la red (el contador), la fila «Desde la red» (lo que
+    # consumió la casa) y la nota. Sumando el reparto por su cuenta se separaban
+    # de la lectura del contador y quedaba un hueco sin explicar.
+    meters["grid_to_battery"] = round(
+        max(meters["grid_import"] * 1000.0 - from_grid, 0.0) / 1000.0, 2
+    )
+    meters["battery_to_grid"] = round(
+        max(meters["grid_export"] * 1000.0 - to_grid, 0.0) / 1000.0, 2
+    )
 
     def _rows(total: float, items: list[tuple[str, str, float]]) -> list[dict[str, Any]]:
         return [
@@ -371,7 +381,7 @@ async def daily_energy(
     }
     power_ids = list(dict.fromkeys(s for s in power_of.values() if s))
     if not ids and not power_ids:
-        return {"totals": {}, "flows": None}
+        return {"totals": {}, "flows": None, "sources": {}}
 
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{','.join(power_ids)}"
@@ -380,7 +390,8 @@ async def daily_energy(
         and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
     ):
         cached = {"totals": dict(_daily_cache["value"]["totals"]),
-                  "flows": _daily_cache["value"]["flows"]}
+                  "flows": _daily_cache["value"]["flows"],
+                  "sources": dict(_daily_cache["value"].get("sources") or {})}
         if mode == "daily":
             # El estado va al segundo; el reparto viene cacheado. El estado
             # tampoco manda si marca cero y la potencia dice otra cosa.
@@ -452,6 +463,8 @@ async def daily_energy(
     }
 
     out: dict[str, float] = {}
+    # De dónde ha salido cada cifra, para poder enseñarlo en el diagnóstico.
+    sources: dict[str, str] = {}
     per_bucket: dict[str, dict[str, float]] = {}
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
@@ -464,11 +477,13 @@ async def daily_energy(
             # Solo las estadísticas separan las dos direcciones.
             if buckets:
                 out[key] = sum(buckets.values()) * 1000.0
+                sources[key] = "estadisticas"
             continue
         state_value = _convert(states.get(entity), "energy")
         if mode == "daily":
             if state_value is not None:
                 out[key] = state_value
+                sources[key] = "estado"
             continue
         if not buckets:
             factor = series_mod._unit_factor(entity, states, "energy", units)
@@ -476,6 +491,7 @@ async def daily_energy(
         if not buckets:
             if state_value is not None:
                 out[key] = state_value
+                sources[key] = "estado"
             continue
         computed = sum(buckets.values()) * 1000.0  # kWh → Wh
         # En automático, si el estado coincide con el incremento del día es que
@@ -483,8 +499,10 @@ async def daily_energy(
         # las estadísticas (que van con hasta 5 minutos de retraso).
         if mode == "auto" and state_value is not None and _same_day_total(state_value, computed):
             out[key] = state_value
+            sources[key] = "estado"
         else:
             out[key] = computed
+            sources[key] = "estadisticas"
 
     # Integral de cada potencia (Wh). Sustituye al contador que no ha dado nada
     # —o que marca cero mientras su potencia sí mide— y aporta el detalle por
@@ -502,6 +520,7 @@ async def daily_energy(
         power_totals[key] = integral
         if not out.get(key):
             out[key] = integral
+            sources[key] = "potencia"
         if sum((by_key.get(key) or {}).values()) <= 0:
             # Sin buckets del contador (o todos a cero), el reparto usa los de
             # la potencia: si no, repartiría sobre un cero que no es real.
@@ -519,14 +538,82 @@ async def daily_energy(
     # no tienen alternativa: a cero.
     if (out.get("home_energy") or 0.0) <= 0:
         out.pop("home_energy", None)
+        sources.pop("home_energy", None)
     out = {key: max(value, 0.0) for key, value in out.items()}
 
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
-    value = {"totals": out, "flows": flows}
+    value = {"totals": out, "flows": flows, "sources": sources}
     _daily_cache.update({"key": cache_key, "at": time.monotonic(),
                          "value": {"totals": dict(out), "flows": flows,
-                                   "power": dict(power_totals)}})
+                                   "power": dict(power_totals),
+                                   "sources": dict(sources)}})
     return value
+
+
+_DIAG_LABELS = {
+    "pv_energy": ("Generación solar", "entra"),
+    "grid_import_energy": ("Importada de la red", "entra"),
+    "battery_discharge_energy": ("Descarga de la batería", "entra"),
+    "home_energy": ("Consumo de la casa", "sale"),
+    "grid_export_energy": ("Exportada a la red", "sale"),
+    "battery_charge_energy": ("Carga de la batería", "sale"),
+}
+_DIAG_SOURCES = {
+    "estado": "estado del sensor",
+    "estadisticas": "estadísticas",
+    "potencia": "integral de su potencia",
+}
+
+
+async def diagnostics(
+    settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
+) -> dict[str, Any]:
+    """Balance de energía del día, sensor a sensor.
+
+    Todo lo que entra en la instalación tiene que salir por algún sitio: lo
+    generado, lo importado y lo que descarga la batería frente a lo que consume
+    la casa, lo vertido y lo que carga la batería. Si no cuadra, uno de los
+    sensores miente, y el reparto de la Home no puede hacer magia con eso: lo
+    único honesto es enseñar la diferencia y de dónde sale cada cifra.
+    """
+    energy_cfg = settings.get("energy_sensors") or {}
+    flow_cfg = settings.get("flow_sensors") or {}
+    daily = await daily_energy(settings, states, tz, now)
+    totals, sources = daily["totals"], daily.get("sources") or {}
+
+    rows: list[dict[str, Any]] = []
+    sums = {"entra": 0.0, "sale": 0.0}
+    for key, (label, side) in _DIAG_LABELS.items():
+        value = totals.get(key)
+        source = sources.get(key)
+        sensor = energy_cfg.get(key) or ""
+        if source == "potencia" or (value is not None and not sensor):
+            sensor = flow_cfg.get(POWER_FOR_ENERGY[key]) or ""
+        if value is not None:
+            sums[side] += value
+        rows.append({
+            "key": key,
+            "label": label,
+            "side": side,
+            "kwh": None if value is None else round(value / 1000.0, 2),
+            "sensor": sensor,
+            "source": _DIAG_SOURCES.get(source or "", "sin dato"),
+        })
+
+    entra, sale = sums["entra"] / 1000.0, sums["sale"] / 1000.0
+    diff = entra - sale
+    mayor = max(entra, sale)
+    # Un 5 % de margen absorbe el desfase normal entre contadores y el retraso
+    # de las estadísticas; por encima de eso hay un sensor que no cuadra.
+    cuadra = mayor <= 0 or abs(diff) <= max(mayor * 0.05, 0.1)
+    return {
+        "rows": rows,
+        "entra": round(entra, 2),
+        "sale": round(sale, 2),
+        "diferencia": round(diff, 2),
+        "cuadra": cuadra,
+        "generated_at": now.isoformat(),
+    }
 
 
 async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:

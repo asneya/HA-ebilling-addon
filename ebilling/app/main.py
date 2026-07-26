@@ -330,6 +330,22 @@ async def get_live():
         raise HTTPException(502, f"No se pudo leer el estado de Home Assistant: {err}") from err
 
 
+@app.get("/api/diagnostics")
+async def get_diagnostics():
+    """Balance de energía del día, sensor a sensor, para Ajustes."""
+    settings = storage.load()["settings"]
+    tz = _tz(settings)
+    now = datetime.now(tz)
+    try:
+        states = await live.fetch_states(settings)
+        return await live.diagnostics(settings, states, tz, now)
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error calculando el diagnóstico", exc_info=True)
+        raise HTTPException(502, f"No se pudo leer el estado de Home Assistant: {err}") from err
+
+
 # ---------------------------------------------------------------------------
 # Simulación
 # ---------------------------------------------------------------------------

@@ -97,13 +97,57 @@ function showSettingsPage(page) {
   $$("#view-settings .settings-page").forEach((p) => {
     p.classList.toggle("active", p.id === `sp-${page || "root"}`);
   });
-  // El botón de guardar no tiene sentido en el índice, en la lista de tarifas
-  // ni en apariencia (el tema se aplica y se guarda al pulsarlo).
-  const hideSave = !page || page === "tariffs" || page === "appearance";
+  // El botón de guardar no tiene sentido en el índice, en la lista de tarifas,
+  // en apariencia (el tema se aplica y se guarda al pulsarlo) ni en el
+  // diagnóstico, que solo lee.
+  const hideSave = !page || ["tariffs", "appearance", "diagnostics"].includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   if (page === "tariffs") renderTariffsList();
+  if (page === "diagnostics") loadDiagnostics();
   window.scrollTo(0, 0);
+}
+
+/* ========================= diagnóstico ========================= */
+
+async function loadDiagnostics() {
+  const body = $("#diag-body");
+  body.innerHTML = `<p class="li-note">Leyendo los sensores…</p>`;
+  let d;
+  try {
+    d = await api("diagnostics");
+  } catch (err) {
+    body.innerHTML = `<p class="li-note">No se pudo calcular: ${esc(err.message)}</p>`;
+    return;
+  }
+  const fila = (r) => `
+    <div class="li diag-row">
+      <span class="diag-txt">
+        <b>${esc(r.label)}</b>
+        <small>${r.sensor ? esc(r.sensor) : "sin sensor"} · ${esc(r.source)}</small>
+      </span>
+      <span class="diag-kwh ${r.kwh == null ? "muted" : ""}">${
+        r.kwh == null ? "--" : `${fmtNum.format(r.kwh)} kWh`
+      }</span>
+    </div>`;
+  const lado = (side, titulo, total) => `
+    <div class="diag-side">
+      <div class="diag-head"><span>${titulo}</span><b>${fmtNum.format(total)} kWh</b></div>
+      ${d.rows.filter((r) => r.side === side).map(fila).join("")}
+    </div>`;
+  const diff = d.diferencia;
+  const veredicto = d.cuadra
+    ? `Cuadra: la diferencia (${fmtNum.format(Math.abs(diff))} kWh) entra dentro
+       del margen normal entre contadores.`
+    : `<b>No cuadra por ${fmtNum.format(Math.abs(diff))} kWh.</b> ${
+        diff > 0
+          ? "Entra más de lo que sale: o el consumo de la casa se queda corto, o la descarga de la batería y la importación se están contando de más."
+          : "Sale más de lo que entra: o el consumo de la casa se pasa, o la generación y la importación se están contando de menos."
+      }`;
+  body.innerHTML = `
+    ${lado("entra", "Entra", d.entra)}
+    ${lado("sale", "Sale", d.sale)}
+    <p class="li-note diag-verdict ${d.cuadra ? "ok" : "warn"}">${veredicto}</p>`;
 }
 
 $$("[data-settings-page]").forEach((row) =>

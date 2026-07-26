@@ -625,6 +625,26 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 }
 .li.col { flex-direction: column; align-items: stretch; gap: 6px; }
 .li-label { flex: 0 0 44%; color: var(--ink-2); font-size: 15px; }
+/* ---------------- diagnóstico ---------------- */
+.diag-side + .diag-side { border-top: 1px solid var(--sep); }
+.diag-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 12px 16px 6px; color: var(--ink-3);
+  font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.diag-head b { color: var(--ink); font-size: 15px; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.diag-row { align-items: center; gap: 12px; }
+.diag-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.diag-txt b { color: var(--ink); font-size: 15px; font-weight: 600; }
+.diag-txt small { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.diag-kwh {
+  margin-left: auto; color: var(--ink); font-size: 15px; font-weight: 650;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.diag-kwh.muted { color: var(--ink-3); font-weight: 600; }
+.diag-verdict.ok { color: var(--ink-2); }
+.diag-verdict.warn b { color: var(--warn); }
+
 /* Valor de sólo lectura (versión del add-on y similares). */
 .li-value { margin-left: auto; color: var(--ink); font-size: 15px; font-weight: 650;
   font-variant-numeric: tabular-nums; }
