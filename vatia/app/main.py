@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
@@ -171,17 +172,31 @@ def _version() -> str:
 _VERSION: str | None = None
 
 
+MASKED = "********"
+
+
+def _unmask(patch: dict, current: dict) -> None:
+    """Los campos enmascarados no sobreescriben el secreto guardado."""
+    if patch.get("ha_token") == MASKED:
+        patch["ha_token"] = current.get("ha_token", "")
+    influx = patch.get("influx")
+    if isinstance(influx, dict):
+        for secret in ("token", "password"):
+            if influx.get(secret) == MASKED:
+                influx[secret] = current.get("influx", {}).get(secret, "")
+
+
 @app.get("/api/config")
 async def get_config():
     config = storage.load()
     settings = dict(config["settings"])
     # No exponer secretos completos al frontend.
     if settings.get("ha_token"):
-        settings["ha_token"] = "********"
+        settings["ha_token"] = MASKED
     if settings.get("influx", {}).get("token"):
-        settings["influx"] = {**settings["influx"], "token": "********"}
+        settings["influx"] = {**settings["influx"], "token": MASKED}
     if settings.get("influx", {}).get("password"):
-        settings["influx"] = {**settings["influx"], "password": "********"}
+        settings["influx"] = {**settings["influx"], "password": MASKED}
     return {
         "settings": settings,
         "tariffs": config["tariffs"],
@@ -192,18 +207,92 @@ async def get_config():
 
 @app.put("/api/settings")
 async def put_settings(patch: dict = Body(...)):
-    # Los campos enmascarados no sobreescriben el secreto guardado.
-    current = storage.load()["settings"]
-    if patch.get("ha_token") == "********":
-        patch["ha_token"] = current.get("ha_token", "")
-    influx_patch = patch.get("influx")
-    if isinstance(influx_patch, dict):
-        for secret in ("token", "password"):
-            if influx_patch.get(secret) == "********":
-                influx_patch[secret] = current.get("influx", {}).get(secret, "")
+    _unmask(patch, storage.load()["settings"])
     settings = storage.update_settings(patch)
     _cache.clear()
     return {"ok": True, "settings": settings}
+
+
+@app.get("/api/config/export")
+async def export_config():
+    """Descarga los ajustes y las tarifas en un JSON.
+
+    Sirve de copia de seguridad, para mover la instalación a otro Home Assistant
+    y para volver atrás si algo se rompe. Incluye los secretos (el token de HA y
+    las credenciales de InfluxDB) porque si no, no restaura del todo: la interfaz
+    avisa de que el fichero hay que tratarlo como una contraseña.
+    """
+    config = storage.load()
+    payload = {
+        "app": "vatia",
+        "version": _version(),
+        "exported_at": datetime.now(_tz(config["settings"])).isoformat(),
+        "settings": config["settings"],
+        "tariffs": config["tariffs"],
+    }
+    return Response(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="vatia-config.json"'},
+    )
+
+
+@app.post("/api/config/import")
+async def import_config(payload: dict = Body(...)):
+    """Restaura ajustes y tarifas desde un JSON.
+
+    Acepta tanto el fichero de ``/api/config/export`` como la respuesta de
+    ``/api/config`` —que es la que se puede copiar del add-on antiguo desde el
+    navegador—, así que las claves que sobran (``version``, ``supervisor``…) se
+    ignoran y los secretos enmascarados conservan el valor que ya hubiera.
+    """
+    settings = payload.get("settings")
+    tariffs = payload.get("tariffs")
+    if not isinstance(settings, dict) and not isinstance(tariffs, list):
+        raise HTTPException(
+            400,
+            "El fichero no parece una configuración de Vatia: "
+            "se esperaba un objeto con «settings» o «tariffs».",
+        )
+
+    resumen = {"settings": 0, "tariffs": 0}
+    if isinstance(settings, dict):
+        patch = dict(settings)
+        _unmask(patch, storage.load()["settings"])
+        storage.update_settings(patch)
+        resumen["settings"] = len(patch)
+    if isinstance(tariffs, list):
+        # `normalize_tariff` es deliberadamente tolerante (rellena lo que falta
+        # para poder migrar formatos antiguos), así que aquí hace falta un
+        # filtro propio: importar sustituye **todas** las tarifas, y un pegado
+        # equivocado no puede llevarse por delante las que ya están.
+        candidatos = [
+            t for t in tariffs
+            if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"].strip()
+        ]
+        if tariffs and not candidatos:
+            raise HTTPException(
+                400,
+                "Ninguna de las tarifas del fichero es válida: a cada una le "
+                "hace falta al menos un nombre.",
+            )
+        normalized = []
+        for raw in candidatos:
+            try:
+                tariff = tariffs_mod.normalize_tariff(raw)
+            except tariffs_mod.TariffError:
+                _LOGGER.warning("Tarifa ignorada al importar: %s", raw.get("name"))
+                continue
+            tariff["id"] = raw.get("id") or tariffs_mod.slugify(tariff["name"])
+            normalized.append(tariff)
+        if not normalized:
+            raise HTTPException(400, "Ninguna de las tarifas del fichero es válida.")
+        config = storage.load()
+        config["tariffs"] = normalized
+        storage.save(config)
+        resumen["tariffs"] = len(normalized)
+    _cache.clear()
+    return {"ok": True, "imported": resumen}
 
 
 @app.post("/api/tariffs")
