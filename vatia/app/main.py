@@ -1,4 +1,4 @@
-"""API y servidor web del add-on eBilling."""
+"""API y servidor web del add-on Vatia."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ import storage
 import tariffs as tariffs_mod
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "info").upper())
-_LOGGER = logging.getLogger("ebilling")
+_LOGGER = logging.getLogger("vatia")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     task.cancel()
 
 
-app = FastAPI(title="eBilling", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Vatia", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 def _tz(settings: dict) -> ZoneInfo:
@@ -139,7 +139,7 @@ def _version() -> str:
 
     Se busca en este orden, porque el sitio depende de cómo se haya construido:
 
-    1. ``EBILLING_VERSION``, que el Dockerfile fija desde ``BUILD_VERSION``.
+    1. ``VATIA_VERSION``, que el Dockerfile fija desde ``BUILD_VERSION``.
     2. ``addon.yaml`` junto a la aplicación: el ``config.yaml`` copiado dentro
        de la imagen. Un build local puede no pasar el argumento anterior.
     3. ``../config.yaml``, que es donde está al ejecutar desde el repositorio.
@@ -147,7 +147,7 @@ def _version() -> str:
     global _VERSION
     if _VERSION is not None:
         return _VERSION
-    _VERSION = (os.environ.get("EBILLING_VERSION") or "").strip()
+    _VERSION = (os.environ.get("VATIA_VERSION") or "").strip()
     if _VERSION:
         return _VERSION
     here = os.path.dirname(os.path.abspath(__file__))
@@ -237,7 +237,7 @@ async def tariff_template():
     return PlainTextResponse(
         tariffs_mod.template_csv(),
         media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": 'attachment; filename="plantilla_tarifa_ebilling.csv"'},
+        headers={"Content-Disposition": 'attachment; filename="plantilla_tarifa_vatia.csv"'},
     )
 
 

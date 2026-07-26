@@ -5,7 +5,7 @@ FROM $BUILD_FROM
 # Assistant pasa BUILD_VERSION; el config.yaml se copia también porque un build
 # local puede no pasar el argumento y es la fuente de la verdad.
 ARG BUILD_VERSION=""
-ENV EBILLING_VERSION=$BUILD_VERSION
+ENV VATIA_VERSION=$BUILD_VERSION
 
 WORKDIR /opt/app
 

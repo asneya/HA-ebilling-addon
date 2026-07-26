@@ -2,15 +2,15 @@
 
 Por cada tarifa se exponen:
 
-  - sensor.ebilling_<tarifa>_precio         €/kWh del término de energía ahora
-  - sensor.ebilling_<tarifa>_precio_excedente  €/kWh de compensación (si aplica)
-  - sensor.ebilling_<tarifa>_coste_ciclo    € acumulados del ciclo actual
-  - sensor.ebilling_<tarifa>_proyeccion     € estimados a fin de ciclo
+  - sensor.vatia_<tarifa>_precio         €/kWh del término de energía ahora
+  - sensor.vatia_<tarifa>_precio_excedente  €/kWh de compensación (si aplica)
+  - sensor.vatia_<tarifa>_coste_ciclo    € acumulados del ciclo actual
+  - sensor.vatia_<tarifa>_proyeccion     € estimados a fin de ciclo
 
 Y dos sensores globales:
 
-  - sensor.ebilling_mejor_tarifa            nombre de la tarifa más barata
-  - sensor.ebilling_ahorro_potencial        € de diferencia entre la tarifa
+  - sensor.vatia_mejor_tarifa            nombre de la tarifa más barata
+  - sensor.vatia_ahorro_potencial        € de diferencia entre la tarifa
                                             actualmente más cara y la más barata
 """
 
@@ -57,7 +57,7 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
         return
 
     headers = {"Authorization": f"Bearer {token}"}
-    common = {"attribution": "eBilling add-on"}
+    common = {"attribution": "Vatia add-on"}
     async with aiohttp.ClientSession(headers=headers) as session:
         for item in payload["tariffs"]:
             slug = item["slug"]
@@ -73,11 +73,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                 await _post_state(
                     session,
                     base,
-                    f"sensor.ebilling_{slug}_precio",
+                    f"sensor.vatia_{slug}_precio",
                     round(item["price"], 6),
                     {
                         **base_attrs,
-                        "friendly_name": f"eBilling {item['name']} precio",
+                        "friendly_name": f"Vatia {item['name']} precio",
                         "unit_of_measurement": "€/kWh",
                         "icon": "mdi:currency-eur",
                         "tramo": item.get("period"),
@@ -87,11 +87,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                 await _post_state(
                     session,
                     base,
-                    f"sensor.ebilling_{slug}_precio_excedente",
+                    f"sensor.vatia_{slug}_precio_excedente",
                     round(item["surplus_price"], 6),
                     {
                         **base_attrs,
-                        "friendly_name": f"eBilling {item['name']} precio excedente",
+                        "friendly_name": f"Vatia {item['name']} precio excedente",
                         "unit_of_measurement": "€/kWh",
                         "icon": "mdi:solar-power",
                     },
@@ -99,11 +99,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
             await _post_state(
                 session,
                 base,
-                f"sensor.ebilling_{slug}_coste_ciclo",
+                f"sensor.vatia_{slug}_coste_ciclo",
                 item["cycle_cost"],
                 {
                     **base_attrs,
-                    "friendly_name": f"eBilling {item['name']} coste ciclo",
+                    "friendly_name": f"Vatia {item['name']} coste ciclo",
                     "unit_of_measurement": "EUR",
                     "device_class": "monetary",
                     "icon": "mdi:receipt-text-outline",
@@ -113,11 +113,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
             await _post_state(
                 session,
                 base,
-                f"sensor.ebilling_{slug}_proyeccion",
+                f"sensor.vatia_{slug}_proyeccion",
                 item["projected_cost"],
                 {
                     **base_attrs,
-                    "friendly_name": f"eBilling {item['name']} proyección ciclo",
+                    "friendly_name": f"Vatia {item['name']} proyección ciclo",
                     "unit_of_measurement": "EUR",
                     "device_class": "monetary",
                     "icon": "mdi:chart-line",
@@ -127,11 +127,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
                 await _post_state(
                     session,
                     base,
-                    f"sensor.ebilling_{slug}_monedero",
+                    f"sensor.vatia_{slug}_monedero",
                     item.get("wallet_credit", 0.0),
                     {
                         **base_attrs,
-                        "friendly_name": f"eBilling {item['name']} monedero virtual",
+                        "friendly_name": f"Vatia {item['name']} monedero virtual",
                         "unit_of_measurement": "EUR",
                         "device_class": "monetary",
                         "icon": "mdi:wallet-outline",
@@ -143,11 +143,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
             await _post_state(
                 session,
                 base,
-                "sensor.ebilling_mejor_tarifa",
+                "sensor.vatia_mejor_tarifa",
                 best["name"],
                 {
                     **common,
-                    "friendly_name": "eBilling mejor tarifa",
+                    "friendly_name": "Vatia mejor tarifa",
                     "icon": "mdi:trophy-outline",
                     "coste_ciclo": best["cycle_cost"],
                     "totales": payload.get("totals"),
@@ -156,11 +156,11 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
             await _post_state(
                 session,
                 base,
-                "sensor.ebilling_ahorro_potencial",
+                "sensor.vatia_ahorro_potencial",
                 payload.get("potential_saving", 0.0),
                 {
                     **common,
-                    "friendly_name": "eBilling ahorro potencial",
+                    "friendly_name": "Vatia ahorro potencial",
                     "unit_of_measurement": "EUR",
                     "device_class": "monetary",
                     "icon": "mdi:piggy-bank-outline",
@@ -169,13 +169,13 @@ async def publish(settings: dict[str, Any], payload: dict[str, Any]) -> None:
 
         # Borra de HA los sensores de tarifas que ya no existen (evita que
         # queden entidades huérfanas visibles, p. ej. en la tarjeta).
-        expected = {"sensor.ebilling_mejor_tarifa", "sensor.ebilling_ahorro_potencial"}
+        expected = {"sensor.vatia_mejor_tarifa", "sensor.vatia_ahorro_potencial"}
         for item in payload["tariffs"]:
             slug = item["slug"]
             for suffix in ("precio", "precio_excedente", "coste_ciclo", "proyeccion"):
-                expected.add(f"sensor.ebilling_{slug}_{suffix}")
+                expected.add(f"sensor.vatia_{slug}_{suffix}")
             if item.get("virtual_wallet"):
-                expected.add(f"sensor.ebilling_{slug}_monedero")
+                expected.add(f"sensor.vatia_{slug}_monedero")
         await _cleanup_stale(session, base, expected)
 
 
@@ -184,7 +184,7 @@ async def _cleanup_stale(
     base: str,
     expected: set[str],
 ) -> None:
-    """Elimina las entidades sensor.ebilling_* que ya no correspondan."""
+    """Elimina las entidades sensor.vatia_* que ya no correspondan."""
     try:
         async with session.get(
             f"{base}/states", timeout=aiohttp.ClientTimeout(total=15)
@@ -196,7 +196,7 @@ async def _cleanup_stale(
         return
     for state in states:
         entity_id = state.get("entity_id", "")
-        if entity_id.startswith("sensor.ebilling_") and entity_id not in expected:
+        if entity_id.startswith("sensor.vatia_") and entity_id not in expected:
             try:
                 async with session.delete(
                     f"{base}/states/{entity_id}",

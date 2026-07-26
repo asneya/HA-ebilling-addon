@@ -1,4 +1,4 @@
-# Brief para Claude Design — rediseño completo de eBilling
+# Brief para Claude Design — rediseño completo de Vatia
 
 > Cópialo entero como prompt. Está escrito para que quien lo lea no necesite ver
 > el código: incluye el contexto, las restricciones duras del entorno, los datos
@@ -23,7 +23,7 @@ de interfaz, interacción y movimiento**, y el sistema de diseño que la sostien
 
 ## 2. Qué es el producto
 
-**eBilling** es un add-on de Home Assistant que simula **en tiempo real la
+**Vatia** es un add-on de Home Assistant que simula **en tiempo real la
 factura de la luz** de una vivienda española con autoconsumo solar, y compara
 varias tarifas eléctricas en paralelo.
 
@@ -320,7 +320,7 @@ al pulsar (ni escala, ni resalte), y el teclado tapa los campos al escribir.
 
 ## 6. Qué quiero que diseñes (entregable)
 
-1. **Concepto y dirección de arte** (1 página): en qué se convierte eBilling,
+1. **Concepto y dirección de arte** (1 página): en qué se convierte Vatia,
    qué se conserva de la identidad (el fondo que representa la hora del día, el
    flujo de energía animado) y qué se tira.
 2. **Sistema de diseño**:

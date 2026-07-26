@@ -1,20 +1,20 @@
 /*
- * eBilling Card — tarjeta Lovelace para Home Assistant
- * Comparativa de tarifas del add-on eBilling.
+ * Vatia Card — tarjeta Lovelace para Home Assistant
+ * Comparativa de tarifas del add-on Vatia.
  *
  * Instalación:
- *   1. Copia este archivo a /config/www/ebilling-card.js
+ *   1. Copia este archivo a /config/www/vatia-card.js
  *   2. Ajustes → Paneles → (⋮) Recursos → Añadir recurso:
- *        URL: /local/ebilling-card.js   ·   Tipo: Módulo de JavaScript
+ *        URL: /local/vatia-card.js   ·   Tipo: Módulo de JavaScript
  *   3. Añade la tarjeta a tu panel:
- *        type: custom:ebilling-card
+ *        type: custom:vatia-card
  *
  * Configuración (todo opcional; por defecto descubre los sensores solos):
- *   type: custom:ebilling-card
+ *   type: custom:vatia-card
  *   title: Comparativa de tarifas        # encabezado
  *   mode: cycle                          # cycle (acumulado) | projection (fin de ciclo)
  *   entities:                            # forzar tarifas concretas (por sus sensores de coste)
- *     - sensor.ebilling_plan_estable_coste_ciclo
+ *     - sensor.vatia_plan_estable_coste_ciclo
  */
 
 const PALETTE_LIGHT = [
@@ -32,7 +32,7 @@ const eur4 = new Intl.NumberFormat("es-ES", {
 });
 const num = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
 
-class EBillingCard extends HTMLElement {
+class VatiaCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._mode = this._config.mode === "projection" ? "projection" : "cycle";
@@ -62,12 +62,12 @@ class EBillingCard extends HTMLElement {
 
     if (Array.isArray(explicit) && explicit.length) {
       for (const id of explicit) {
-        const m = /^sensor\.ebilling_(.+)_coste_ciclo$/.exec(id);
+        const m = /^sensor\.vatia_(.+)_coste_ciclo$/.exec(id);
         if (m) slugs.push(m[1]);
       }
     } else {
       for (const id of Object.keys(states)) {
-        const m = /^sensor\.ebilling_(.+)_coste_ciclo$/.exec(id);
+        const m = /^sensor\.vatia_(.+)_coste_ciclo$/.exec(id);
         if (m) slugs.push(m[1]);
       }
     }
@@ -78,12 +78,12 @@ class EBillingCard extends HTMLElement {
     let period = null;
 
     slugs.forEach((slug, idx) => {
-      const cost = states[`sensor.ebilling_${slug}_coste_ciclo`];
+      const cost = states[`sensor.vatia_${slug}_coste_ciclo`];
       if (!cost) return;
       const a = cost.attributes || {};
-      const priceEnt = states[`sensor.ebilling_${slug}_precio`];
-      const projEnt = states[`sensor.ebilling_${slug}_proyeccion`];
-      const surplusEnt = states[`sensor.ebilling_${slug}_precio_excedente`];
+      const priceEnt = states[`sensor.vatia_${slug}_precio`];
+      const projEnt = states[`sensor.vatia_${slug}_proyeccion`];
+      const surplusEnt = states[`sensor.vatia_${slug}_precio_excedente`];
       if (!period && a.ciclo_inicio) period = { start: a.ciclo_inicio, end: a.ciclo_fin };
       tariffs.push({
         slug,
@@ -101,7 +101,7 @@ class EBillingCard extends HTMLElement {
 
     tariffs.sort((x, y) => this._value(x) - this._value(y));
 
-    const savingSensor = states["sensor.ebilling_ahorro_potencial"];
+    const savingSensor = states["sensor.vatia_ahorro_potencial"];
     const cheapest = tariffs.length ? this._value(tariffs[0]) : 0;
     const dearest = tariffs.length ? this._value(tariffs[tariffs.length - 1]) : 0;
     // El ahorro se calcula sobre el modo mostrado (acumulado o proyección);
@@ -149,8 +149,8 @@ class EBillingCard extends HTMLElement {
       this._rows.innerHTML = `
         <div class="empty">
           <div class="empty-icon">⚡</div>
-          <p>No se han encontrado sensores de eBilling.</p>
-          <p class="hint">Activa <b>Publicar sensores</b> en el add-on eBilling
+          <p>No se han encontrado sensores de Vatia.</p>
+          <p class="hint">Activa <b>Publicar sensores</b> en el add-on Vatia
           (Ajustes) y espera al primer ciclo de actualización.</p>
         </div>`;
       this._headerSub.textContent = "";
@@ -238,7 +238,7 @@ class EBillingCard extends HTMLElement {
     this._built = true;
     const card = document.createElement("ha-card");
     card.innerHTML = `
-      <style>${EBillingCard.styles}</style>
+      <style>${VatiaCard.styles}</style>
       <div class="wrap">
         <div class="header">
           <div>
@@ -279,7 +279,7 @@ class EBillingCard extends HTMLElement {
   }
 }
 
-EBillingCard.styles = `
+VatiaCard.styles = `
   .wrap { padding: 16px; }
   .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
   .header-title { font-size: 1.15rem; font-weight: 600; color: var(--primary-text-color); }
@@ -331,14 +331,20 @@ EBillingCard.styles = `
   }
 `;
 
-customElements.define("ebilling-card", EBillingCard);
+customElements.define("vatia-card", VatiaCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "ebilling-card",
-  name: "eBilling — Comparativa de tarifas",
-  description: "Compara en tiempo real el coste de tus tarifas eléctricas (add-on eBilling).",
+  type: "vatia-card",
+  name: "Vatia — Comparativa de tarifas",
+  description: "Compara en tiempo real el coste de tus tarifas eléctricas (add-on Vatia).",
   preview: true,
 });
 
-console.info("%c eBilling-card %c cargada ", "background:#4a6cf7;color:#fff;border-radius:3px 0 0 3px;padding:2px 4px", "background:#00a443;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+// Alias del nombre antiguo («ebilling-card»), para que los dashboards que ya
+// la usan sigan funcionando al actualizar el recurso. No sale en el selector.
+if (!customElements.get("ebilling-card")) {
+  customElements.define("ebilling-card", class extends VatiaCard {});
+}
+
+console.info("%c vatia-card %c cargada ", "background:#4a6cf7;color:#fff;border-radius:3px 0 0 3px;padding:2px 4px", "background:#00a443;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
