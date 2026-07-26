@@ -2,6 +2,27 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.9
+
+### Corregido
+
+- **La energía importada desaparecía del origen del consumo.** El nodo de la red
+  mostraba 2,15 kWh importados y, justo debajo, el anillo de la casa no tenía
+  tramo azul y el resumen decía «Desde la red 0 kWh». No era un contador mal
+  leído: era el modelo, que se tragaba la importación.
+- Cuando hay **contador del consumo de la casa**, los orígenes se rellenaban en
+  orden —primero el sol, luego la batería y **la red al final, con el resto**—.
+  Si el sol y la batería ya cubrían el consumo, a la red le tocaba cero **diga
+  lo que diga su contador**: `imported` ni siquiera se leía en ese camino.
+- Ahora los tres orígenes se reparten **a prorrata de lo que cada contador dice
+  haber aportado** (el sol que no se vertió ni cargó la batería, toda la
+  descarga, y lo importado que no acabó en la batería). Con contadores
+  coherentes la oferta es exactamente el consumo, el factor vale 1 y **no cambia
+  nada**; cuando no cuadran, el desajuste se reparte entre los tres en vez de
+  caerle entero al último de la cola.
+- Si los contadores se quedan **cortos** para el consumo medido, el hueco sigue
+  siendo de la red, que es lo único que puede aportar sin que lo veamos.
+
 ## 0.18.8
 
 ### Corregido
