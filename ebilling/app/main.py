@@ -135,15 +135,26 @@ async def _consumption(settings: dict, start: datetime, end: datetime, tz, kind:
 
 
 def _version() -> str:
-    """Versión del add-on, leída de su config.yaml (una sola vez).
+    """Versión del add-on (una sola vez), para enseñarla en Ajustes.
 
-    Se enseña en Ajustes para poder comprobar de un vistazo qué versión está
-    corriendo de verdad, sin salir de la app.
+    Se busca en este orden, porque el sitio depende de cómo se haya construido:
+
+    1. ``EBILLING_VERSION``, que el Dockerfile fija desde ``BUILD_VERSION``.
+    2. ``addon.yaml`` junto a la aplicación: el ``config.yaml`` copiado dentro
+       de la imagen. Un build local puede no pasar el argumento anterior.
+    3. ``../config.yaml``, que es donde está al ejecutar desde el repositorio.
     """
     global _VERSION
-    if _VERSION is None:
-        _VERSION = ""
-        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
+    if _VERSION is not None:
+        return _VERSION
+    _VERSION = (os.environ.get("EBILLING_VERSION") or "").strip()
+    if _VERSION:
+        return _VERSION
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (
+        os.path.join(here, "addon.yaml"),
+        os.path.join(os.path.dirname(here), "config.yaml"),
+    ):
         try:
             with open(path, encoding="utf-8") as handle:
                 for line in handle:
@@ -151,7 +162,9 @@ def _version() -> str:
                         _VERSION = line.split(":", 1)[1].strip().strip('"').strip("'")
                         break
         except OSError:
-            pass
+            continue
+        if _VERSION:
+            break
     return _VERSION
 
 
