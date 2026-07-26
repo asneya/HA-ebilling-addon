@@ -290,6 +290,20 @@ def _same_day_total(state_value: float, computed: float) -> bool:
     return state_value <= computed + margin
 
 
+def _prefer_power(totals: dict[str, float], power_totals: dict[str, float]) -> None:
+    """Un contador a cero no manda sobre una potencia que sí está midiendo.
+
+    Un contador que marca 0 mientras su sensor de potencia lleva horas dando
+    cientos de vatios no está midiendo, o todavía no ha empezado. Es la misma
+    regla que con un contador sin estadísticas: «cero» y «sin dato» no son lo
+    mismo, y un cero falso no se queda quieto —el reparto lo da por bueno y le
+    echa la culpa al residuo—.
+    """
+    for key, integral in power_totals.items():
+        if integral > 0 and not totals.get(key):
+            totals[key] = integral
+
+
 def _states_energy(
     energy_cfg: dict[str, str], states: dict[str, Any]
 ) -> dict[str, float]:
@@ -380,8 +394,10 @@ async def daily_energy(
         cached = {"totals": dict(_daily_cache["value"]["totals"]),
                   "flows": _daily_cache["value"]["flows"]}
         if mode == "daily":
-            # El estado va al segundo; el reparto viene cacheado.
+            # El estado va al segundo; el reparto viene cacheado. El estado
+            # tampoco manda si marca cero y la potencia dice otra cosa.
             cached["totals"].update(_states_energy(energy_cfg, states))
+            _prefer_power(cached["totals"], _daily_cache["value"].get("power") or {})
         return cached
 
     requests: list[dict[str, Any]] = []
@@ -482,18 +498,27 @@ async def daily_energy(
         else:
             out[key] = computed
 
-    # Contadores que no han dado nada: se integra su potencia media (Wh). Una
-    # media negativa (sensor invertido) no resta; si toda la curva es negativa,
-    # el sensor no vale y esa magnitud se queda sin dato.
+    # Integral de cada potencia (Wh). Sustituye al contador que no ha dado nada
+    # —o que marca cero mientras su potencia sí mide— y aporta el detalle por
+    # bucket cuando el contador no tiene estadísticas. Una media negativa
+    # (sensor invertido) no resta; si toda la curva es negativa, el sensor no
+    # vale y esa magnitud se queda sin dato.
+    power_totals: dict[str, float] = {}
     for key, entity in power_of.items():
-        if not entity or out.get(key) is not None:
+        if not entity:
             continue
         means = curves.get(POWER_FOR_ENERGY[key]) or {}
-        if not means or sum(means.values()) <= 0:
+        integral = sum(means.values()) * (5.0 / 60.0) if means else 0.0
+        if integral <= 0:
             continue
-        out[key] = sum(means.values()) * (5.0 / 60.0)
-        for iso, watts in means.items():
-            per_bucket.setdefault(iso, {})[key] = watts * (5.0 / 60.0) / 1000.0
+        power_totals[key] = integral
+        if not out.get(key):
+            out[key] = integral
+        if sum((by_key.get(key) or {}).values()) <= 0:
+            # Sin buckets del contador (o todos a cero), el reparto usa los de
+            # la potencia: si no, repartiría sobre un cero que no es real.
+            for iso, watts in means.items():
+                per_bucket.setdefault(iso, {})[key] = watts * (5.0 / 60.0) / 1000.0
 
     # Último filtro: un contador puede dar un total negativo (sensor con el
     # signo invertido, o un reinicio que las estadísticas cuentan como
@@ -511,7 +536,8 @@ async def daily_energy(
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
     value = {"totals": out, "flows": flows}
     _daily_cache.update({"key": cache_key, "at": time.monotonic(),
-                         "value": {"totals": dict(out), "flows": flows}})
+                         "value": {"totals": dict(out), "flows": flows,
+                                   "power": dict(power_totals)}})
     return value
 
 

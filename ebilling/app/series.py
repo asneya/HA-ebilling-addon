@@ -847,7 +847,7 @@ async def _build_power(
         """
         out = dict(by_key)
         for energy_key, series_key in COUNTER_SERIES.items():
-            if out.get(energy_key):
+            if sum((out.get(energy_key) or {}).values()) > 0:
                 continue
             curve = curves.get(series_key)
             if not curve:
@@ -921,9 +921,13 @@ async def _build_power(
         source = yesterday_totals if is_yesterday else totals
         key = SERIES_COUNTER.get(base)
         counter = source.get(key) if key else None
-        if base == "home" and not counter:
-            deduced = (yesterday_flows if is_yesterday else flows) or {}
-            counter = deduced.get("home_total")
+        if not counter:
+            # Un contador a cero no manda sobre una curva que sí mide: o no
+            # está midiendo, o todavía no ha empezado. Se cae al respaldo.
+            counter = None
+            if base == "home":
+                deduced = (yesterday_flows if is_yesterday else flows) or {}
+                counter = deduced.get("home_total") or None
         if counter is None and not any(v is not None for v in item["values"]):
             # Ni contador ni curva: no hay dato. Un cero aquí sería inventárselo.
             item["total"] = None

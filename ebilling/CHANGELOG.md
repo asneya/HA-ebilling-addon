@@ -2,6 +2,23 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.8
+
+### Corregido
+
+- **Un contador que marca cero tampoco manda sobre una potencia que sí mide.**
+  La 0.18.7 arregló el cero que venía de unas estadísticas vacías, pero quedaba
+  el otro camino: un contador cuyo **estado** dice 0 (o cuyas estadísticas suman
+  0). Se veía «Importada 0 kWh» justo encima de una curva de importación de
+  900 W durante cinco horas: la leyenda y su propio gráfico contradiciéndose.
+- Ahora, en cualquiera de los tres sitios donde se lee un contador —el estado,
+  las estadísticas y el estado recacheado del modo «diario»—, un cero cede ante
+  la integral de su sensor de potencia. Un contador a cero mientras su potencia
+  lleva horas midiendo no está midiendo, o todavía no ha empezado.
+- El **reparto** usa esos mismos buckets de potencia cuando el contador no
+  aporta ninguno o los aporta todos a cero. Antes repartía sobre un cero que no
+  era real y la diferencia acababa en el residuo.
+
 ## 0.18.7
 
 ### Corregido
