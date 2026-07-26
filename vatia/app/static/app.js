@@ -100,13 +100,51 @@ function showSettingsPage(page) {
   // El botón de guardar no tiene sentido en el índice, en la lista de tarifas,
   // en apariencia (el tema se aplica y se guarda al pulsarlo) ni en el
   // diagnóstico, que solo lee.
-  const hideSave = !page || ["tariffs", "appearance", "diagnostics"].includes(page);
+  const hideSave = !page || ["tariffs", "appearance", "diagnostics", "backup"].includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   if (page === "tariffs") renderTariffsList();
   if (page === "diagnostics") loadDiagnostics();
   window.scrollTo(0, 0);
 }
+
+/* ========================= copia de seguridad ========================= */
+
+$("#import-config-file").addEventListener("click", () => $("#import-config-input").click());
+$("#import-config-input").addEventListener("change", async (ev) => {
+  const file = ev.target.files?.[0];
+  if (!file) return;
+  $("#import-config-text").value = await file.text();
+  ev.target.value = "";
+  $("#import-config-status").textContent = `Fichero cargado (${esc(file.name)}). Pulsa «Importar».`;
+});
+
+$("#import-config-btn").addEventListener("click", async () => {
+  const status = $("#import-config-status");
+  const raw = $("#import-config-text").value.trim();
+  if (!raw) { status.textContent = "Pega el JSON o elige un fichero."; return; }
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch (err) {
+    status.textContent = `No es un JSON válido: ${err.message}`;
+    return;
+  }
+  try {
+    const r = await api("config/import", { method: "POST", body: JSON.stringify(payload) });
+    await reloadConfig();
+    fillSettings();
+    loadSimulation();
+    loadLive();
+    const t = r.imported.tariffs;
+    status.textContent = `✓ Importado: ${r.imported.settings} ajustes` +
+      (t ? ` y ${t} ${t === 1 ? "tarifa" : "tarifas"}` : " (ninguna tarifa en el fichero)") +
+      ". Revisa el token en Fuente de datos.";
+    $("#import-config-text").value = "";
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
+});
 
 /* ========================= diagnóstico ========================= */
 

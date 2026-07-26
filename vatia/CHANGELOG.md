@@ -2,6 +2,32 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.21.1
+
+### Novedades
+
+- **Copia de seguridad** en *Ajustes › Aplicación*: un botón descarga un
+  `vatia-config.json` con tus ajustes y tus tarifas, y otro lo restaura pegando
+  el contenido o eligiendo el fichero. Sirve de respaldo, para mudarse a otro
+  Home Assistant y para volver atrás si algo se rompe.
+- **Y resuelve la migración desde eBilling sin tocar ficheros del sistema.** La
+  importación acepta también la respuesta de `api/config` del add-on antiguo,
+  que se puede copiar desde el navegador: entra todo menos el token de Home
+  Assistant, que va enmascarado y hay que volver a poner. Hasta ahora la única
+  forma de recuperar la configuración era llegar a `/data` por SSH, que en HAOS
+  requiere el add-on avanzado con el modo protegido desactivado.
+- Los secretos enmascarados (`********`) conservan el valor que ya hubiera, así
+  que importar dos veces no borra el token.
+
+### Detalles
+
+- Importar **reemplaza todas las tarifas**, así que se exige que cada una traiga
+  al menos un nombre. `normalize_tariff` es deliberadamente tolerante para poder
+  migrar formatos antiguos y aceptaba objetos vacíos: un pegado equivocado se
+  habría llevado por delante las tarifas buenas.
+- El fichero exportado incluye los secretos, porque si no no restaura del todo.
+  La pantalla lo advierte: hay que tratarlo como una contraseña.
+
 ## 0.21.0
 
 ### El add-on ahora se llama Vatia

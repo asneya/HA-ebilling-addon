@@ -283,6 +283,23 @@ es el sitio donde se ve la causa en lugar del síntoma. Un margen de hasta el 5 
 se considera normal (los contadores no son idénticos y las estadísticas van con
 unos minutos de retraso).
 
+## Copia de seguridad
+
+En **Ajustes → Copia de seguridad** puedes:
+
+- **Exportar**: descarga un `vatia-config.json` con todos tus ajustes y tus
+  tarifas. Guárdalo antes de tocar nada gordo, para mudarte a otro Home
+  Assistant, o simplemente como respaldo.
+  **Contiene el token de Home Assistant**, así que trátalo como una contraseña.
+- **Importar**: pega el contenido del JSON o elige el fichero. Sustituye los
+  ajustes y **reemplaza todas las tarifas** por las del fichero.
+
+Los secretos que vengan **enmascarados** (`********`) conservan el valor que ya
+tuvieras, así que importar la respuesta de `api/config` —que es la que se puede
+copiar del navegador— no te borra el token: simplemente no lo trae, y lo vuelves
+a poner en *Fuente de datos*. Esa es la vía para
+[venir de eBilling](#venir-de-ebilling) sin tocar ficheros del sistema.
+
 ## Apariencia
 
 En **Ajustes → Apariencia** eliges el tema:
@@ -304,13 +321,25 @@ El add-on se llamaba **eBilling**. Home Assistant identifica los add-ons por su
 `slug`, así que al cambiarlo lo trata como un add-on **nuevo**: no llega como
 actualización y no se lleva nada consigo. Hay tres cosas que mover.
 
-**1. La configuración.** Copia el fichero `ebilling.json` de los datos del
-add-on antiguo a los del nuevo (con el add-on de *Terminal & SSH*, *Samba* o
-*Advanced SSH*; están en `/addon_configs/` o en el directorio de datos del
-add-on, según tu instalación). Vatia lo reconoce por su nombre de antes, **lo
-adopta tal cual** y lo reescribe como `vatia.json`. No hay que editar nada
-dentro. Si prefieres no tocar ficheros, reconfigúralo a mano: son cuatro
-pantallas.
+**1. La configuración.** La forma fácil, sin tocar ficheros del sistema:
+
+1. Abre **eBilling** y, en la pestaña donde se ve su interfaz, añade
+   `api/config` al final de la dirección. Sale un JSON con todos tus ajustes y
+   tus tarifas.
+2. Cópialo entero y pégalo en **Vatia → Ajustes → Copia de seguridad →
+   Importar**.
+3. Vuelve a poner el **token de Home Assistant** en *Fuente de datos*: es el
+   único dato que no viaja, porque la API lo enmascara por seguridad.
+
+Si prefieres el fichero, copia `ebilling.json` del directorio de datos del
+add-on antiguo al del nuevo. En HAOS ese directorio no está compartido por
+Samba, así que hace falta el add-on **Advanced SSH & Web Terminal** con el *modo
+protegido* desactivado; está en
+`/mnt/data/supervisor/addons/data/local_ebilling/`. Vatia reconoce el fichero
+por su nombre de antes, **lo adopta tal cual** y lo reescribe como `vatia.json`.
+
+Y si no te importa volver a configurarlo, son cuatro pantallas de selectores;
+las tarifas se mueven una a una con el botón **CSV** de cada una.
 
 **2. Los sensores.** Pasan de `sensor.ebilling_*` a `sensor.vatia_*`. Los
 antiguos desaparecen solos al reiniciar Home Assistant, porque se publican por

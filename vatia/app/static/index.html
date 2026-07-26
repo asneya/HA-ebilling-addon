@@ -389,6 +389,13 @@
             <span class="nav-txt"><b>Apariencia</b><small id="nav-sub-theme">—</small></span>
             <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
           </button>
+          <button class="nav-row" data-settings-page="backup">
+            <span class="nav-ico" style="--ico:#30d158">
+              <svg viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="M7.5 10l4.5 4.5 4.5-4.5"/><path d="M4.5 18.5h15"/></svg>
+            </span>
+            <span class="nav-txt"><b>Copia de seguridad</b><small>Exportar e importar la configuración</small></span>
+            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+          </button>
           <button class="nav-row" data-settings-page="diagnostics">
             <span class="nav-ico" style="--ico:#ff9f0a">
               <svg viewBox="0 0 24 24"><path d="M3 13h3.5l2-5 3 10 2.5-7 1.7 4h5.3"/></svg>
@@ -584,6 +591,71 @@
             Si acabas de actualizar y sigues viendo lo de antes, comprueba aquí
             que la versión es la que esperas: Home Assistant necesita reiniciar
             el add-on para aplicar una actualización.
+          </p>
+        </div>
+      </div>
+      </div>
+
+      <!-- ---- nivel 2: copia de seguridad ---- -->
+      <div class="settings-page" id="sp-backup">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Copia de seguridad</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+      <div class="panel glass group">
+        <div class="group-head">Exportar</div>
+        <div class="list">
+          <div class="li col">
+            <a class="btn primary block" id="export-config-btn" href="api/config/export" download>
+              Descargar la configuración
+            </a>
+          </div>
+          <p class="li-note">
+            Un fichero <code>vatia-config.json</code> con tus ajustes y tus
+            tarifas. Sirve de copia de seguridad, para mudarte a otro Home
+            Assistant y para volver atrás si algo se rompe.
+            <b>Contiene tu token de Home Assistant</b>: guárdalo como una
+            contraseña y no lo compartas.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Importar</div>
+        <div class="list">
+          <div class="li col">
+            <textarea id="import-config-text" class="json-textarea" spellcheck="false"
+                      placeholder='Pega aquí el contenido del JSON…'></textarea>
+          </div>
+          <div class="li col">
+            <div class="row-btns">
+              <button class="btn subtle" id="import-config-file">Elegir fichero…</button>
+              <button class="btn primary" id="import-config-btn">Importar</button>
+            </div>
+            <input type="file" id="import-config-input" accept=".json,application/json" class="hidden">
+          </div>
+          <p class="li-note" id="import-config-status"></p>
+          <p class="li-note">
+            Sustituye los ajustes y <b>reemplaza todas las tarifas</b> por las del
+            fichero. Los secretos que vengan enmascarados (<code>********</code>)
+            conservan el valor que ya tengas, así que tras importar comprueba el
+            token en <b>Fuente de datos</b>.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Venir de eBilling</div>
+        <div class="list">
+          <p class="li-note">
+            El add-on se llamaba eBilling y Home Assistant trata Vatia como uno
+            nuevo, así que la configuración no viaja sola. Sin tocar ficheros del
+            sistema: abre eBilling, y en la misma pestaña donde se ve su interfaz
+            añade <code>api/config</code> al final de la dirección. Copia todo lo
+            que salga y pégalo aquí arriba. Se importará todo menos el token de
+            HA, que va enmascarado y tendrás que volver a poner.
           </p>
         </div>
       </div>
