@@ -2,6 +2,33 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.22.0
+
+### La configuración ya está en una carpeta que puedes ver
+
+Hasta ahora vivía en `/data`, que es almacenamiento interno del add-on y **no
+está compartido**: para leerla hacía falta el add-on avanzado de SSH con el modo
+protegido desactivado. Por eso costaba tanto llegar a ella.
+
+Vatia declara ahora `map: addon_config`, así que el Supervisor le da una carpeta
+propia y la expone en **`/addon_configs/<slug>/vatia.json`**, visible desde
+**Samba, el File Editor, Studio Code Server** o el add-on de *Terminal & SSH*.
+Se puede leer, editar a mano y respaldar sin trucos.
+
+- **Se migra sola**: si la configuración está todavía en `/data` —o es el
+  `ebilling.json` de antes del cambio de nombre, ahí o en la carpeta nueva— se
+  adopta al arrancar y se reescribe en su sitio. No hay que hacer nada.
+- **Queda una copia en `/data`**, que es lo que archiva el Supervisor al hacer
+  una copia de seguridad del add-on: si restauras y solo viene `/data`, la
+  configuración sigue ahí. Manda siempre la de la carpeta compartida.
+- **Un JSON roto ya no borra la configuración.** Ahora que se puede editar a
+  mano, una coma de más es un caso previsible: el fichero se aparta como
+  `vatia.json.invalido` —tu edición no se tira— y se recupera la copia de
+  `/data`; si tampoco hay, se parte de los valores por defecto.
+
+La caché de precios PVPC se queda en `/data`, que es su sitio: es caché, no
+configuración.
+
 ## 0.21.1
 
 ### Novedades

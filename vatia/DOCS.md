@@ -283,6 +283,30 @@ es el sitio donde se ve la causa en lugar del síntoma. Un margen de hasta el 5 
 se considera normal (los contadores no son idénticos y las estadísticas van con
 unos minutos de retraso).
 
+## Dónde está la configuración
+
+En **`/addon_configs/<slug>_vatia/vatia.json`** (el `<slug>` exacto lo ves
+listando `/addon_configs/`; en una instalación local es `local_vatia`). Esa
+carpeta la crea el Supervisor porque el add-on declara `map: addon_config`, y se
+ve desde:
+
+- el add-on **Samba share** (recurso `addon_configs`),
+- **File Editor** o **Studio Code Server**,
+- **Terminal & SSH**, el oficial, sin desactivar el modo protegido.
+
+Puedes leerla, editarla a mano y respaldarla. Un par de advertencias:
+
+- **Edita con el add-on parado**, o usa la pantalla de *Copia de seguridad*: si
+  el add-on guarda mientras editas, tu cambio se pierde.
+- Si el JSON queda mal, el add-on **no lo sobreescribe**: lo aparta como
+  `vatia.json.invalido` y recupera la copia interna de `/data`. Revisa el registro
+  del add-on si algo no aparece como esperabas.
+
+Hay una **copia en `/data`**, que es lo que archiva el Supervisor en las copias
+de seguridad del add-on; si restauras y solo viene `/data`, la configuración
+sigue ahí. Manda siempre la de la carpeta compartida. La caché de precios PVPC se
+queda también en `/data`: es caché, no configuración.
+
 ## Copia de seguridad
 
 En **Ajustes → Copia de seguridad** puedes:

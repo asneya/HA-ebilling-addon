@@ -1,5 +1,5 @@
 name: Vatia
-version: "0.21.1"
+version: "0.22.0"
 slug: vatia
 description: Tu electricidad en tiempo real, con el origen del consumo, el coste del ciclo y comparativa de tarifas
 url: https://github.com/asneya/HA-ebilling-addon
@@ -13,6 +13,11 @@ ingress_port: 8099
 panel_icon: mdi:lightning-bolt
 panel_title: Vatia
 homeassistant_api: true
+# Carpeta propia del add-on, que el Supervisor expone en
+# `/addon_configs/<slug>/`: ahí vive `vatia.json`, y así se puede leer, editar y
+# respaldar con Samba, el File Editor o Studio Code Server.
+map:
+  - addon_config:rw
 options:
   log_level: info
 schema:

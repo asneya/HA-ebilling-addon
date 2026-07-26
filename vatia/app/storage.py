@@ -1,4 +1,9 @@
-"""Persistencia de configuración y tarifas en /data (JSON)."""
+"""Persistencia de configuración y tarifas (JSON).
+
+El fichero vive en la carpeta del add-on que el Supervisor expone en
+``/addon_configs/<slug>/``, con una copia en ``/data`` como red de seguridad
+para las copias de seguridad del add-on.
+"""
 
 from __future__ import annotations
 
@@ -14,13 +19,28 @@ import tariffs as tariffs_mod
 _LOGGER = logging.getLogger(__name__)
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
-CONFIG_PATH = os.path.join(DATA_DIR, "vatia.json")
-# El add-on se llamaba «eBilling». Al cambiar el slug, Home Assistant lo trata
-# como un add-on distinto y le da un /data vacío, así que la configuración no
-# viaja sola: hay que copiar el fichero antiguo a mano. Si aparece con su nombre
-# de antes se adopta tal cual y se reescribe con el nuevo, para que copiarlo sea
-# todo lo que haya que hacer.
-LEGACY_CONFIG_PATH = os.path.join(DATA_DIR, "ebilling.json")
+# La configuración vive en la carpeta del add-on (`map: addon_config`), que el
+# Supervisor expone en `/addon_configs/<slug>/`: se ve desde Samba, el File
+# Editor o Studio Code Server, así que se puede leer, editar y respaldar sin
+# entrar por SSH. `/data` es almacenamiento interno y no está compartido, que es
+# donde estaba antes y por lo que costaba tanto llegar a ella.
+CONFIG_DIR = os.environ.get("CONFIG_DIR") or (
+    "/config" if os.path.isdir("/config") else DATA_DIR
+)
+CONFIG_PATH = os.path.join(CONFIG_DIR, "vatia.json")
+# Copia en `/data`: es lo que archiva el Supervisor al hacer una copia de
+# seguridad del add-on, así que un restaurado que solo traiga `/data` no se
+# queda sin configuración. Manda siempre la de `CONFIG_DIR`.
+MIRROR_PATH = os.path.join(DATA_DIR, "vatia.json")
+# Sitios de los que se adopta la configuración si aún no está en su sitio
+# nuevo: la copia interna, y el fichero de cuando el add-on se llamaba
+# «eBilling» (al cambiar el slug, Home Assistant le dio un /data vacío y hay que
+# traerlo a mano; si aparece se adopta tal cual, sin editar nada dentro).
+LEGACY_PATHS = (
+    MIRROR_PATH,
+    os.path.join(CONFIG_DIR, "ebilling.json"),
+    os.path.join(DATA_DIR, "ebilling.json"),
+)
 
 _lock = threading.Lock()
 
@@ -194,23 +214,40 @@ def _normalize_tariffs(raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return normalized
 
 
+def _read(path: str) -> dict[str, Any] | None:
+    """Lee un JSON de configuración; ``None`` si no vale.
+
+    El fichero está en una carpeta compartida y se puede editar a mano, así que
+    un JSON roto es un caso previsible, no una anomalía. Se aparta con la
+    extensión ``.invalido`` en lugar de sobreescribirlo —el trabajo de quien lo
+    editó no se tira— y se sigue buscando en los demás sitios.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            config = json.load(fh)
+    except OSError:
+        return None
+    except ValueError:
+        _LOGGER.warning("Configuración ilegible en %s: se aparta y se ignora", path)
+        try:
+            os.replace(path, path + ".invalido")
+        except OSError:
+            _LOGGER.warning("Tampoco se pudo apartar %s", path, exc_info=True)
+        return None
+    return config if isinstance(config, dict) else None
+
+
 def load() -> dict[str, Any]:
     with _lock:
-        path = CONFIG_PATH
-        if not os.path.exists(path):
-            if os.path.exists(LEGACY_CONFIG_PATH):
-                _LOGGER.info(
-                    "Adoptando la configuración de eBilling (%s)", LEGACY_CONFIG_PATH
-                )
-                path = LEGACY_CONFIG_PATH
-            else:
-                config = _default_config()
-                _write(config)
-                return config
-        try:
-            with open(path, encoding="utf-8") as fh:
-                config = json.load(fh)
-        except (OSError, ValueError):
+        config = None
+        for candidate in (CONFIG_PATH, *LEGACY_PATHS):
+            config = _read(candidate)
+            if config is not None:
+                if candidate != CONFIG_PATH:
+                    _LOGGER.info("Adoptando la configuración de %s", candidate)
+                path = candidate
+                break
+        if config is None:
             config = _default_config()
             _write(config)
             return config
@@ -233,19 +270,28 @@ def load() -> dict[str, Any]:
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
         }
-        if path is not CONFIG_PATH:
-            # Se ha adoptado la configuración antigua: se guarda con el nombre
-            # nuevo para no volver a leerla del fichero de eBilling.
+        if path != CONFIG_PATH:
+            # Se ha adoptado de otro sitio: se guarda ya en el suyo para no
+            # volver a leerla de ahí.
             _write(merged_config)
         return merged_config
 
 
 def _write(config: dict[str, Any]) -> None:
-    os.makedirs(DATA_DIR, exist_ok=True)
-    tmp = CONFIG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(config, fh, ensure_ascii=False, indent=2)
-    os.replace(tmp, CONFIG_PATH)
+    texto = json.dumps(config, ensure_ascii=False, indent=2)
+    for destino in (CONFIG_PATH, MIRROR_PATH):
+        try:
+            os.makedirs(os.path.dirname(destino), exist_ok=True)
+            tmp = destino + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(texto)
+            os.replace(tmp, destino)   # atómico: nunca se lee a medias
+        except OSError:
+            # La copia de /data es una red de seguridad, no un requisito: si no
+            # se puede escribir (permisos, disco), el fichero bueno ya está.
+            if destino is CONFIG_PATH:
+                raise
+            _LOGGER.warning("No se pudo guardar la copia en %s", destino, exc_info=True)
 
 
 def save(config: dict[str, Any]) -> None:
