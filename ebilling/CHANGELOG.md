@@ -2,6 +2,24 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.19.1
+
+### Corregido
+
+- **La energía importada aparece entera como origen del consumo.** La versión
+  anterior ya no se la tragaba, pero la repartía a prorrata con el sol y la
+  batería, y se quedaba corta: con 2,15 kWh importados enseñaba 1,39. Lo
+  importado que **no ha cargado la batería** no tiene otro sitio al que ir: es
+  una entrega medida por el contador de la compañía, no una estimación. Ahora se
+  atribuye entera y el sol y la batería se reparten el resto.
+- Esto no confunde una carga desde la red con consumo de la casa: el reparto se
+  hace **intervalo a intervalo**, así que en los tramos en los que la batería sí
+  carga de la red esa parte se descuenta antes (es la fila «de lo importado fue
+  a cargar la batería»).
+- **La descarga que se vierte a la red ya no cuenta como consumo de la casa.**
+  Si se exporta más de lo que ha generado el sol, la diferencia sale de la
+  batería y no la ha consumido la casa; antes se atribuía igualmente.
+
 ## 0.19.0
 
 ### Novedades

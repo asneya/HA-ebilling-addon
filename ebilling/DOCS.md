@@ -118,19 +118,30 @@ misma cifra.
 
 #### Cuando los contadores no cuadran entre sí
 
-Con un **contador del consumo de la casa**, ese total manda y los tres orígenes
-se reparten hasta cubrirlo, **a prorrata de lo que cada contador dice haber
-aportado**: el sol que no se vertió ni cargó la batería, toda la descarga, y lo
-importado que no acabó en la batería.
+Con un **contador del consumo de la casa**, ese total manda y los orígenes se
+reparten hasta cubrirlo. Cada origen aporta lo que salió de su punto y no fue a
+ningún otro sitio medido:
 
-Si los sensores son coherentes, esas tres cantidades suman exactamente el
-consumo y cada origen se lleva justo lo suyo. Si no lo son —pasa: un sensor de
-la casa que no cubre todos los circuitos, una descarga que se contabiliza de más
-al vuelo— el desajuste se reparte **entre los tres**. Antes se rellenaba en
-orden (sol, batería y la red con el resto), y eso tenía un efecto feo: si el sol
-y la batería ya cubrían el consumo, **la red se quedaba a cero aunque su
-contador dijera que habías importado 2 kWh**, y esos kWh no aparecían por ningún
-lado.
+| Origen | Lo que entregó a la casa |
+|---|---|
+| Solar | lo generado menos lo vertido y lo que cargó la batería |
+| Batería | la descarga menos lo que se vertió a la red |
+| Red | lo importado menos lo que cargó la batería |
+
+**La red va primero, y entera.** Lo importado que no ha cargado la batería no
+tiene otro sitio al que ir, y además lo mide el contador de la compañía: es una
+entrega, no una estimación. El sol y la batería se reparten el resto a prorrata.
+
+Si los sensores son coherentes, las tres cantidades suman exactamente el consumo
+y cada origen se lleva justo lo suyo, en cualquier orden. El orden solo importa
+cuando **no** cuadran —pasa: un sensor de la casa que no cubre todos los
+circuitos, una descarga que se contabiliza de más—, y ahí lo que no puede ser es
+que la cifra que te cuesta dinero se quede corta o a cero.
+
+Nada de esto confunde una **carga desde la red** con consumo de la casa: el
+reparto se hace intervalo a intervalo, así que en los tramos en los que la
+batería sí carga de la red esa parte se descuenta antes (es la frase «X kWh de
+lo importado fue a cargar la batería»).
 
 Si los contadores se quedan **cortos** para el consumo medido, el hueco se le
 atribuye a la red: es lo único que puede aportar energía sin que se vea en
