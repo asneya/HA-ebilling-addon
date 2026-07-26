@@ -134,6 +134,30 @@ async def _consumption(settings: dict, start: datetime, end: datetime, tz, kind:
 # ---------------------------------------------------------------------------
 
 
+def _version() -> str:
+    """Versión del add-on, leída de su config.yaml (una sola vez).
+
+    Se enseña en Ajustes para poder comprobar de un vistazo qué versión está
+    corriendo de verdad, sin salir de la app.
+    """
+    global _VERSION
+    if _VERSION is None:
+        _VERSION = ""
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                for line in handle:
+                    if line.startswith("version:"):
+                        _VERSION = line.split(":", 1)[1].strip().strip('"').strip("'")
+                        break
+        except OSError:
+            pass
+    return _VERSION
+
+
+_VERSION: str | None = None
+
+
 @app.get("/api/config")
 async def get_config():
     config = storage.load()
@@ -149,6 +173,7 @@ async def get_config():
         "settings": settings,
         "tariffs": config["tariffs"],
         "supervisor": bool(os.environ.get("SUPERVISOR_TOKEN")),
+        "version": _version(),
     }
 
 

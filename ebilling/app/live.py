@@ -193,21 +193,9 @@ def _energy_summary(
         bucket_gen = flows["to_home"] + flows["to_battery"] + flows["to_grid"]
         if gen_total > 0 and bucket_gen < gen_total * 0.5:
             return _energy_summary(energy, None)
-        flows = dict(flows)
-
-        def _rescale(parts: tuple[str, ...], target: float | None) -> float:
-            total = sum(flows[key] for key in parts)
-            if target is not None and target > 0 and total > 0:
-                factor = target / total
-                for key in parts:
-                    flows[key] *= factor
-                return target
-            return total
-
-        _rescale(("to_home", "to_battery", "to_grid"), gen_total if gen_total > 0 else None)
-        flows["home_total"] = _rescale(
-            ("from_solar", "from_battery", "from_grid"), energy.get("home_energy")
-        )
+        # El mismo ajuste que aplica la pantalla de Energía, compartido para
+        # que las dos den la misma cifra.
+        flows = series_mod.rescale_flows(flows, energy)
     to_load = flows["to_home"]
     to_battery = flows["to_battery"]
     to_grid = flows["to_grid"]

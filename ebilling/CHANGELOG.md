@@ -2,6 +2,27 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.19.0
+
+### Novedades
+
+- **Tema claro, oscuro o automático**, en *Ajustes › Aplicación › Apariencia*.
+  «Automático» sigue al sistema y cambia solo cuando el móvil entra en modo
+  oscuro, sin recargar. La elección se guarda en el add-on, así que es la misma
+  en todos tus dispositivos, y se aplica **antes del primer pintado**: no hay
+  destello del tema contrario al abrir.
+- **La versión del add-on se ve dentro de la app**, en esa misma pantalla. Sirve
+  para comprobar de un vistazo qué versión está corriendo de verdad cuando algo
+  no cuadra tras actualizar.
+
+### Corregido
+
+- **En el día en curso, el desglose no cuadraba con la leyenda.** La leyenda
+  toma el contador y el desglose salía de las estadísticas, que van con hasta
+  cinco minutos de retraso: «Casa 0,67 kWh» arriba y 0,75 en «Origen del
+  consumo». La Home ya ajustaba el reparto al contador; ahora ese ajuste es
+  **el mismo código** para las dos pantallas, así que no pueden separarse.
+
 ## 0.18.9
 
 ### Corregido

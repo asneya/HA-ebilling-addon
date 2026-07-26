@@ -6,6 +6,19 @@
   <title>eBilling</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="static/styles.css">
+  <script>
+    // Tema antes del primer pintado, para que no haya un destello del tema
+    // contrario mientras llega /api/config. La preferencia se guarda en el
+    // servidor (es la misma en todos tus dispositivos) y se refleja aquí para
+    // poder aplicarla ya en el arranque.
+    (function () {
+      var pref = "auto";
+      try { pref = localStorage.getItem("ebilling-theme") || "auto"; } catch (e) {}
+      var dark = pref === "dark" || (pref !== "light" &&
+        window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    })();
+  </script>
 </head>
 <body>
   <!-- Indicador de progreso: visible mientras hay peticiones en vuelo -->
@@ -367,6 +380,17 @@
           </button>
         </div>
 
+        <div class="group-label">Aplicación</div>
+        <div class="panel glass nav-list">
+          <button class="nav-row" data-settings-page="appearance">
+            <span class="nav-ico" style="--ico:#8e8e93">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" fill="none"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></svg>
+            </span>
+            <span class="nav-txt"><b>Apariencia</b><small id="nav-sub-theme">—</small></span>
+            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+
         <div class="group-label">Integración</div>
         <div class="panel glass nav-list">
           <button class="nav-row" data-settings-page="publish">
@@ -514,6 +538,45 @@
             Compatible con Solcast y Forecast.Solar. La previsión se dibuja
             como línea punteada en la vista solar cuando el intervalo incluye
             horas futuras.
+          </p>
+        </div>
+      </div>
+      </div>
+
+      <!-- ---- nivel 2: apariencia ---- -->
+      <div class="settings-page" id="sp-appearance">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Apariencia</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+      <div class="panel glass group">
+        <div class="group-head">Tema</div>
+        <div class="list">
+          <div class="li col">
+            <div class="segmented glass-soft" id="theme-seg" role="group" aria-label="Tema de la aplicación">
+              <button class="seg" data-theme-opt="auto">Automático</button>
+              <button class="seg" data-theme-opt="light">Claro</button>
+              <button class="seg" data-theme-opt="dark">Oscuro</button>
+            </div>
+          </div>
+          <p class="li-note">
+            <b>Automático</b> sigue al sistema: cambia solo cuando tu móvil o tu
+            ordenador entran en modo oscuro. Se aplica al instante y se guarda,
+            así que es el mismo tema en todos tus dispositivos.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">Acerca de</div>
+        <div class="list">
+          <div class="li"><span class="li-label">Versión del add-on</span><span class="li-value" id="about-version">—</span></div>
+          <p class="li-note">
+            Si acabas de actualizar y sigues viendo lo de antes, comprueba aquí
+            que la versión es la que esperas: Home Assistant necesita reiniciar
+            el add-on para aplicar una actualización.
           </p>
         </div>
       </div>

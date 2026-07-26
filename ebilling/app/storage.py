@@ -90,6 +90,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # para dibujar el forecast punteado en la pantalla de Energía cuando el
     # intervalo incluye tiempo futuro.
     "solar_forecast_sensor": "",
+    # Apariencia: «auto» sigue al sistema (el modo oscuro del móvil o del
+    # navegador), «light» y «dark» lo fuerzan.
+    "theme": "auto",
     # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
     # fin inclusivo). Si está definido, es el periodo por defecto de todos los
     # cálculos (comparativa, detalle y sensores). null = ciclo automático.

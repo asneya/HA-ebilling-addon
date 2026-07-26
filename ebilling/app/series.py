@@ -600,6 +600,33 @@ def split_flows(
 
 
 
+def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str, float]:
+    """Escala el reparto para que cada columna cuadre con su contador.
+
+    El reparto se calcula sobre las estadísticas, que van con hasta cinco
+    minutos de retraso respecto al estado del sensor. Sin este ajuste, el total
+    del desglose y el del contador —que es lo que enseña la leyenda, y con lo
+    que el usuario compara— se separan. ``flows`` y ``totals`` en la misma
+    unidad.
+    """
+    out = dict(flows)
+
+    def fit(parts: tuple[str, ...], target: float | None) -> float:
+        total = sum(out[key] for key in parts)
+        if target is not None and target > 0 and total > 0:
+            factor = target / total
+            for key in parts:
+                out[key] *= factor
+            return target
+        return total
+
+    fit(("to_home", "to_battery", "to_grid"), totals.get("pv_energy"))
+    out["home_total"] = fit(
+        ("from_solar", "from_battery", "from_grid"), totals.get("home_energy")
+    )
+    return out
+
+
 def _breakdown_rows(view: str, flows: list[dict[str, float]]) -> list[tuple[str, str, float]]:
     """Filas del desglose según la vista (vacío para batería y red)."""
     def total(key: str) -> float:
@@ -907,6 +934,8 @@ async def _build_power(
     if energy_index is not None:
         totals, by_key = counters(results[energy_index])
         flows = flows_from(with_power(by_key))
+        if flows:
+            flows = rescale_flows(flows, totals)
     elif energy_ids and is_today:
         # Mismos totales y mismo reparto que la Home (cacheados allí), para que
         # las dos pantallas coincidan. Import local: `live` importa este módulo.
@@ -915,7 +944,11 @@ async def _build_power(
         daily = await live.daily_energy(settings, states, tz, now)
         totals = {k: v / 1000.0 for k, v in daily["totals"].items()}
         if daily["flows"]:
-            flows = {k: v / 1000.0 for k, v in daily["flows"].items()}
+            # El mismo ajuste que hace la Home, para que las dos pantallas den
+            # la misma cifra: el contador manda sobre las estadísticas.
+            flows = rescale_flows(
+                {k: v / 1000.0 for k, v in daily["flows"].items()}, totals
+            )
     else:
         # Sin contadores de energía, el reparto sale de integrar las potencias.
         flows = flows_from(with_power({}))
