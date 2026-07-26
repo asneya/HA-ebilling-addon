@@ -466,6 +466,9 @@ SERIES_COUNTER = {
     "grid_import": "grid_import_energy",
     "grid_export": "grid_export_energy",
 }
+# El mismo mapa al revés: de qué curva de potencia se puede sacar cada contador
+# cuando el contador no tiene estadísticas.
+COUNTER_SERIES = {energy: key for key, energy in SERIES_COUNTER.items()}
 
 
 def shares_sensor(cfg: dict[str, str], pos: str, neg: str) -> bool:
@@ -481,6 +484,10 @@ def split_signed_buckets(
         if not shares_sensor(cfg, pos, neg):
             continue
         buckets = dict(data.get(pos) or {})
+        if not buckets:
+            # Sin datos no hay nada que repartir, y crear las dos claves vacías
+            # haría pasar por «cero medido» lo que en realidad es «sin datos».
+            continue
         data[pos] = {k: (v if v > 0 else 0.0) for k, v in buckets.items()}
         data[neg] = {k: (-v if v < 0 else 0.0) for k, v in buckets.items()}
 
@@ -680,7 +687,19 @@ async def _build_power(
         forecast_points = forecast_power(_forecast_states(settings, states), tz)
         forecast_points = [p for p in forecast_points if start <= p[0] <= end]
 
+    # Lo que se dibuja depende de la vista, pero el reparto necesita todas las
+    # magnitudes. Se piden todas las potencias configuradas (va en la misma
+    # petición) y se dibujan solo las de la vista.
+    all_power = [
+        ("solar", flow.get("pv", "")),
+        ("home", flow.get("home", "")),
+        ("battery_charge", flow.get("battery_charge", "")),
+        ("battery_discharge", flow.get("battery_discharge", "")),
+        ("grid_import", flow.get("grid_import", "")),
+        ("grid_export", flow.get("grid_export", "")),
+    ]
     ids = [sensor for _k, _l, sensor in wanted if sensor]
+    power_ids = list(dict.fromkeys(sensor for _k, sensor in all_power if sensor))
     if not ids and not forecast_points:
         return {"unit": "W", "chart": "line", "x": [], "series": [], "breakdown": None}
 
@@ -696,7 +715,7 @@ async def _build_power(
                 "series": [forecast], "breakdown": None}
 
     requests = [
-        {"ids": ids, "start": start, "end": end, "period": "5minute", "types": ["mean"]}
+        {"ids": power_ids, "start": start, "end": end, "period": "5minute", "types": ["mean"]}
     ]
     show_yesterday = view in ("solar", "home")
     if show_yesterday:
@@ -738,29 +757,28 @@ async def _build_power(
     results, units = await ws_statistics(settings, requests)
     main = results[0]
 
-    extracted: list[tuple[str, str, dict[str, float]]] = []
-    for key, label_s, sensor in wanted:
-        if not sensor:
-            continue
-        factor = _unit_factor(sensor, states, "power", units)
-        extracted.append((key, label_s, _extract(main, sensor, "mean", tz, factor)))
-
     # Un sensor bidireccional en las dos casillas se reparte por signo; en el
     # resto, un valor negativo no es una magnitud válida y se trata como cero
     # (si no, el gráfico y su total saldrían por debajo de cero).
-    curves = {key: data for key, _l, data in extracted}
+    curves: dict[str, dict[str, float]] = {}
+    for key, sensor in all_power:
+        if not sensor:
+            continue
+        factor = _unit_factor(sensor, states, "power", units)
+        curves[key] = _extract(main, sensor, "mean", tz, factor)
     split_signed_buckets(curves, flow, POWER_PAIRS)
     curves = {
         key: {k: max(v, 0.0) for k, v in data.items()} for key, data in curves.items()
     }
+    drawn = [(key, label_s) for key, label_s, sensor in wanted if sensor]
 
     # El eje cubre el día completo (00–24) aunque falten datos futuros.
     keys = {moment.isoformat() for moment in _grid(start, end, 5)}
-    keys.update(k for data in curves.values() for k in data)
+    keys.update(k for key, _l in drawn for k in curves.get(key) or {})
     x_keys = _sorted_keys(keys)
     series = [
         _series(key, label_s, _align(x_keys, curves.get(key) or {}))
-        for key, label_s, _data in extracted
+        for key, label_s in drawn
     ]
 
     if show_yesterday and len(results) > 1 and ids:
@@ -800,17 +818,44 @@ async def _build_power(
             )
 
     def counters(result: dict[str, Any]) -> tuple[dict[str, float], dict[str, dict[str, float]]]:
-        """(total por clave, valor por bucket) de los contadores de energía."""
+        """(total por clave, valor por bucket) de los contadores de energía.
+
+        Solo aparecen las claves con estadísticas. Un contador **sin datos** no
+        es un contador que marque cero: si se colara como cero, se enseñaría
+        como un dato medido («ayer no importaste nada») y taparía el respaldo.
+        """
         by_key: dict[str, dict[str, float]] = {}
         for key in energy_keys:
             sensor = energy_cfg.get(key)
             if not sensor:
                 continue
             factor = _unit_factor(sensor, states, "energy", units)
-            by_key[key] = _extract(result, sensor, "change", tz, factor)
+            rows = _extract(result, sensor, "change", tz, factor)
+            if rows:
+                by_key[key] = rows
         split_signed_buckets(by_key, energy_cfg, ENERGY_PAIRS)
         clamp_buckets(by_key)
-        return ({k: sum(v.values()) for k, v in by_key.items()}, by_key)
+        return ({k: sum(v.values()) for k, v in by_key.items() if v}, by_key)
+
+    def with_power(by_key: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+        """Rellena los contadores sin estadísticas integrando su potencia.
+
+        Si no, el reparto daría ese origen por cero y le echaría la culpa al
+        residuo: se veía «0 importada» en la leyenda y «4,2 kWh desde la red»
+        en el desglose, dos cifras que se contradicen. Con el respaldo, las dos
+        salen del mismo sitio.
+        """
+        out = dict(by_key)
+        for energy_key, series_key in COUNTER_SERIES.items():
+            if out.get(energy_key):
+                continue
+            curve = curves.get(series_key)
+            if not curve:
+                continue
+            out[energy_key] = {
+                iso: watts * (5.0 / 60.0) / 1000.0 for iso, watts in curve.items()
+            }
+        return out
 
     def flows_from(by_key: dict[str, dict[str, float]]) -> dict[str, float] | None:
         """Reparto sumado a partir de los incrementos por bucket."""
@@ -842,7 +887,7 @@ async def _build_power(
     totals: dict[str, float] = {}
     if energy_index is not None:
         totals, by_key = counters(results[energy_index])
-        flows = flows_from(by_key)
+        flows = flows_from(with_power(by_key))
     elif energy_ids and is_today:
         # Mismos totales y mismo reparto que la Home (cacheados allí), para que
         # las dos pantallas coincidan. Import local: `live` importa este módulo.
@@ -852,6 +897,9 @@ async def _build_power(
         totals = {k: v / 1000.0 for k, v in daily["totals"].items()}
         if daily["flows"]:
             flows = {k: v / 1000.0 for k, v in daily["flows"].items()}
+    else:
+        # Sin contadores de energía, el reparto sale de integrar las potencias.
+        flows = flows_from(with_power({}))
 
     # Total de la leyenda, por orden de preferencia:
     #
@@ -876,6 +924,10 @@ async def _build_power(
         if base == "home" and not counter:
             deduced = (yesterday_flows if is_yesterday else flows) or {}
             counter = deduced.get("home_total")
+        if counter is None and not any(v is not None for v in item["values"]):
+            # Ni contador ni curva: no hay dato. Un cero aquí sería inventárselo.
+            item["total"] = None
+            continue
         item["total"] = round(counter if counter is not None else integral, 2)
 
     breakdown = _make_breakdown(_breakdown_rows(view, [flows])) if flows else None

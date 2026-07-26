@@ -29,6 +29,16 @@ POWER_KEYS = (
     "home",
 )
 ENERGY_KEYS = series_mod.ENERGY_KEYS
+# Sensor de potencia del que se puede deducir cada contador si el contador no
+# existe o no tiene estadísticas.
+POWER_FOR_ENERGY = {
+    "pv_energy": "pv",
+    "grid_import_energy": "grid_import",
+    "grid_export_energy": "grid_export",
+    "battery_charge_energy": "battery_charge",
+    "battery_discharge_energy": "battery_discharge",
+    "home_energy": "home",
+}
 
 
 def _num(value: Any) -> float | None:
@@ -350,14 +360,19 @@ async def daily_energy(
     flow_cfg = settings.get("flow_sensors") or {}
     mode = settings.get("energy_counters") or "auto"
     ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
-    # Sin contador propio del consumo de la casa, se mide integrando su sensor
-    # de potencia (que ya está configurado en el flujo de energía).
-    home_power = "" if energy_cfg.get("home_energy") else (flow_cfg.get("home") or "")
-    if not ids and not home_power:
+    # Respaldo: el contador que no exista —o que no tenga estadísticas— se mide
+    # integrando su sensor de potencia, que ya está configurado en el flujo de
+    # energía. Sin esto, esa magnitud valdría cero y el reparto se lo achacaría
+    # al residuo: se vería «0 importada» y a la vez «4,2 kWh desde la red».
+    power_of = {
+        key: flow_cfg.get(POWER_FOR_ENERGY[key]) or "" for key in ENERGY_KEYS
+    }
+    power_ids = list(dict.fromkeys(s for s in power_of.values() if s))
+    if not ids and not power_ids:
         return {"totals": {}, "flows": None}
 
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{home_power}"
+    cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{','.join(power_ids)}"
     if (
         _daily_cache["key"] == cache_key
         and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
@@ -380,10 +395,10 @@ async def daily_energy(
             {"ids": ids, "start": start, "end": now, "period": "day", "types": ["change"]}
         )
     power_index = None
-    if home_power:
+    if power_ids:
         power_index = len(requests)
         requests.append(
-            {"ids": [home_power], "start": start, "end": now,
+            {"ids": power_ids, "start": start, "end": now,
              "period": "5minute", "types": ["mean"]}
         )
 
@@ -405,9 +420,26 @@ async def daily_energy(
         entity = energy_cfg.get(key)
         if entity:
             factor = series_mod._unit_factor(entity, states, "energy", units)
-            by_key[key] = series_mod._extract(detailed, entity, "change", tz, factor)
+            rows = series_mod._extract(detailed, entity, "change", tz, factor)
+            if rows:
+                by_key[key] = rows
     series_mod.split_signed_buckets(by_key, energy_cfg, series_mod.ENERGY_PAIRS)
     series_mod.clamp_buckets(by_key)
+
+    # Curvas de potencia (W por bucket de 5 min) para el respaldo.
+    curves: dict[str, dict[str, float]] = {}
+    if power_index is not None and power_index < len(results):
+        for key, entity in power_of.items():
+            if not entity:
+                continue
+            factor = series_mod._unit_factor(entity, states, "power", units)
+            curves[POWER_FOR_ENERGY[key]] = series_mod._extract(
+                results[power_index], entity, "mean", tz, factor
+            )
+        series_mod.split_signed_buckets(curves, flow_cfg, series_mod.POWER_PAIRS)
+        curves = {
+            k: {i: max(w, 0.0) for i, w in data.items()} for k, data in curves.items()
+        }
     signed_keys = {
         key
         for pos, neg in series_mod.ENERGY_PAIRS
@@ -450,18 +482,18 @@ async def daily_energy(
         else:
             out[key] = computed
 
-    # Consumo de la casa por integración de su potencia media (Wh).
-    if power_index is not None and power_index < len(results):
-        factor = series_mod._unit_factor(home_power, states, "power", units)
-        means = series_mod._extract(results[power_index], home_power, "mean", tz, factor)
-        # Si el sensor está invertido (integral negativa) no vale como medida:
-        # se deja sin poner y el consumo se deduce por balance más abajo. Si
-        # solo hay algún bucket negativo, se recorta para que no reste.
-        if means and sum(means.values()) > 0:
-            means = {iso: max(watts, 0.0) for iso, watts in means.items()}
-            out["home_energy"] = sum(means.values()) * (5.0 / 60.0)
-            for iso, watts in means.items():
-                per_bucket.setdefault(iso, {})["home_energy"] = watts * (5.0 / 60.0) / 1000.0
+    # Contadores que no han dado nada: se integra su potencia media (Wh). Una
+    # media negativa (sensor invertido) no resta; si toda la curva es negativa,
+    # el sensor no vale y esa magnitud se queda sin dato.
+    for key, entity in power_of.items():
+        if not entity or out.get(key) is not None:
+            continue
+        means = curves.get(POWER_FOR_ENERGY[key]) or {}
+        if not means or sum(means.values()) <= 0:
+            continue
+        out[key] = sum(means.values()) * (5.0 / 60.0)
+        for iso, watts in means.items():
+            per_bucket.setdefault(iso, {})[key] = watts * (5.0 / 60.0) / 1000.0
 
     # Último filtro: un contador puede dar un total negativo (sensor con el
     # signo invertido, o un reinicio que las estadísticas cuentan como
