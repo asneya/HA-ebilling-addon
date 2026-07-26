@@ -2,6 +2,31 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.20.0
+
+### Novedades
+
+- **Diagnóstico** en *Ajustes › Aplicación*: el **balance de energía del día**,
+  sensor a sensor. Todo lo que entra (generación, importación, descarga) frente a
+  todo lo que sale (consumo de la casa, exportación, carga), con el nombre de
+  cada sensor, de dónde sale su cifra —el estado, las estadísticas o la integral
+  de su potencia— y la diferencia.
+- Si el balance **no cuadra**, lo dice y explica qué significa: sobra energía
+  cuando el consumo de la casa se queda corto o cuando la descarga y la
+  importación se cuentan de más, y falta al contrario. Ningún reparto puede
+  arreglar un sensor que no mide lo que crees, así que lo único honesto es
+  enseñar la diferencia y de dónde sale cada cifra.
+
+### Corregido
+
+- **El contador de la red queda explicado del todo.** La nota del resumen («X kWh
+  de lo importado fue a cargar la batería») se calculaba sumando el reparto por
+  intervalos, por su cuenta, así que podía separarse de la lectura del contador y
+  quedaba un hueco: el nodo decía 8,0 importados, la fila «Desde la red» 1,5 y la
+  nota 6,0, y eso son 7,5. Ahora se calcula **restando del contador**, de modo
+  que el nodo, la fila y la nota cuadran siempre entre sí. Lo mismo con lo
+  vertido y la parte que sale de la batería.
+
 ## 0.19.2
 
 ### Corregido

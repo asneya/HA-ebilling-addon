@@ -248,6 +248,37 @@ Se abre pulsando el **resumen de energía** de la Home.
   destino de la generación, con barra apilada y porcentajes. En el día en curso
   son exactamente los mismos totales que muestra la Home.
 
+## Diagnóstico
+
+En **Ajustes → Diagnóstico** está el **balance de energía del día**: todo lo que
+entra en la instalación frente a todo lo que sale.
+
+| Entra | Sale |
+|---|---|
+| Generación solar | Consumo de la casa |
+| Importada de la red | Exportada a la red |
+| Descarga de la batería | Carga de la batería |
+
+Las dos columnas tienen que sumar lo mismo: la energía no desaparece. Junto a
+cada cifra se indica **qué sensor** la ha dado y **de dónde sale** (el estado del
+sensor, sus estadísticas del `recorder`, o la integral de su potencia cuando no
+hay contador que leer).
+
+Si no cuadra, el add-on lo dice y con qué signo:
+
+- **Entra más de lo que sale**: o el sensor del consumo de la casa se queda corto
+  —es lo más común: una pinza que no cubre todos los circuitos—, o la descarga de
+  la batería y la importación se están contando de más.
+- **Sale más de lo que entra**: o el consumo de la casa se pasa, o la generación
+  y la importación se cuentan de menos.
+
+Esto importa porque **ningún reparto puede arreglar un sensor que no mide lo que
+crees**: el add-on ajusta las filas para que sumen el total de su contador, así
+que si un contador miente el error se reparte entre los orígenes. El diagnóstico
+es el sitio donde se ve la causa en lugar del síntoma. Un margen de hasta el 5 %
+se considera normal (los contadores no son idénticos y las estadísticas van con
+unos minutos de retraso).
+
 ## Apariencia
 
 En **Ajustes → Apariencia** eliges el tema:
