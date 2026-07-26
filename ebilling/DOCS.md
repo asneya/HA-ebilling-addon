@@ -48,7 +48,8 @@ con un contador así, semana, mes y año se calculan con resolución horaria. En
 «Sin datos» y «cero» no son lo mismo, y el add-on no los confunde. Si un
 contador está configurado pero **no tiene estadísticas** para el periodo que
 estás mirando (el `recorder` no las guarda, el sensor es nuevo, o no tiene
-`state_class`), esa lectura no se enseña como un cero:
+`state_class`) —o si **marca cero** mientras su sensor de potencia lleva horas
+midiendo—, esa lectura no se enseña como un dato:
 
 1. Se deduce **integrando el sensor de potencia** de esa misma magnitud, el que
    ya tienes en «Flujo de energía». Es una aproximación, pero es un dato.
