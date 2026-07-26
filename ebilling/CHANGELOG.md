@@ -2,6 +2,27 @@
 
 Todas las versiones relevantes del add-on eBilling.
 
+## 0.18.7
+
+### Corregido
+
+- **Un contador sin estadísticas se enseñaba como un cero medido.** Si un sensor
+  de energía está configurado pero el `recorder` no guarda estadísticas suyas
+  para ese periodo, la lectura salía como `0` y se presentaba con la misma
+  autoridad que un dato real: la leyenda decía «Importada 0 kWh» mientras el
+  desglose, justo debajo, repartía kWh «desde la red». Dos cifras que se
+  contradicen. Ahora **«sin datos» y «cero» son cosas distintas**.
+- **Respaldo desde la potencia.** En el rango de día y en la Home, el contador
+  que no tenga estadísticas se deduce **integrando su sensor de potencia**, que
+  ya está configurado en el flujo de energía. Así la leyenda y el reparto salen
+  de la misma cifra en lugar de que una valga cero y la otra tenga que
+  inventarse un residuo. Se piden todas las potencias configuradas, no solo las
+  de la vista, para que el reparto no dependa de qué gráfico estés mirando.
+- **Si no hay nada que leer, no se enseña un número.** Una magnitud sin contador
+  y sin sensor de potencia muestra «--» en la leyenda en vez de un cero.
+- Con solo sensores de **potencia** y ningún contador de energía, el rango de
+  día ya muestra el desglose (antes se quedaba vacío).
+
 ## 0.18.6
 
 ### Corregido

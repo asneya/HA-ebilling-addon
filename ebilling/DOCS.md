@@ -43,6 +43,27 @@ siempre de las estadísticas y el reparto por signo se hace **antes** de agrupar
 con un contador así, semana, mes y año se calculan con resolución horaria. En
 **Total** (diez años) se reparte por días y las cifras son aproximadas.
 
+### Cuando falta un dato
+
+«Sin datos» y «cero» no son lo mismo, y el add-on no los confunde. Si un
+contador está configurado pero **no tiene estadísticas** para el periodo que
+estás mirando (el `recorder` no las guarda, el sensor es nuevo, o no tiene
+`state_class`), esa lectura no se enseña como un cero:
+
+1. Se deduce **integrando el sensor de potencia** de esa misma magnitud, el que
+   ya tienes en «Flujo de energía». Es una aproximación, pero es un dato.
+2. Si tampoco hay potencia, la leyenda muestra **«--»**.
+
+Esto importa porque un cero falso no se queda quieto: el reparto lo da por
+bueno y le echa la culpa al residuo, y acabas viendo «0 importada» arriba y
+«4,2 kWh desde la red» abajo. Con el respaldo, las dos cifras salen del mismo
+sitio.
+
+Si una magnitud sale como «--» o muy por debajo de lo que esperas, mira si su
+sensor aparece en **Ajustes › Desarrollador › Estadísticas** de Home Assistant:
+un sensor sin `state_class` no genera estadísticas y solo se puede leer por su
+potencia.
+
 ### Valores negativos
 
 La potencia y la energía que muestra el add-on son **magnitudes**: nunca son
