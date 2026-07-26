@@ -97,8 +97,9 @@ function showSettingsPage(page) {
   $$("#view-settings .settings-page").forEach((p) => {
     p.classList.toggle("active", p.id === `sp-${page || "root"}`);
   });
-  // El botón de guardar no tiene sentido en el índice ni en la lista de tarifas.
-  const hideSave = !page || page === "tariffs";
+  // El botón de guardar no tiene sentido en el índice, en la lista de tarifas
+  // ni en apariencia (el tema se aplica y se guarda al pulsarlo).
+  const hideSave = !page || page === "tariffs" || page === "appearance";
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   if (page === "tariffs") renderTariffsList();
@@ -1493,6 +1494,9 @@ function renderSettingsIndex(s) {
   $("#nav-sub-publish").textContent = s.export_sensors === false
     ? "Desactivado"
     : `Cada ${s.sensor_update_minutes ?? 5} min`;
+  $("#nav-sub-theme").textContent = THEMES[s.theme] || THEMES.auto;
+  $("#about-version").textContent = state.config?.version
+    ? `v${state.config.version}` : "—";
 }
 
 function fillSettings() {
@@ -1509,6 +1513,7 @@ function fillSettings() {
   $("#s-export-sensors").checked = s.export_sensors !== false;
   $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
   $("#s-energy-counters").value = s.energy_counters || "auto";
+  applyTheme(s.theme);
   renderSettingsIndex(s);
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
@@ -1726,7 +1731,53 @@ $("#load-entities-btn").addEventListener("click", loadEntities);
 $("#load-grouped-btn").addEventListener("click", loadGroupedEntities);
 $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
 
-async function reloadConfig() { state.config = await api("config"); }
+async function reloadConfig() {
+  state.config = await api("config");
+  applyTheme(state.config?.settings?.theme);
+}
+
+/* ========================= tema ========================= */
+
+const THEMES = { auto: "Automático", light: "Claro", dark: "Oscuro" };
+
+// El tema vive en Ajustes (servidor) y se refleja en localStorage para que el
+// script de la cabecera pueda aplicarlo antes del primer pintado. «auto» se
+// resuelve aquí: en el CSS `data-theme` siempre vale «light» o «dark».
+function applyTheme(pref) {
+  const choice = THEMES[pref] ? pref : "auto";
+  const dark = choice === "dark" || (choice !== "light" && prefersDark());
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  try { localStorage.setItem("ebilling-theme", choice); } catch (e) { /* modo privado */ }
+  $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
+  const sub = $("#nav-sub-theme");
+  if (sub) sub.textContent = THEMES[choice];
+}
+
+function prefersDark() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+$$("#theme-seg .seg").forEach((button) =>
+  button.addEventListener("click", async () => {
+    const pref = button.dataset.themeOpt;
+    applyTheme(pref);                       // inmediato, sin esperar al servidor
+    if (state.config?.settings) state.config.settings.theme = pref;
+    try {
+      await api("settings", { method: "PUT", body: JSON.stringify({ theme: pref }) });
+    } catch (err) {
+      $("#settings-status").textContent = `No se pudo guardar el tema: ${err.message}`;
+    }
+  }));
+
+// Con «automático», seguir al sistema cuando cambia sin recargar la página.
+if (window.matchMedia) {
+  const query = window.matchMedia("(prefers-color-scheme: dark)");
+  const follow = () => {
+    if ((state.config?.settings?.theme || "auto") === "auto") applyTheme("auto");
+  };
+  if (query.addEventListener) query.addEventListener("change", follow);
+  else if (query.addListener) query.addListener(follow);
+}
 
 /* ========================= arranque ========================= */
 

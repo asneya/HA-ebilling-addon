@@ -237,6 +237,21 @@ Se abre pulsando el **resumen de energía** de la Home.
   destino de la generación, con barra apilada y porcentajes. En el día en curso
   son exactamente los mismos totales que muestra la Home.
 
+## Apariencia
+
+En **Ajustes → Apariencia** eliges el tema:
+
+| Opción | Qué hace |
+|---|---|
+| **Automático** (por defecto) | Sigue al sistema: cambia solo cuando tu móvil o tu ordenador entran en modo oscuro, sin recargar la página. |
+| **Claro** | Fuerza el tema claro aunque el sistema esté en oscuro. |
+| **Oscuro** | Fuerza el tema oscuro aunque el sistema esté en claro. |
+
+Se aplica al instante y se guarda en el add-on, así que es el mismo tema en
+todos tus dispositivos. En esa misma pantalla se muestra la **versión del
+add-on**, útil para comprobar qué versión está corriendo de verdad después de
+una actualización (Home Assistant necesita reiniciar el add-on para aplicarla).
+
 ## Primeros pasos
 
 Al arrancar, el add-on funciona en **modo demo** con datos sintéticos para que

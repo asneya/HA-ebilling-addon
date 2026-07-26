@@ -48,19 +48,24 @@
   color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #f2f5fb;
-    --ink-2: #c2cade;
-    --ink-3: #98a1b6;
-    --glass: rgba(24, 27, 35, .80);
-    --glass-2: rgba(40, 44, 55, .66);
-    --glass-brd: rgba(255, 255, 255, .14);
-    --glass-shadow: 0 10px 34px rgba(0, 0, 0, .40);
-    --sep: rgba(255, 255, 255, .12);
-    --switch-off: #4a505e;
-  }
+/* El tema cuelga de `data-theme` en <html>, que fija un script en la cabecera
+   antes del primer pintado: «auto» se resuelve con prefers-color-scheme y
+   «light»/«dark» lo fuerzan desde Ajustes. Al resolverse siempre a un valor
+   concreto, la paleta oscura vive en un único sitio. */
+:root[data-theme="dark"] {
+  --ink: #f2f5fb;
+  --ink-2: #c2cade;
+  --ink-3: #98a1b6;
+  --glass: rgba(24, 27, 35, .80);
+  --glass-2: rgba(40, 44, 55, .66);
+  --glass-brd: rgba(255, 255, 255, .14);
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, .40);
+  --sep: rgba(255, 255, 255, .12);
+  --switch-off: #4a505e;
+  color-scheme: dark;
 }
+
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
@@ -620,6 +625,12 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 }
 .li.col { flex-direction: column; align-items: stretch; gap: 6px; }
 .li-label { flex: 0 0 44%; color: var(--ink-2); font-size: 15px; }
+/* Valor de sólo lectura (versión del add-on y similares). */
+.li-value { margin-left: auto; color: var(--ink); font-size: 15px; font-weight: 650;
+  font-variant-numeric: tabular-nums; }
+/* El control segmentado dentro de una fila ocupa el ancho y no arrastra el
+   margen inferior que lleva cuando va suelto en una cabecera. */
+.li.col > .segmented { width: 100%; margin: 0; }
 .li input, .li select { flex: 1 1 auto; min-width: 0; }
 .li input[type="checkbox"] { flex: 0 0 auto; margin-left: auto; }
 .li-note {
@@ -665,7 +676,8 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--glass-2); color: var(--ink-2); white-space: nowrap; }
 .badge.best { background: rgba(48, 209, 88, .18); color: #0f9b45; }
 .badge.extra { background: rgba(255, 69, 58, .16); color: #d13b32; }
-@media (prefers-color-scheme: dark) { .badge.best { color: var(--good); } .badge.extra { color: #ff7a70; } }
+:root[data-theme="dark"] .badge.best { color: var(--good); }
+:root[data-theme="dark"] .badge.extra { color: #ff7a70; }
 .bill-total { font-size: 27px; font-weight: 700; letter-spacing: -.7px; margin: 9px 0 1px; }
 .bill-total small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .bill-sub { font-size: 12.5px; color: var(--ink-3); }
