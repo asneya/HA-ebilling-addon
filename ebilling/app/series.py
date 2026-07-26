@@ -531,9 +531,10 @@ def split_flows(
     batería por encima de lo generado viene de la red.
 
     Si hay una **medida directa del consumo de la casa** (``home_measured``) se
-    usa como total y los orígenes se reparten hasta cubrirlo, de modo que las
-    filas siempre suman exactamente el total. Sin ella (``None``), el consumo se
-    deduce por balance.
+    usa como total y los orígenes se reparten **a prorrata de lo que cada
+    contador dice haber aportado**, hasta cubrirlo: así las filas suman
+    exactamente el total y ningún origen desaparece porque los otros lleguen
+    antes. Sin ella (``None``), el consumo se deduce por balance.
 
     Un cero **sí** es una medida: si en ese intervalo el contador dice que la
     casa no ha consumido, no hay que deducir nada. Deducirlo hacía que la suma
@@ -555,9 +556,27 @@ def split_flows(
 
     if home_measured is not None and home_measured >= 0:
         home_total = home_measured
-        from_solar = min(to_home, home_total)
-        from_battery = min(discharge, max(home_total - from_solar, 0.0))
-        from_grid = max(home_total - from_solar - from_battery, 0.0)
+        # Lo que cada origen pudo aportar a la casa, según su contador: el sol
+        # que no se vertió ni cargó la batería, toda la descarga, y lo
+        # importado que no acabó en la batería.
+        supply = (to_home, discharge, max(imported - grid_to_battery, 0.0))
+        offered = sum(supply)
+        if offered >= home_total and offered > 0:
+            # Sobra oferta: se reparte a prorrata. Con contadores coherentes la
+            # oferta es exactamente el consumo y el factor vale 1, así que esto
+            # no cambia nada. Cuando no cuadran, el desajuste se reparte entre
+            # los tres en lugar de caerle entero al último de la cola: antes se
+            # rellenaba solar → batería → red y, si esos dos ya cubrían el
+            # consumo, la red se quedaba a cero **aunque su contador dijera lo
+            # contrario**, y esos kWh importados no aparecían por ningún lado.
+            factor = home_total / offered
+            from_solar, from_battery, from_grid = (part * factor for part in supply)
+        else:
+            # Falta oferta: lo que los contadores no explican se le atribuye a
+            # la red, que es lo único que puede aportar sin que lo veamos.
+            from_solar = to_home
+            from_battery = discharge
+            from_grid = max(home_total - to_home - discharge, 0.0)
     else:
         from_solar = to_home
         from_battery = discharge
