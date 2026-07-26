@@ -1,5 +1,5 @@
 /*
- * eBilling Power Flow — tarjeta Lovelace de flujo de energía fotovoltaica
+ * Vatia Power Flow — tarjeta Lovelace de flujo de energía fotovoltaica
  *
  * Layout en cruz (Solar arriba · Red izq. · Casa der. · Batería abajo) con
  * enrutado ortogonal de esquinas redondeadas, una bola por línea, líneas
@@ -7,8 +7,8 @@
  * con tooltip, e iconos vectoriales (la batería refleja su nivel de carga).
  *
  * Instalación:
- *   - HACS: recurso /hacsfiles/HA-ebilling-addon/ebilling-power-flow.js
- *   - Manual: copia a /config/www/ y añade /local/ebilling-power-flow.js
+ *   - HACS: recurso /hacsfiles/HA-ebilling-addon/vatia-power-flow.js
+ *   - Manual: copia a /config/www/ y añade /local/vatia-power-flow.js
  */
 
 // Todo el módulo va dentro de un IIFE: al cargarse como recurso Lovelace
@@ -133,7 +133,7 @@ function pfIcon(cx, cy, type, color, scale = 1) {
 
 /* ---------------------------- tarjeta ---------------------------- */
 
-class EBillingPowerFlow extends HTMLElement {
+class VatiaPowerFlow extends HTMLElement {
   setConfig(config) {
     this._config = Object.assign({ title: "Flujo de energía", entities: {}, colors: {} }, config || {});
     this._built = false;
@@ -143,7 +143,7 @@ class EBillingPowerFlow extends HTMLElement {
   set hass(hass) { this._hass = hass; this._update(); }
   getCardSize() { return 8; }
   static getStubConfig() { return { title: "Flujo de energía", entities: {}, colors: {} }; }
-  static getConfigElement() { return document.createElement("ebilling-power-flow-editor"); }
+  static getConfigElement() { return document.createElement("vatia-power-flow-editor"); }
 
   _color(key) {
     const c = (this._config.colors || {})[key];
@@ -233,7 +233,7 @@ class EBillingPowerFlow extends HTMLElement {
   // sensores de energía). Se persiste como máximo cada 30 s.
   _accumulate(v) {
     let d;
-    try { d = JSON.parse(localStorage.getItem("ebilling_pf_daily") || "{}"); } catch (_) { d = {}; }
+    try { d = JSON.parse(localStorage.getItem("vatia_pf_daily") || "{}"); } catch (_) { d = {}; }
     const today = new Date().toLocaleDateString("sv");
     if (d.date !== today) d = { date: today, solar: 0, grid: 0, battery: 0, ts: Date.now() };
     const now = Date.now();
@@ -246,7 +246,7 @@ class EBillingPowerFlow extends HTMLElement {
     d.ts = now;
     if (now - this._lastWrite > 30000) {
       this._lastWrite = now;
-      try { localStorage.setItem("ebilling_pf_daily", JSON.stringify(d)); } catch (_) { /* noop */ }
+      try { localStorage.setItem("vatia_pf_daily", JSON.stringify(d)); } catch (_) { /* noop */ }
     }
     this._mem = d;
     return d;
@@ -429,7 +429,7 @@ class EBillingPowerFlow extends HTMLElement {
     }).join("");
 
     card.innerHTML = `
-      <style>${EBillingPowerFlow.styles}</style>
+      <style>${VatiaPowerFlow.styles}</style>
       <div class="pf-wrap">
         ${this._config.title ? `<div class="pf-title">${this._esc(this._config.title)}</div>` : ""}
         <svg data-el="svg" viewBox="0 0 400 420" class="pf-svg" role="img">
@@ -471,7 +471,7 @@ class EBillingPowerFlow extends HTMLElement {
   }
 }
 
-EBillingPowerFlow.styles = `
+VatiaPowerFlow.styles = `
   .pf-wrap { padding: 14px 12px 12px; }
   .pf-title { font-size: 1.1rem; font-weight: 600; color: var(--primary-text-color); padding: 2px 6px 6px; }
   .pf-svg { width: 100%; height: auto; max-width: 470px; display: block; margin: 0 auto;
@@ -493,7 +493,7 @@ EBillingPowerFlow.styles = `
 
 /* ------------------------- editor visual ------------------------- */
 
-class EBillingPowerFlowEditor extends HTMLElement {
+class VatiaPowerFlowEditor extends HTMLElement {
   setConfig(config) { this._config = Object.assign({ entities: {}, colors: {} }, config || {}); this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
 
@@ -584,19 +584,28 @@ class EBillingPowerFlowEditor extends HTMLElement {
 }
 
 // Evita redefinir si el recurso se carga dos veces (caché/HACS + manual).
-if (!customElements.get("ebilling-power-flow")) {
-  customElements.define("ebilling-power-flow", EBillingPowerFlow);
-  customElements.define("ebilling-power-flow-editor", EBillingPowerFlowEditor);
+if (!customElements.get("vatia-power-flow")) {
+  customElements.define("vatia-power-flow", VatiaPowerFlow);
+  customElements.define("vatia-power-flow-editor", VatiaPowerFlowEditor);
 
   window.customCards = window.customCards || [];
   window.customCards.push({
-    type: "ebilling-power-flow",
-    name: "eBilling — Flujo de energía",
+    type: "vatia-power-flow",
+    name: "Vatia — Flujo de energía",
     description: "Diagrama animado del flujo de potencia entre solar, red, batería y casa.",
     preview: true,
   });
 
-  console.info("%c eBilling-power-flow %c v0.14 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+  console.info("%c vatia-power-flow %c v0.15 ", "background:#f5a524;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#10b981;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+}
+
+// La tarjeta se llamaba «ebilling-power-flow». Se mantiene el nombre antiguo
+// como alias para que los dashboards que ya la usan sigan funcionando al
+// actualizar el recurso, sin tener que editar cada tarjeta a mano. No aparece
+// en el selector de tarjetas: para las nuevas, «vatia-power-flow».
+if (!customElements.get("ebilling-power-flow")) {
+  customElements.define("ebilling-power-flow", class extends VatiaPowerFlow {});
+  customElements.define("ebilling-power-flow-editor", class extends VatiaPowerFlowEditor {});
 }
 
 })();

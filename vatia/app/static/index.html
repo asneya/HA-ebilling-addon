@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>eBilling</title>
+  <title>Vatia</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="static/styles.css">
   <script>
@@ -13,7 +13,7 @@
     // poder aplicarla ya en el arranque.
     (function () {
       var pref = "auto";
-      try { pref = localStorage.getItem("ebilling-theme") || "auto"; } catch (e) {}
+      try { pref = localStorage.getItem("vatia-theme") || "auto"; } catch (e) {}
       var dark = pref === "dark" || (pref !== "light" &&
         window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
@@ -33,7 +33,7 @@
         </span>
         <span class="boot-ring" aria-hidden="true"></span>
       </div>
-      <p class="boot-name">eBilling</p>
+      <p class="boot-name">Vatia</p>
       <p class="boot-text" id="boot-text">Conectando con Home Assistant…</p>
     </div>
   </div>
@@ -703,7 +703,7 @@
             <input type="checkbox" id="s-export-sensors" class="ios-switch">
           </label>
           <label class="li"><span class="li-label">Intervalo (min)</span><input id="s-sensor-minutes" type="number" min="1" max="60"></label>
-          <p class="li-note">Crea entidades <code>sensor.ebilling_*</code> con el precio actual, el coste del ciclo, la proyección y la mejor tarifa.</p>
+          <p class="li-note">Crea entidades <code>sensor.vatia_*</code> con el precio actual, el coste del ciclo, la proyección y la mejor tarifa.</p>
         </div>
       </div>
       </div>

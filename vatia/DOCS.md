@@ -1,4 +1,8 @@
-# eBilling — Documentación
+# Vatia — Documentación
+
+> **Antes se llamaba eBilling.** Si vienes de ahí, mira
+> [Venir de eBilling](#venir-de-ebilling) antes de nada: Home Assistant trata
+> Vatia como un add-on nuevo y hay tres cosas que mover.
 
 ## La aplicación
 
@@ -294,12 +298,39 @@ todos tus dispositivos. En esa misma pantalla se muestra la **versión del
 add-on**, útil para comprobar qué versión está corriendo de verdad después de
 una actualización (Home Assistant necesita reiniciar el add-on para aplicarla).
 
+## Venir de eBilling
+
+El add-on se llamaba **eBilling**. Home Assistant identifica los add-ons por su
+`slug`, así que al cambiarlo lo trata como un add-on **nuevo**: no llega como
+actualización y no se lleva nada consigo. Hay tres cosas que mover.
+
+**1. La configuración.** Copia el fichero `ebilling.json` de los datos del
+add-on antiguo a los del nuevo (con el add-on de *Terminal & SSH*, *Samba* o
+*Advanced SSH*; están en `/addon_configs/` o en el directorio de datos del
+add-on, según tu instalación). Vatia lo reconoce por su nombre de antes, **lo
+adopta tal cual** y lo reescribe como `vatia.json`. No hay que editar nada
+dentro. Si prefieres no tocar ficheros, reconfigúralo a mano: son cuatro
+pantallas.
+
+**2. Los sensores.** Pasan de `sensor.ebilling_*` a `sensor.vatia_*`. Los
+antiguos desaparecen solos al reiniciar Home Assistant, porque se publican por
+la API de estados y no quedan registrados. Si los usas en automatizaciones,
+plantillas o tarjetas, cambia el nombre.
+
+**3. Las tarjetas Lovelace.** El fichero cambia: actualiza el recurso a
+`vatia-power-flow.js` y `vatia-card.js` en *Ajustes → Paneles → Recursos*. **Las
+tarjetas que ya tengas puestas siguen funcionando**: los nombres antiguos
+(`ebilling-power-flow` y `ebilling-card`) se mantienen como alias precisamente
+para no tener que editarlas una a una. Para las nuevas, usa los nuevos.
+
+Cuando compruebes que todo está en su sitio, desinstala eBilling.
+
 ## Primeros pasos
 
 Al arrancar, el add-on funciona en **modo demo** con datos sintéticos para que
 puedas explorar la interfaz. Para usar tu consumo real:
 
-1. Abre **eBilling** en la barra lateral.
+1. Abre **Vatia** en la barra lateral.
 2. Ve a **Ajustes → Fuente de datos** y elige *Home Assistant*.
 3. Pulsa **Buscar sensores** y selecciona tu sensor de energía acumulada
    (kWh, normalmente el mismo que usas en el panel de Energía).
@@ -396,14 +427,14 @@ ofrezca un **monedero o batería virtual**, que lo acumula como saldo para usar
 en otras facturas.
 
 Activa la casilla **Monedero / batería virtual** en la tarifa (dentro de
-Compensación de excedentes) y eBilling calculará ese «exceso de excedentes»
+Compensación de excedentes) y Vatia calculará ese «exceso de excedentes»
 **aparte**: aparece como un saldo (`+X €`) en la tarjeta y en la factura
 detallada, sin reducir el total de la factura del ciclo. Si la tarifa no tiene
 monedero, ese mismo importe se muestra como *excedente no compensado*
 (informativo, se pierde).
 
 Si publicas sensores, las tarifas con monedero exponen además
-`sensor.ebilling_<tarifa>_monedero` con el saldo generado en el ciclo.
+`sensor.vatia_<tarifa>_monedero` con el saldo generado en el ciclo.
 
 ### Conceptos comunes
 
@@ -450,12 +481,12 @@ Si activas **Publicar sensores** en Ajustes, el add-on crea y actualiza
 
 | Entidad | Descripción |
 |---|---|
-| `sensor.ebilling_<tarifa>_precio` | Precio del término de energía **ahora** (€/kWh) |
-| `sensor.ebilling_<tarifa>_precio_excedente` | Precio de compensación ahora (si aplica) |
-| `sensor.ebilling_<tarifa>_coste_ciclo` | Coste acumulado del ciclo actual (€) |
-| `sensor.ebilling_<tarifa>_proyeccion` | Coste estimado a fin de ciclo (€) |
-| `sensor.ebilling_mejor_tarifa` | Nombre de la tarifa más barata |
-| `sensor.ebilling_ahorro_potencial` | Diferencia € entre la más cara y la más barata |
+| `sensor.vatia_<tarifa>_precio` | Precio del término de energía **ahora** (€/kWh) |
+| `sensor.vatia_<tarifa>_precio_excedente` | Precio de compensación ahora (si aplica) |
+| `sensor.vatia_<tarifa>_coste_ciclo` | Coste acumulado del ciclo actual (€) |
+| `sensor.vatia_<tarifa>_proyeccion` | Coste estimado a fin de ciclo (€) |
+| `sensor.vatia_mejor_tarifa` | Nombre de la tarifa más barata |
+| `sensor.vatia_ahorro_potencial` | Diferencia € entre la más cara y la más barata |
 
 `<tarifa>` es el nombre de la tarifa en minúsculas y sin espacios. El
 intervalo de actualización es configurable (por defecto 5 minutos). Con estos
@@ -498,4 +529,4 @@ detalle por día/hora deja ver exactamente dónde.
 | `log_level` | `debug`, `info`, `warning` o `error` |
 
 Toda la configuración funcional (fuente, tarifas, contrato) se gestiona desde
-la propia interfaz y se guarda en `/data/ebilling.json`.
+la propia interfaz y se guarda en `/data/vatia.json`.

@@ -14,7 +14,13 @@ import tariffs as tariffs_mod
 _LOGGER = logging.getLogger(__name__)
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
-CONFIG_PATH = os.path.join(DATA_DIR, "ebilling.json")
+CONFIG_PATH = os.path.join(DATA_DIR, "vatia.json")
+# El add-on se llamaba «eBilling». Al cambiar el slug, Home Assistant lo trata
+# como un add-on distinto y le da un /data vacío, así que la configuración no
+# viaja sola: hay que copiar el fichero antiguo a mano. Si aparece con su nombre
+# de antes se adopta tal cual y se reescribe con el nuevo, para que copiarlo sea
+# todo lo que haya que hacer.
+LEGACY_CONFIG_PATH = os.path.join(DATA_DIR, "ebilling.json")
 
 _lock = threading.Lock()
 
@@ -190,12 +196,19 @@ def _normalize_tariffs(raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def load() -> dict[str, Any]:
     with _lock:
-        if not os.path.exists(CONFIG_PATH):
-            config = _default_config()
-            _write(config)
-            return config
+        path = CONFIG_PATH
+        if not os.path.exists(path):
+            if os.path.exists(LEGACY_CONFIG_PATH):
+                _LOGGER.info(
+                    "Adoptando la configuración de eBilling (%s)", LEGACY_CONFIG_PATH
+                )
+                path = LEGACY_CONFIG_PATH
+            else:
+                config = _default_config()
+                _write(config)
+                return config
         try:
-            with open(CONFIG_PATH, encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 config = json.load(fh)
         except (OSError, ValueError):
             config = _default_config()
@@ -216,10 +229,15 @@ def load() -> dict[str, Any]:
             merged = dict(defaults["settings"][key])
             merged.update(stored_nested[key])
             settings[key] = merged
-        return {
+        merged_config = {
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
         }
+        if path is not CONFIG_PATH:
+            # Se ha adoptado la configuración antigua: se guarda con el nombre
+            # nuevo para no volver a leerla del fichero de eBilling.
+            _write(merged_config)
+        return merged_config
 
 
 def _write(config: dict[str, Any]) -> None:

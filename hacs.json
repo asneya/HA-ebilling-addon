@@ -1,6 +1,6 @@
 {
-  "name": "eBilling Card",
-  "filename": "ebilling-card.js",
+  "name": "Vatia Card",
+  "filename": "vatia-card.js",
   "render_readme": true,
   "homeassistant": "2024.1.0"
 }

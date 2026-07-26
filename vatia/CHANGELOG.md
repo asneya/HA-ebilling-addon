@@ -1,6 +1,40 @@
 # Changelog
 
-Todas las versiones relevantes del add-on eBilling.
+Todas las versiones relevantes del add-on Vatia.
+
+## 0.21.0
+
+### El add-on ahora se llama Vatia
+
+«eBilling» describía lo que fue al principio —un simulador de factura— y no lo
+que es: un monitor de energía en tiempo real con reparto por origen, batería,
+previsión solar y diagnóstico de sensores, donde la factura es una pantalla de
+tres. Y era un nombre en inglés, genérico (así llaman las eléctricas a la
+factura electrónica) e imposible de buscar. **Vatia** viene de «vatio».
+
+El cambio es completo: el add-on, su interfaz, los sensores que publica, las
+tarjetas Lovelace y la documentación.
+
+### Qué tienes que hacer al actualizar
+
+Home Assistant identifica los add-ons por su `slug`, así que al cambiarlo lo
+trata como un add-on **nuevo**. No es una actualización automática:
+
+1. **Instala Vatia** desde la tienda de complementos (el repositorio es el
+   mismo) y **desinstala eBilling** cuando hayas terminado.
+2. **Tu configuración**: copia el fichero `ebilling.json` de los datos del
+   add-on antiguo a los del nuevo. Vatia lo reconoce por su nombre de antes, lo
+   adopta tal cual y lo reescribe como `vatia.json`; no hay que editar nada. Si
+   prefieres no tocar ficheros, vuelve a configurarlo: son cuatro pantallas.
+3. **Los sensores** pasan de `sensor.ebilling_*` a `sensor.vatia_*`. Los
+   antiguos desaparecen solos al reiniciar Home Assistant (se publican por la
+   API de estados, no quedan registrados). Si los usas en automatizaciones o
+   dashboards, actualiza el nombre.
+4. **Las tarjetas Lovelace** cambian de fichero: actualiza el recurso a
+   `vatia-power-flow.js` y `vatia-card.js`. **No hace falta editar las tarjetas
+   que ya tengas puestas**: los nombres antiguos (`ebilling-power-flow` y
+   `ebilling-card`) siguen funcionando como alias. Para las nuevas, usa los
+   nuevos.
 
 ## 0.20.0
 
@@ -35,7 +69,7 @@ Todas las versiones relevantes del add-on eBilling.
   en la ruta que tiene en el repositorio, pero dentro del contenedor la
   aplicación vive en `/opt/app` y ese fichero no está un nivel por encima, así
   que no se encontraba nunca en una instalación real.
-- Ahora se busca en tres sitios, por orden: la variable `EBILLING_VERSION` que
+- Ahora se busca en tres sitios, por orden: la variable `VATIA_VERSION` que
   el `Dockerfile` fija desde el `BUILD_VERSION` que pasa Home Assistant, el
   `config.yaml` copiado dentro de la imagen, y la ruta del repositorio para
   cuando se ejecuta en desarrollo.
@@ -570,7 +604,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Cambios
 
-- **Rediseño de la tarjeta `ebilling-power-flow`** con disposición en **cruz**
+- **Rediseño de la tarjeta `vatia-power-flow`** con disposición en **cruz**
   (Solar arriba, Red izquierda, Casa derecha, Batería abajo), más cercana a las
   apps de inversores:
   - Iconos y valores **centrados y alineados** dentro de cada círculo (se
@@ -585,7 +619,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Nuevo
 
-- Tarjeta `ebilling-power-flow`:
+- Tarjeta `vatia-power-flow`:
   - En el círculo de la **casa** se muestra el **total consumido hoy** (kWh) y,
     debajo, la potencia instantánea.
   - **Tooltip al pulsar** cada sección del anillo (fuente · kWh · %).
@@ -603,7 +637,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Corregido
 
-- En el editor de la tarjeta `ebilling-power-flow`, el sensor de **estado de
+- En el editor de la tarjeta `vatia-power-flow`, el sensor de **estado de
   carga de batería (%)** no aparecía en su desplegable porque se filtraba por
   unidades de potencia (W/kW). Ahora ese campo se filtra por porcentaje (`%` /
   `device_class: battery`).
@@ -612,7 +646,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Nuevo
 
-- La tarjeta `ebilling-power-flow` permite configurar **sensores de energía
+- La tarjeta `vatia-power-flow` permite configurar **sensores de energía
   diaria** (kWh) por fuente (producción solar, importada/exportada de red,
   carga/descarga de batería). Cuando se definen, el **anillo de la casa** se
   pinta con esos totales reales del día; si no, se mantiene el cálculo
@@ -623,7 +657,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Cambios
 
-- **Tarjeta `ebilling-power-flow` rediseñada** con nueva disposición (solar
+- **Tarjeta `vatia-power-flow` rediseñada** con nueva disposición (solar
   arriba, casa en el centro, batería abajo-izquierda, red abajo-derecha):
   - **Una sola bola** viajando por cada línea activa (antes eran varios
     puntos), con velocidad proporcional a la potencia y etiqueta del valor.
@@ -655,7 +689,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Cambios
 
-- **Tarjeta `ebilling-power-flow` rediseñada**: iconos vectoriales (sol, red,
+- **Tarjeta `vatia-power-flow` rediseñada**: iconos vectoriales (sol, red,
   batería, casa), líneas curvas que convergen en la casa sin cruzarse, puntos
   de energía animados con brillo y velocidad proporcional a la potencia. Ahora
   se actualiza en tiempo real con cada cambio de los sensores (se eliminó el
@@ -673,14 +707,14 @@ Todas las versiones relevantes del add-on eBilling.
   las tarifas sin monedero, ese importe se muestra como *excedente no
   compensado* (informativo). Soportado también en importación/exportación CSV
   (`monedero_virtual: si/no`) y, si publicas sensores, en
-  `sensor.ebilling_<tarifa>_monedero`.
+  `sensor.vatia_<tarifa>_monedero`.
 
 ## 0.5.0
 
 ### Nuevo
 
-- **Nueva tarjeta Lovelace `custom:ebilling-power-flow`** (en
-  `dist/ebilling-power-flow.js`): diagrama **animado** del flujo de potencia
+- **Nueva tarjeta Lovelace `custom:vatia-power-flow`** (en
+  `dist/vatia-power-flow.js`): diagrama **animado** del flujo de potencia
   instantánea entre **solar, red, batería y casa**, con el sentido de cada
   flujo y editor visual para asignar los sensores (producción PV, importación
   y exportación de red, carga y descarga de batería, consumo de la casa y,
@@ -739,7 +773,7 @@ Todas las versiones relevantes del add-on eBilling.
 
 ### Nuevo
 
-- **Tarjeta Lovelace** `custom:ebilling-card` (servida en `dist/`,
+- **Tarjeta Lovelace** `custom:vatia-card` (servida en `dist/`,
   **instalable por HACS** como plugin de panel): comparativa visual de
   tarifas con mejor tarifa, ahorro potencial, coste acumulado y proyección,
   precio actual y excedentes. Descubre los sensores automáticamente, respeta

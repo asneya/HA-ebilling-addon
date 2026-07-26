@@ -1,7 +1,7 @@
-name: eBilling
-version: "0.20.0"
-slug: ebilling
-description: Simulación en tiempo real de tu factura de luz con comparativa de tarifas
+name: Vatia
+version: "0.21.0"
+slug: vatia
+description: Tu electricidad en tiempo real, con el origen del consumo, el coste del ciclo y comparativa de tarifas
 url: https://github.com/asneya/HA-ebilling-addon
 arch:
   - aarch64
@@ -10,8 +10,8 @@ arch:
 init: false
 ingress: true
 ingress_port: 8099
-panel_icon: mdi:receipt-text-outline
-panel_title: eBilling
+panel_icon: mdi:lightning-bolt
+panel_title: Vatia
 homeassistant_api: true
 options:
   log_level: info

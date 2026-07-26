@@ -1,11 +1,11 @@
-# eBilling — Add-on de Home Assistant
+# Vatia — Add-on de Home Assistant
 
-Simulación **en tiempo real** de tu factura de la luz a partir de tus datos de
-consumo, con **comparativa de tarifas en paralelo** (distintas compañías) y el
-desglose completo de una factura española: término de potencia, energía por
-periodos 2.0TD (punta/llano/valle), financiación del bono social, impuesto
-especial sobre la electricidad, alquiler de contador, servicios adicionales e
-IVA por grupos.
+Tu electricidad **en tiempo real**: de dónde viene lo que consumes en cada
+momento (solar, batería o red), cuánto llevas gastado hoy y qué te costaría el
+ciclo con **varias tarifas en paralelo**, con el desglose completo de una
+factura española: término de potencia, energía por periodos 2.0TD
+(punta/llano/valle), financiación del bono social, impuesto especial sobre la
+electricidad, alquiler de contador, servicios adicionales e IVA por grupos.
 
 ![Peaje 2.0TD](https://img.shields.io/badge/peaje-2.0TD-blue)
 ![Arquitecturas](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-lightgrey)
@@ -18,10 +18,10 @@ Pulsa este botón para añadir el repositorio a tu tienda de complementos:
 
 Y este otro para abrir directamente la página del add-on e instalarlo:
 
-[![Abrir el add-on eBilling en mi Home Assistant](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=6c61fa46_ebilling&repository_url=https%3A%2F%2Fgithub.com%2Fasneya%2FHA-ebilling-addon)
+[![Abrir el add-on Vatia en mi Home Assistant](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=6c61fa46_vatia&repository_url=https%3A%2F%2Fgithub.com%2Fasneya%2FHA-ebilling-addon)
 
 Después pulsa **Instalar**, arranca el add-on y abre la interfaz desde la
-barra lateral (**eBilling**) — funciona vía Ingress, sin abrir puertos.
+barra lateral (**Vatia**) — funciona vía Ingress, sin abrir puertos.
 
 <details>
 <summary>Instalación manual (sin botones)</summary>
@@ -33,7 +33,7 @@ barra lateral (**eBilling**) — funciona vía Ingress, sin abrir puertos.
    https://github.com/asneya/HA-ebilling-addon
    ```
 
-3. Instala el add-on **eBilling** y arráncalo.
+3. Instala el add-on **Vatia** y arráncalo.
 
 </details>
 
@@ -72,19 +72,19 @@ versión publicada en este repositorio con la instalada. Cuando publiques o
 recibas una versión superior, aparecerá el aviso de actualización en el
 add-on (puedes forzar la comprobación con **⋮ → Buscar actualizaciones** en la
 tienda de complementos). El detalle de cada versión está en
-[`ebilling/CHANGELOG.md`](ebilling/CHANGELOG.md) y HA lo muestra en el diálogo
+[`vatia/CHANGELOG.md`](vatia/CHANGELOG.md) y HA lo muestra en el diálogo
 de actualización.
 
 ## Sensores expuestos
 
 Con los sensores activados (Ajustes), por cada tarifa se publican
-`sensor.ebilling_<tarifa>_precio`, `_precio_excedente`, `_coste_ciclo` y
-`_proyeccion`, más los globales `sensor.ebilling_mejor_tarifa` y
-`sensor.ebilling_ahorro_potencial`. Ver [`ebilling/DOCS.md`](ebilling/DOCS.md).
+`sensor.vatia_<tarifa>_precio`, `_precio_excedente`, `_coste_ciclo` y
+`_proyeccion`, más los globales `sensor.vatia_mejor_tarifa` y
+`sensor.vatia_ahorro_potencial`. Ver [`vatia/DOCS.md`](vatia/DOCS.md).
 
 ## Tarjeta Lovelace (instalable vía HACS)
 
-La tarjeta personalizada `custom:ebilling-card` muestra la comparativa de
+La tarjeta personalizada `custom:vatia-card` muestra la comparativa de
 tarifas en tu panel (mejor tarifa, ahorro, coste y proyección por tarifa,
 precio actual y excedentes), con tema claro/oscuro y conmutador acumulado/fin
 de ciclo.
@@ -94,12 +94,12 @@ A diferencia del add-on, **la tarjeta sí se instala por HACS** (categoría
 
 [![Abrir en HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=asneya&repository=HA-ebilling-addon&category=plugin)
 
-El archivo se sirve desde [`dist/ebilling-card.js`](dist/ebilling-card.js) y
+El archivo se sirve desde [`dist/vatia-card.js`](dist/vatia-card.js) y
 también puede instalarse manualmente. Instrucciones completas (HACS y manual)
 en [`lovelace/README.md`](lovelace/README.md).
 
-Además, [`dist/ebilling-power-flow.js`](dist/ebilling-power-flow.js) aporta la
-tarjeta `custom:ebilling-power-flow`: un diagrama **animado** del flujo de
+Además, [`dist/vatia-power-flow.js`](dist/vatia-power-flow.js) aporta la
+tarjeta `custom:vatia-power-flow`: un diagrama **animado** del flujo de
 potencia entre **solar, red, batería y casa** (con editor visual de sensores).
 No depende del add-on; usa tus propios sensores de potencia. Requiere añadir su
 recurso aparte — ver [`lovelace/README.md`](lovelace/README.md).
@@ -109,10 +109,10 @@ recurso aparte — ver [`lovelace/README.md`](lovelace/README.md).
 ```
 repository.yaml        Metadatos del repositorio de add-ons (Supervisor)
 hacs.json              Metadatos del plugin de panel (HACS)
-dist/ebilling-card.js       Tarjeta Lovelace: comparativa de tarifas
-dist/ebilling-power-flow.js Tarjeta Lovelace: flujo de energía animado
+dist/vatia-card.js       Tarjeta Lovelace: comparativa de tarifas
+dist/vatia-power-flow.js Tarjeta Lovelace: flujo de energía animado
 lovelace/README.md          Instalación y uso de las tarjetas
-ebilling/              El add-on
+vatia/              El add-on
   config.yaml          Configuración del add-on (version, ingress, permisos)
   CHANGELOG.md         Historial de versiones (mostrado por HA al actualizar)
   Dockerfile           Imagen (Python 3.12 sobre base Alpine de HA)
@@ -130,9 +130,9 @@ ebilling/              El add-on
 ## Desarrollo local
 
 ```bash
-cd ebilling/app
+cd vatia/app
 pip install -r requirements.txt
-DATA_DIR=/tmp/ebilling-data python3 -m uvicorn main:app --port 8099
+DATA_DIR=/tmp/vatia-data python3 -m uvicorn main:app --port 8099
 # abre http://localhost:8099 (arranca en modo demo)
 ```
 

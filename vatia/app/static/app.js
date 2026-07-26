@@ -1,4 +1,4 @@
-/* eBilling — app web (rutas relativas para funcionar tras el Ingress de HA) */
+/* Vatia — app web (rutas relativas para funcionar tras el Ingress de HA) */
 "use strict";
 
 const state = {
@@ -1791,7 +1791,7 @@ function applyTheme(pref) {
   const choice = THEMES[pref] ? pref : "auto";
   const dark = choice === "dark" || (choice !== "light" && prefersDark());
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  try { localStorage.setItem("ebilling-theme", choice); } catch (e) { /* modo privado */ }
+  try { localStorage.setItem("vatia-theme", choice); } catch (e) { /* modo privado */ }
   $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
   const sub = $("#nav-sub-theme");
   if (sub) sub.textContent = THEMES[choice];

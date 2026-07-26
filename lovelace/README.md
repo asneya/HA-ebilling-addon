@@ -1,19 +1,19 @@
-# eBilling Card (tarjeta Lovelace)
+# Vatia Card (tarjeta Lovelace)
 
 Tarjeta personalizada para visualizar en tu panel la **comparativa de tarifas**
-del add-on eBilling: mejor tarifa, ahorro potencial, coste acumulado y proyección
+del add-on Vatia: mejor tarifa, ahorro potencial, coste acumulado y proyección
 de cada tarifa, precio actual €/kWh y compensación de excedentes.
 
 Se adapta al tema (claro/oscuro) de Home Assistant y usa el color que hayas
 asignado a cada tarifa en el add-on.
 
-![Requiere el add-on eBilling](https://img.shields.io/badge/requiere-add--on%20eBilling-4a6cf7)
+![Requiere el add-on Vatia](https://img.shields.io/badge/requiere-add--on%20Vatia-4a6cf7)
 
 ## Requisitos
 
-En el add-on eBilling, ve a **Ajustes → Sensores** y activa **Publicar
+En el add-on Vatia, ve a **Ajustes → Sensores** y activa **Publicar
 sensores en Home Assistant**. La tarjeta lee esas entidades
-(`sensor.ebilling_*`).
+(`sensor.vatia_*`).
 
 ## Instalación con HACS (recomendada)
 
@@ -25,28 +25,28 @@ la tienda por defecto, se añade como **repositorio personalizado**:
 1. HACS → menú **⋮ → Repositorios personalizados**.
 2. **Repositorio**: `https://github.com/asneya/HA-ebilling-addon` ·
    **Tipo/Categoría**: `Dashboard` (o *Lovelace/Plugin*).
-3. Añade, abre *eBilling Card* y pulsa **Descargar**.
+3. Añade, abre *Vatia Card* y pulsa **Descargar**.
 4. HACS registra el recurso automáticamente. Recarga el navegador
    (Ctrl/Cmd + Shift + R) y añade la tarjeta a tu panel.
 
 > **Actualizaciones**: el repositorio publica *releases* con cada versión, así
 > que HACS te avisará cuando haya una nueva y la actualizarás con un clic (más
 > una recarga forzada del navegador). Tras actualizar, si tienes también la
-> tarjeta de flujo (`ebilling-power-flow.js`) como recurso aparte, recarga
+> tarjeta de flujo (`vatia-power-flow.js`) como recurso aparte, recarga
 > igualmente para que el navegador coja la versión nueva.
 
 > El botón de arriba abre directamente el diálogo de repositorio en tu HACS.
 
 ## Instalación manual (sin HACS)
 
-1. Copia [`dist/ebilling-card.js`](../dist/ebilling-card.js) a la carpeta
-   `www` de tu configuración: `/config/www/ebilling-card.js`.
+1. Copia [`dist/vatia-card.js`](../dist/vatia-card.js) a la carpeta
+   `www` de tu configuración: `/config/www/vatia-card.js`.
    (Puedes usar el complemento *File editor* o *Samba/SSH*.)
 2. Ve a **Ajustes → Paneles**, menú **⋮ → Recursos → Añadir recurso**:
-   - **URL**: `/local/ebilling-card.js`
+   - **URL**: `/local/vatia-card.js`
    - **Tipo**: `Módulo de JavaScript`
 3. Recarga el navegador (Ctrl/Cmd + Shift + R).
-4. Edita tu panel, **Añadir tarjeta**, busca *eBilling — Comparativa de
+4. Edita tu panel, **Añadir tarjeta**, busca *Vatia — Comparativa de
    tarifas* (o usa el YAML de abajo).
 
 ## Uso
@@ -54,18 +54,18 @@ la tienda por defecto, se añade como **repositorio personalizado**:
 Lo más sencillo — descubre los sensores automáticamente:
 
 ```yaml
-type: custom:ebilling-card
+type: custom:vatia-card
 ```
 
 Con opciones:
 
 ```yaml
-type: custom:ebilling-card
+type: custom:vatia-card
 title: Mi comparativa de luz
 mode: cycle          # cycle (acumulado, por defecto) | projection (fin de ciclo)
 entities:            # opcional: fija qué tarifas mostrar (sus sensores de coste)
-  - sensor.ebilling_plan_estable_coste_ciclo
-  - sensor.ebilling_pvpc_regulada_coste_ciclo
+  - sensor.vatia_plan_estable_coste_ciclo
+  - sensor.vatia_pvpc_regulada_coste_ciclo
 ```
 
 | Opción | Por defecto | Descripción |
@@ -83,17 +83,17 @@ integradas. Ejemplo con una `entities` y un `gauge`:
 type: vertical-stack
 cards:
   - type: entity
-    entity: sensor.ebilling_mejor_tarifa
+    entity: sensor.vatia_mejor_tarifa
     name: Mejor tarifa
     icon: mdi:trophy-outline
   - type: entities
     title: Coste del ciclo por tarifa
     entities:
-      - sensor.ebilling_plan_estable_coste_ciclo
-      - sensor.ebilling_tarifa_plana_excedentes_ejemplo_coste_ciclo
-      - sensor.ebilling_pvpc_regulada_coste_ciclo
+      - sensor.vatia_plan_estable_coste_ciclo
+      - sensor.vatia_tarifa_plana_excedentes_ejemplo_coste_ciclo
+      - sensor.vatia_pvpc_regulada_coste_ciclo
   - type: gauge
-    entity: sensor.ebilling_ahorro_potencial
+    entity: sensor.vatia_ahorro_potencial
     name: Ahorro potencial
     unit: EUR
     needle: true
@@ -105,9 +105,9 @@ cards:
 
 ---
 
-# eBilling Power Flow (flujo de energía)
+# Vatia Power Flow (flujo de energía)
 
-Segunda tarjeta del repositorio: `custom:ebilling-power-flow`. Muestra de
+Segunda tarjeta del repositorio: `custom:vatia-power-flow`. Muestra de
 forma **animada** la potencia instantánea que viaja entre **solar, red,
 batería y casa**, con la potencia de cada nodo y el sentido de cada flujo.
 No depende del add-on: funciona con tus propios sensores de potencia (W/kW).
@@ -119,10 +119,10 @@ más** (HACS solo registra automáticamente el primero):
 
 - **Con HACS** (tras descargar el repositorio como en la tarjeta anterior):
   **Ajustes → Paneles → ⋮ → Recursos → Añadir recurso**
-  - **URL**: `/hacsfiles/HA-ebilling-addon/ebilling-power-flow.js`
+  - **URL**: `/hacsfiles/HA-ebilling-addon/vatia-power-flow.js`
   - **Tipo**: `Módulo de JavaScript`
-- **Manual**: copia [`dist/ebilling-power-flow.js`](../dist/ebilling-power-flow.js)
-  a `/config/www/` y añade el recurso `/local/ebilling-power-flow.js`.
+- **Manual**: copia [`dist/vatia-power-flow.js`](../dist/vatia-power-flow.js)
+  a `/config/www/` y añade el recurso `/local/vatia-power-flow.js`.
 
 Recarga el navegador (Ctrl/Cmd + Shift + R) después.
 
@@ -132,7 +132,7 @@ Puedes configurarla con el **editor visual** de la tarjeta (dropdowns para
 cada sensor) o por YAML:
 
 ```yaml
-type: custom:ebilling-power-flow
+type: custom:vatia-power-flow
 title: Flujo de energía
 entities:
   pv: sensor.produccion_solar          # producción fotovoltaica
