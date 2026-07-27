@@ -21,6 +21,11 @@
   </script>
 </head>
 <body>
+  <!-- Sprite de iconos, incrustado por el servidor desde static/iconos.svg. Va
+       aquí y no como fichero aparte porque `<use href="fichero.svg#id">` no
+       funciona en WebKit, el motor de la app de Home Assistant en iOS. -->
+  <!--ICONOS-->
+
   <!-- Indicador de progreso: visible mientras hay peticiones en vuelo -->
   <div class="progress" role="progressbar" aria-label="Cargando" aria-hidden="true"></div>
 
@@ -122,26 +127,26 @@
           <button class="icon-btn" id="e-prev" aria-label="Periodo anterior">‹</button>
           <div class="period-picker" id="e-picker">
             <span class="period-label" id="e-label">—</span>
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10.5l5 5 5-5"/></svg>
+            <svg class="i chev" aria-hidden="true"><use href="#i-desplegar"/></svg>
             <input type="date" id="e-date" class="period-input" aria-label="Elegir el periodo">
           </div>
           <button class="icon-btn" id="e-next" aria-label="Periodo siguiente">›</button>
         </div>
         <div class="viewtabs" role="tablist">
           <button class="vt active" data-eview="overview" title="General" aria-label="General">
-            <svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15l4-5 3 3 4-6"/></svg>
+            <svg class="i"><use href="#i-vista-general"/></svg>
           </button>
           <button class="vt" data-eview="solar" title="Solar" aria-label="Solar">
-            <svg viewBox="0 0 24 24"><path d="M4.5 16.5 8.2 7.5H20l-3 9z"/><path d="M12.2 7.5 9.6 16.5M16.1 7.5l-2.8 9M6.6 12h12"/><path d="M11 16.5v3M8.5 19.5h5"/></svg>
+            <svg class="i"><use href="#i-solar"/></svg>
           </button>
           <button class="vt" data-eview="home" title="Casa" aria-label="Casa">
-            <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/></svg>
+            <svg class="i"><use href="#i-casa"/></svg>
           </button>
           <button class="vt" data-eview="battery" title="Batería" aria-label="Batería">
-            <svg viewBox="0 0 24 24"><path d="M10.2 3.6h3.6"/><rect x="7.8" y="5.4" width="8.4" height="14.6" rx="1.8"/></svg>
+            <svg class="i"><use href="#i-bateria"/></svg>
           </button>
           <button class="vt" data-eview="grid" title="Red" aria-label="Red">
-            <svg viewBox="0 0 24 24"><path d="M9.2 4.5h5.6"/><path d="M12 4.5 6.6 19.5M12 4.5l5.4 15"/><path d="M9.9 10.4h4.2M8.8 13.8h6.4M7.7 17h8.6"/></svg>
+            <svg class="i"><use href="#i-red"/></svg>
           </button>
         </div>
       </div>
@@ -153,7 +158,7 @@
           <div class="e-stamp" id="e-stamp">—</div>
           <button class="chip-clear hidden" id="e-clear">
             Totales
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+            <svg class="i" aria-hidden="true"><use href="#i-cerrar"/></svg>
           </button>
         </div>
         <div class="e-legend" id="e-legend"></div>
@@ -336,42 +341,35 @@
         <div class="panel glass nav-list">
           <button class="nav-row" data-settings-page="source">
             <span class="nav-ico" style="--ico:#0a84ff">
-              <svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
+              <svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
             </span>
             <span class="nav-txt"><b>Fuente de datos</b><small id="nav-sub-source">—</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
         </div>
 
         <div class="group-label">Sensores</div>
         <div class="panel glass nav-list">
-          <button class="nav-row" data-settings-page="flow">
+          <button class="nav-row" data-settings-page="sensors">
             <span class="nav-ico" style="--ico:#ff9f0a">
-              <svg viewBox="0 0 24 24"><path d="M13 3 5.5 13.5H11l-1 7.5 7.5-10.5H12z"/></svg>
+              <svg class="i"><use href="#i-potencia"/></svg>
             </span>
-            <span class="nav-txt"><b>Flujo de energía</b><small>Potencia instantánea</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
-          </button>
-          <button class="nav-row" data-settings-page="counters">
-            <span class="nav-ico" style="--ico:#30d158">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v4.5l3 2"/></svg>
-            </span>
-            <span class="nav-txt"><b>Contadores de energía</b><small>Totales del día</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <span class="nav-txt"><b>Sensores</b><small id="nav-sub-sensors">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="forecast">
             <span class="nav-ico" style="--ico:#ffcf5c">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></svg>
+              <svg class="i"><use href="#i-solar"/></svg>
             </span>
             <span class="nav-txt"><b>Previsión solar</b><small>Forecast en los gráficos</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="weather">
             <span class="nav-ico" style="--ico:#64d2ff">
-              <svg viewBox="0 0 24 24"><path d="M7.2 17h9.4a3.4 3.4 0 0 0 .3-6.8 5.2 5.2 0 0 0-10-1.4A3.6 3.6 0 0 0 7.2 17Z"/></svg>
+              <svg class="i"><use href="#i-nubes"/></svg>
             </span>
             <span class="nav-txt"><b>Meteorología</b><small>Fondo de la Home</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
         </div>
 
@@ -379,42 +377,66 @@
         <div class="panel glass nav-list">
           <button class="nav-row" data-settings-page="tariffs">
             <span class="nav-ico" style="--ico:#bf5af2">
-              <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+              <svg class="i"><use href="#i-factura"/></svg>
             </span>
             <span class="nav-txt"><b>Tarifas</b><small id="nav-sub-tariffs">—</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="contract">
             <span class="nav-ico" style="--ico:#ff453a">
-              <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h5"/></svg>
+              <svg class="i"><use href="#i-calendario"/></svg>
             </span>
             <span class="nav-txt"><b>Contrato y ciclo</b><small id="nav-sub-contract">—</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
+        </div>
+
+        <div class="group-label">Apariencia</div>
+        <div class="panel glass group">
+          <div class="list">
+            <div class="li col">
+              <span class="li-label">Tema</span>
+              <div class="segmented glass-soft" id="theme-seg" role="group" aria-label="Tema de la aplicación">
+                <button class="seg" data-theme-opt="auto">Auto</button>
+                <button class="seg" data-theme-opt="light">Claro</button>
+                <button class="seg" data-theme-opt="dark">Oscuro</button>
+              </div>
+            </div>
+            <label class="li">
+              <span class="li-txt"><b>Fondo según la hora</b>
+                <small>Cielo y meteorología en la pantalla de inicio</small></span>
+              <input type="checkbox" id="s-dynamic-bg" class="ios-switch">
+            </label>
+            <div class="li">
+              <span class="li-txt"><b>Material traslúcido</b>
+                <small>Sigue el ajuste del sistema</small></span>
+              <span class="li-value" id="material-state">—</span>
+            </div>
+          </div>
         </div>
 
         <div class="group-label">Aplicación</div>
         <div class="panel glass nav-list">
-          <button class="nav-row" data-settings-page="appearance">
-            <span class="nav-ico" style="--ico:#8e8e93">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" fill="none"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></svg>
-            </span>
-            <span class="nav-txt"><b>Apariencia</b><small id="nav-sub-theme">—</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
-          </button>
           <button class="nav-row" data-settings-page="backup">
             <span class="nav-ico" style="--ico:#30d158">
-              <svg viewBox="0 0 24 24"><path d="M12 3.5v11"/><path d="M7.5 10l4.5 4.5 4.5-4.5"/><path d="M4.5 18.5h15"/></svg>
+              <svg class="i"><use href="#i-duplicar"/></svg>
             </span>
             <span class="nav-txt"><b>Copia de seguridad</b><small>Exportar e importar la configuración</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="nav-row" data-settings-page="about">
+            <span class="nav-ico" style="--ico:#8e8e93">
+              <svg class="i"><use href="#i-informacion"/></svg>
+            </span>
+            <span class="nav-txt"><b>Acerca de</b><small id="nav-sub-about">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="diagnostics">
             <span class="nav-ico" style="--ico:#ff9f0a">
-              <svg viewBox="0 0 24 24"><path d="M3 13h3.5l2-5 3 10 2.5-7 1.7 4h5.3"/></svg>
+              <svg class="i"><use href="#i-balance"/></svg>
             </span>
             <span class="nav-txt"><b>Diagnóstico</b><small>¿Cuadran tus contadores?</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
         </div>
 
@@ -422,10 +444,10 @@
         <div class="panel glass nav-list">
           <button class="nav-row" data-settings-page="publish">
             <span class="nav-ico" style="--ico:#5e5ce6">
-              <svg viewBox="0 0 24 24"><path d="M12 20.5V9"/><path d="M7.5 13.5 12 9l4.5 4.5"/><path d="M4 6.5h16"/></svg>
+              <svg class="i"><use href="#i-exportar"/></svg>
             </span>
             <span class="nav-txt"><b>Sensores en Home Assistant</b><small id="nav-sub-publish">—</small></span>
-            <svg class="nav-chev" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></svg>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
         </div>
       </div>
@@ -481,72 +503,45 @@
       </div>
       </div>
 
-      <!-- ---- nivel 2: flujo de energía ---- -->
-      <div class="settings-page" id="sp-flow">
+      <!-- ---- nivel 2: sensores, agrupados por función ---- -->
+      <div class="settings-page" id="sp-sensors">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Flujo de energía</h1>
-          <span class="nav-spacer"></span>
+          <h1 class="nav-title">Sensores</h1>
+          <span class="nav-count" id="sensors-count">—</span>
         </header>
 
-      <div class="panel glass group">
-        <div class="group-head">Potencia instantánea <span class="soft">· W o kW</span></div>
-        <div class="list" id="flow-sensor-list"></div>
-        <div class="li"><button id="load-grouped-btn" class="btn subtle">Buscar entidades</button></div>
-        <p class="li-note">
-          Alimentan el diagrama de flujo de la Home y las curvas de potencia de
-          la pantalla de Energía. El consumo de la casa y el % de batería son
-          opcionales.
-        </p>
-        <p class="li-note">
-          <b>¿Medidor bidireccional?</b> Si tu inversor o medidor da un único
-          sensor con signo, ponlo en las <b>dos</b> casillas del par: se separa
-          por el signo (<b>+</b> importación y <b>−</b> exportación en la red;
-          <b>+</b> carga y <b>−</b> descarga en la batería).
-        </p>
-      </div>
-      </div>
+        <div id="sensors-groups"></div>
 
-      <!-- ---- nivel 2: contadores de energía ---- -->
-      <div class="settings-page" id="sp-counters">
-        <header class="nav-head">
-          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Contadores de energía</h1>
-          <span class="nav-spacer"></span>
-        </header>
-
-      <div class="panel glass group">
-        <div class="group-head">Contadores <span class="soft">· kWh</span></div>
-        <div class="list" id="energy-sensor-list"></div>
-        <label class="li">
-          <span class="li-label">Qué miden</span>
-          <select id="s-energy-counters">
-            <option value="auto">Detectarlo automáticamente</option>
-            <option value="daily">Ya son del día en curso</option>
-            <option value="lifetime">Son acumulados (calcular el día)</option>
-          </select>
-        </label>
-        <p class="li-note">
-          Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
-          es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde el
-          inicio del histórico (<code>total_increasing</code>), el add-on calcula
-          el incremento desde la medianoche con las estadísticas. En
-          <i>automático</i> lo distingue comparando ambos valores.
-        </p>
-        <p class="li-note">
-          <b>¿Contador neto?</b> Si tienes un único contador que sube al importar
-          y baja al exportar, ponlo en las <b>dos</b> casillas del par: el
-          incremento de cada intervalo se separa por el signo. En ese caso los
-          totales salen siempre de las estadísticas, porque el estado del sensor
-          (el neto) no distingue las dos direcciones.
-        </p>
-        <p class="li-note">
-          El de la casa es <b>opcional</b>: si no tienes un contador de consumo,
-          el add-on integra el <b>sensor de potencia de la casa</b> que hayas
-          configurado en el flujo de energía y, si tampoco lo hay, lo deduce por
-          balance.
-        </p>
-      </div>
+        <div class="panel glass group">
+          <div class="group-head">Qué miden los contadores</div>
+          <label class="li">
+            <span class="li-label">Totales de energía</span>
+            <select id="s-energy-counters">
+              <option value="auto">Detectarlo automáticamente</option>
+              <option value="daily">Ya son del día en curso</option>
+              <option value="lifetime">Son acumulados (calcular el día)</option>
+            </select>
+          </label>
+          <p class="li-note">
+            Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
+            es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde
+            el inicio del histórico (<code>total_increasing</code>), el add-on
+            calcula el incremento desde la medianoche con las estadísticas. En
+            <i>automático</i> lo distingue comparando ambos valores.
+          </p>
+          <p class="li-note">
+            <b>¿Medidor bidireccional o contador neto?</b> Si tu inversor da un
+            único sensor con signo, ponlo en las <b>dos</b> casillas del par: se
+            separa por el signo (<b>+</b> importación y <b>−</b> exportación en la
+            red; <b>+</b> carga y <b>−</b> descarga en la batería).
+          </p>
+          <p class="li-note">
+            El punto verde indica que la entidad responde. Uno rojo no bloquea el
+            cálculo: la serie se dibuja con hueco y la factura avisa. Los sensores
+            marcados como opcionales se deducen del balance si faltan.
+          </p>
+        </div>
       </div>
 
       <!-- ---- nivel 2: previsión solar ---- -->
@@ -571,30 +566,12 @@
       </div>
 
       <!-- ---- nivel 2: apariencia ---- -->
-      <div class="settings-page" id="sp-appearance">
+      <div class="settings-page" id="sp-about">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Apariencia</h1>
+          <h1 class="nav-title">Acerca de</h1>
           <span class="nav-spacer"></span>
         </header>
-
-      <div class="panel glass group">
-        <div class="group-head">Tema</div>
-        <div class="list">
-          <div class="li col">
-            <div class="segmented glass-soft" id="theme-seg" role="group" aria-label="Tema de la aplicación">
-              <button class="seg" data-theme-opt="auto">Automático</button>
-              <button class="seg" data-theme-opt="light">Claro</button>
-              <button class="seg" data-theme-opt="dark">Oscuro</button>
-            </div>
-          </div>
-          <p class="li-note">
-            <b>Automático</b> sigue al sistema: cambia solo cuando tu móvil o tu
-            ordenador entran en modo oscuro. Se aplica al instante y se guarda,
-            así que es el mismo tema en todos tus dispositivos.
-          </p>
-        </div>
-      </div>
 
       <div class="panel glass group">
         <div class="group-head">Acerca de</div>
@@ -806,15 +783,15 @@
   <div class="scroll-edge" aria-hidden="true"></div>
   <nav class="tabbar glass-nav" role="tablist">
     <button class="tab active" data-view="home">
-      <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10.5V20h11v-9.5"/></svg>
+      <svg class="i"><use href="#i-casa"/></svg>
       <span>Home</span>
     </button>
     <button class="tab" data-view="billing">
-      <svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>
+      <svg class="i"><use href="#i-factura"/></svg>
       <span>Facturación</span>
     </button>
     <button class="tab" data-view="settings">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></svg>
+      <svg class="i"><use href="#i-ajustes"/></svg>
       <span>Ajustes</span>
     </button>
   </nav>
@@ -901,6 +878,18 @@
         <button class="btn subtle" id="cancel-tariff-btn">Cancelar</button>
         <button class="btn primary" id="save-tariff-btn">Guardar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Hoja de asignación de un sensor: los candidatos primero, la lista entera
+       detrás por si el nombre no se parece a nada. -->
+  <div id="pick-modal" class="modal hidden">
+    <div class="sheet glass">
+      <div class="sheet-head">
+        <h3 id="pick-title">Asignar sensor</h3>
+        <button class="icon-btn" id="close-pick-modal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="sheet-body" id="pick-body"></div>
     </div>
   </div>
 

@@ -119,6 +119,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Apariencia: «auto» sigue al sistema (el modo oscuro del móvil o del
     # navegador), «light» y «dark» lo fuerzan.
     "theme": "auto",
+    # Fondo de la Home según la hora y el tiempo. Quien prefiera una superficie
+    # lisa —o tenga un móvil justo— lo puede apagar sin perder nada del dato.
+    "dynamic_background": True,
     # La tarifa contratada («la mía»): el id de una de las tarifas guardadas.
     # La comparativa sigue tratándolas a todas igual; esta solo añade lo que
     # ninguna comparación puede dar, el ahorro del día en euros.

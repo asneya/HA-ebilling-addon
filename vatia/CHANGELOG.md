@@ -2,6 +2,45 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.26.0
+
+### Los iconos del diseño, y Ajustes deja de ser catorce desplegables ciegos
+
+**Configurar los sensores era lo que más dolía**, y es lo que más cambia. Las
+catorce casillas dejan de ser catorce desplegables con trescientas entradas cada
+uno y pasan a ser **filas que dicen qué entidad tienen, cuánto marca ahora mismo
+y si responde**:
+
+- Se agrupan **por función** (solar, batería, red, casa), que es como se piensa
+  en ellas, y no por el tipo de magnitud con el que están guardadas. Las dos
+  páginas de antes —potencia en una, contadores en otra— se unen en una sola:
+  preguntaban lo mismo dos veces cuando lo que se configura es un aparato.
+- **El punto verde** indica que la entidad contesta. Uno rojo no bloquea el
+  cálculo: la serie se dibuja con hueco y la factura avisa.
+- **Una casilla vacía tiñe su fila** y ofrece los candidatos con el nombre a
+  favor: asignar un sensor son tres toques. Las opcionales (consumo de la casa,
+  su contador y el % de batería) se distinguen, porque la app las deduce del
+  balance si faltan.
+- **El índice informa**: cada fila lleva su estado resuelto en la línea de
+  abajo — «12 de 13 asignados», «3 tarifas», la potencia contratada — sin tener
+  que entrar a comprobarlo.
+
+**Apariencia baja al índice**, desplegada, y trae un ajuste nuevo: **«Fondo según
+la hora»**, para dejar la Home en superficie lisa si el cielo estorba o el móvil
+va justo. El material traslúcido sigue al ajuste del sistema, así que su fila
+solo informa de cómo está.
+
+**Los 42 iconos del set propio del diseño** entran como un sprite de 6,7 kB, con
+su trazo de 1,75 uniforme (antes había cinco grosores distintos, de 1,4 a 2,2).
+Va incrustado en la página y no como fichero aparte, porque las referencias
+externas no funcionan en el navegador de la app de Home Assistant en iOS. Los
+ocho glifos del tiempo mapean ya uno a uno con la condición meteorológica: antes
+el viento se enseñaba como nubes parciales y el granizo como nieve.
+
+Y dos correcciones del cristal contra la guía de Apple: el desenfoque pasa de 26
+a **30 px**, y **los botones y los avisos dejan de llevar material** — es para la
+capa que flota sobre el contenido, no para el contenido.
+
 ## 0.25.0
 
 ### Tu tarifa, y el resto de la app al lenguaje del prototipo

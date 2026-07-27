@@ -985,3 +985,115 @@ def list_entities(states: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
     for key in groups:
         groups[key].sort(key=lambda item: item["name"].lower())
     return groups
+
+
+# ---------------------------------------------------------------------------
+# Estado de las casillas de sensor, para Ajustes
+# ---------------------------------------------------------------------------
+# La pantalla de sensores del diseño no enseña desplegables sino filas: qué
+# entidad tiene cada casilla, cuánto marca ahora mismo y si responde. Y para la
+# que está vacía, un puñado de candidatos en vez de una lista de trescientos.
+#
+# Se agrupan por función —lo que significan— y no por tipo de magnitud, que es
+# como están guardados: quien configura piensa «la batería», no «los sensores de
+# potencia».
+SENSOR_GROUPS: list[dict[str, Any]] = [
+    {"key": "solar", "name": "Producción solar", "icon": "solar", "rows": [
+        ("flow", "pv", "Potencia instantánea", "power", ("pv", "solar", "fotovolt", "inverter")),
+        ("energy", "pv_energy", "Energía del día", "energy", ("pv", "solar", "fotovolt")),
+    ]},
+    {"key": "battery", "name": "Batería", "icon": "bateria", "rows": [
+        ("flow", "battery_soc", "Estado de carga", "percent", ("soc", "bateria", "battery")),
+        ("flow", "battery_charge", "Potencia de carga", "power", ("charg", "carga", "bateria", "battery")),
+        ("flow", "battery_discharge", "Potencia de descarga", "power", ("discharg", "descarga", "bateria", "battery")),
+        ("energy", "battery_charge_energy", "Energía cargada", "energy", ("charg", "carga", "bateria", "battery")),
+        ("energy", "battery_discharge_energy", "Energía descargada", "energy", ("discharg", "descarga", "bateria", "battery")),
+    ]},
+    {"key": "grid", "name": "Red", "icon": "red", "rows": [
+        ("flow", "grid_import", "Importada", "power", ("import", "compra", "grid", "red")),
+        ("flow", "grid_export", "Exportada", "power", ("export", "vertid", "grid", "red")),
+        ("energy", "grid_import_energy", "Energía importada", "energy", ("import", "compra", "grid", "red")),
+        ("energy", "grid_export_energy", "Energía exportada", "energy", ("export", "vertid", "grid", "red")),
+    ]},
+    {"key": "home", "name": "Casa", "icon": "casa", "rows": [
+        ("flow", "home", "Consumo instantáneo", "power", ("casa", "home", "load", "consum")),
+        ("energy", "home_energy", "Consumo del día", "energy", ("casa", "home", "load", "consum")),
+    ]},
+]
+# Casillas que la app puede deducir del balance si faltan: no cuentan como
+# pendientes ni tiñen su fila.
+OPTIONAL_SLOTS = {"home", "home_energy", "battery_soc"}
+
+
+def _slot_state(
+    entity: str, states: dict[str, Any], kind: str
+) -> tuple[bool, float | None, str]:
+    """(responde, valor, unidad) de la entidad de una casilla."""
+    state = states.get(entity)
+    if not state:
+        return False, None, ""
+    raw = state.get("state")
+    if raw in (None, "", "unknown", "unavailable"):
+        return False, None, ""
+    unit = (state.get("attributes") or {}).get("unit_of_measurement") or ""
+    return True, _num(raw), unit
+
+
+def sensor_status(
+    settings: dict[str, Any], states: dict[str, Any]
+) -> dict[str, Any]:
+    """Cada casilla de sensor con su entidad, su valor de ahora y su estado."""
+    cfg = {"flow": settings.get("flow_sensors") or {},
+           "energy": settings.get("energy_sensors") or {}}
+    catalogo = list_entities(states)
+
+    def sugerencias(kind: str, pistas: tuple[str, ...], usados: set[str]) -> list[dict[str, str]]:
+        """Candidatos para una casilla vacía: del tipo correcto y con el nombre
+        a favor, sin repetir los que ya están puestos en otra casilla."""
+        out = []
+        for item in catalogo.get(kind, []):
+            if item["entity_id"] in usados:
+                continue
+            texto = f"{item['entity_id']} {item['name']}".lower()
+            if any(p in texto for p in pistas):
+                out.append(item)
+        return out[:5]
+
+    usados = {v for grupo in cfg.values() for v in grupo.values() if v}
+    grupos, total, asignados = [], 0, 0
+    for grupo in SENSOR_GROUPS:
+        filas = []
+        for donde, slot, label, kind, pistas in grupo["rows"]:
+            entity = (cfg[donde].get(slot) or "").strip()
+            opcional = slot in OPTIONAL_SLOTS
+            total += 1
+            responde, valor, unidad = (False, None, "")
+            if entity:
+                asignados += 1
+                # Un medidor bidireccional puede ir en las dos casillas, y una
+                # casilla admite varias entidades separadas por comas.
+                primera = entity.split(",")[0].strip()
+                responde, valor, unidad = _slot_state(primera, states, kind)
+            filas.append({
+                "slot": slot, "group": donde, "label": label, "kind": kind,
+                "entity": entity, "optional": opcional,
+                "responds": responde, "value": valor, "unit": unidad,
+                "suggestions": [] if entity else sugerencias(kind, pistas, usados),
+            })
+        grupos.append({"key": grupo["key"], "name": grupo["name"],
+                       "icon": grupo["icon"], "rows": filas})
+    # Los que faltan y no son opcionales: es lo que decide si la configuración
+    # está completa o a medias.
+    pendientes = [
+        f["slot"] for g in grupos for f in g["rows"]
+        if not f["entity"] and not f["optional"]
+    ]
+    caidos = [f["slot"] for g in grupos for f in g["rows"]
+              if f["entity"] and not f["responds"]]
+    return {
+        "groups": grupos,
+        "total": total,
+        "assigned": asignados,
+        "missing": pendientes,
+        "down": caidos,
+    }

@@ -91,7 +91,8 @@
   --r-lg: 24px;
   --r-md: 20px;
   --r-sm: 12px;
-  --blur: saturate(180%) blur(26px);
+  /* §07: cristal regular — desenfoque de 30 px, saturación 180 %. */
+  --blur: saturate(180%) blur(30px);
   color-scheme: light dark;
 }
 
@@ -330,7 +331,7 @@ body[data-view="energy"] .bg-scrim {
   text-shadow: 0 1px 8px rgba(0, 0, 0, .4);
 }
 .weather-icon { display: grid; place-items: center; width: 30px; height: 30px; }
-.weather-icon svg { width: 30px; height: 30px; }
+.weather-icon .i { width: 28px; height: 28px; }
 .weather-temp { font-size: 19px; font-weight: 700; letter-spacing: -.3px; }
 
 /* ---------------- paneles ---------------- */
@@ -341,6 +342,24 @@ body[data-view="energy"] .bg-scrim {
   margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   background: var(--glass-2); border: 1px solid var(--sep); padding: 3px 10px; border-radius: 999px;
 }
+/* Iconos del sistema: los 42 glifos del sprite, en caja de 24 y trazo de 1,75.
+   El color entra por `currentColor`, así que el mismo glifo vale en cualquier
+   tinta y en color de estado.
+
+   El diseño redibuja cada glifo por tamaño para que a 16 px no se emborrone;
+   el handoff trae solo la caja de 24, así que se consigue el mismo efecto con
+   `non-scaling-stroke`: el trazo se mide en píxeles de pantalla y no encoge
+   con el glifo, que es literalmente «el trazo no escala con el tamaño». */
+.i {
+  width: 24px; height: 24px; flex: none; display: inline-block;
+  fill: none; stroke: currentColor; stroke-width: 1.75;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.i * { vector-effect: non-scaling-stroke; }
+.i-20 { width: 20px; height: 20px; }
+.i-16 { width: 16px; height: 16px; }
+
 /* Rótulo de sección: la etiqueta en versalitas del prototipo. Va sobre el
    cielo, así que su tinta es la de fondo —incluido el `.soft` de dentro, que
    con `--ink-3` quedaba casi invisible contra el degradado. */
@@ -428,7 +447,7 @@ body[data-view="energy"] .bg-scrim {
   min-height: 44px; border-radius: 999px; color: var(--ink-2); display: grid; place-items: center;
   transition: background .18s ease, color .18s ease;
 }
-.vt svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.vt .i { width: 24px; height: 24px; }
 .vt.active { background: var(--ink); color: var(--solid); }
 
 .e-stamp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -439,7 +458,7 @@ body[data-view="energy"] .bg-scrim {
   border-radius: 999px; padding: 7px 11px; min-height: 34px; font: inherit;
   font-size: 12.5px; font-weight: 600;
 }
-.chip-clear svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.chip-clear .i { width: 14px; height: 14px; }
 .chip-clear:active { transform: scale(.96); }
 .e-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 14px; }
 .e-serie {
@@ -565,11 +584,13 @@ body[data-view="energy"] .bg-scrim {
   place-items: center; background: var(--ico, var(--accent));
   box-shadow: 0 2px 8px rgba(10, 18, 35, .18);
 }
-.nav-ico svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* El glifo hereda trazo y remate de `.i`; aquí solo su tamaño y que la
+   tinta sea blanca sobre la pastilla de color. */
+.nav-ico .i { width: 20px; height: 20px; stroke: #fff; }
 .nav-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .nav-txt b { font-size: 15px; font-weight: 600; }
 .nav-txt small { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-chev { flex: 0 0 auto; width: 17px; height: 17px; fill: none; stroke: var(--ink-3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.nav-chev { width: 18px; height: 18px; stroke: var(--ink-3); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -605,7 +626,7 @@ body[data-view="energy"] .bg-scrim {
   color: var(--ink-3); font: inherit; font-size: 11px; font-weight: 600;
   transition: background .2s ease, color .2s ease;
 }
-.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tab .i { width: 22px; height: 22px; }
 .tab.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ---------------- segmented control ---------------- */
@@ -628,10 +649,13 @@ body[data-view="energy"] .bg-scrim {
 .subview.active { display: block; }
 
 /* ---------------- controles ---------------- */
+/* Sin material: el botón vive dentro de una tarjeta, y §07 reserva el cristal
+   para la capa que flota sobre el contenido. Encima de una superficie sólida el
+   desenfoque no tenía nada que desenfocar, solo coste. */
 .btn {
   border: 1px solid var(--sep); background: var(--glass-2); color: var(--ink);
   padding: 9px 15px; border-radius: 12px; cursor: pointer; font: inherit;
-  font-size: 14px; font-weight: 600; backdrop-filter: var(--blur);
+  font-size: 14px; font-weight: 600;
   text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn:active { transform: scale(.97); }
@@ -663,7 +687,7 @@ body[data-view="energy"] .bg-scrim {
   cursor: pointer; padding: 0 8px;
 }
 .period-picker:active { background: var(--glass-2); }
-.period-picker .chev { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: var(--ink-3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.period-picker .chev { width: 16px; height: 16px; stroke: var(--ink-3); }
 .period-picker .period-input {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0;
   border: 0; background: transparent; color: transparent; opacity: 0; cursor: pointer;
@@ -716,6 +740,10 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   border-top: 1px solid var(--sep); font-size: 14.5px;
 }
 .li.col { flex-direction: column; align-items: stretch; gap: 6px; }
+/* Fila de dos líneas: rótulo y su explicación debajo, como las de Apariencia. */
+.li-txt { min-width: 0; margin-right: auto; }
+.li-txt b { display: block; font-size: 15px; font-weight: 600; }
+.li-txt small { display: block; font-size: 12px; color: var(--ink-3); }
 .li-label { flex: 0 0 44%; color: var(--ink-2); font-size: 15px; }
 /* ---------------- diagnóstico ---------------- */
 .diag-side + .diag-side { border-top: 1px solid var(--sep); }
@@ -871,9 +899,10 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .table .detail { color: var(--ink-3); font-size: 11.5px; font-weight: 400; }
 
 /* ---------------- banners ---------------- */
+/* Los avisos son contenido, así que superficie sólida (§07). */
 .banner {
   border-radius: var(--r-md); padding: 12px 15px; margin-bottom: 12px; font-size: 13.5px;
-  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: var(--blur);
+  background: var(--solid); border: 1px solid var(--hair);
 }
 .banner.error { background: rgba(255, 69, 58, .16); border-color: rgba(255, 69, 58, .3); }
 
@@ -926,3 +955,68 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
   margin-top: 10px;
 }
+
+/* ---------------- Ajustes · sensores por función ----------------
+   La regla del diseño: «sensores por función, no por entidad». Cada casilla es
+   una fila que dice qué entidad tiene, cuánto marca ahora y si responde, en vez
+   de un desplegable con trescientas entradas. Una casilla vacía no es un hueco
+   callado: tiñe su fila y ofrece los candidatos. */
+.nav-count { font-size: 12.5px; font-weight: 600; color: var(--on-bg-2);
+  text-shadow: var(--on-bg-shadow); white-space: nowrap; }
+
+.sgroup { margin-bottom: 12px; }
+.sgroup-head { display: flex; align-items: center; gap: 9px; padding: 13px 15px 10px; }
+.sgroup-head .i { width: 19px; height: 19px; color: var(--ink-3); }
+.sgroup-head b { font-size: 11px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-3); }
+
+.srow { display: flex; align-items: center; gap: 11px; width: 100%; border: 0;
+  background: transparent; font: inherit; text-align: left; cursor: pointer;
+  padding: 11px 15px; border-top: 1px solid var(--hair); color: var(--ink); }
+.srow-dot { width: 8px; height: 8px; border-radius: 999px; flex: none;
+  background: var(--good); }
+.srow.down .srow-dot { background: var(--bad); }
+.srow.empty .srow-dot { background: var(--warn); }
+.srow.optional.empty .srow-dot { background: var(--ink-3); opacity: .5; }
+/* La fila sin asignar se tiñe, para que no pase por configurada. */
+.srow.empty:not(.optional) { background: var(--warn-chip); }
+
+.srow-txt { min-width: 0; margin-right: auto; }
+.srow-txt b { display: block; font-size: 15px; font-weight: 600; }
+.srow-txt small { display: block; font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.srow-val { font-size: 14px; font-weight: 600; flex: none;
+  font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.srow-assign { flex: none; height: 30px; padding: 0 13px; border: 0;
+  border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; color: var(--accent); background: var(--accent-soft); }
+
+/* Hoja de asignación: los candidatos primero y la lista entera detrás. */
+.pick-sugg { display: grid; gap: 7px; margin-bottom: 12px; }
+.pick-sugg button { display: flex; align-items: baseline; gap: 9px; width: 100%;
+  border: 1px solid var(--hair); background: var(--node); cursor: pointer;
+  border-radius: 14px; padding: 11px 13px; font: inherit; text-align: left;
+  color: var(--ink); }
+.pick-sugg b { font-size: 14.5px; font-weight: 600; }
+.pick-sugg small { font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
+.pick-sugg code { font-size: 11.5px; color: var(--ink-3); }
+
+/* Fondo liso: con «Fondo según la hora» apagado se retira el cielo y queda la
+   superficie de página. Los rótulos que iban sobre el cielo pasan a tinta
+   normal, que sobre un fondo claro el blanco no se lee. */
+body[data-bg="flat"] .bg > *:not(.bg-scrim) { display: none; }
+body[data-bg="flat"] .bg { background: var(--page); }
+body[data-bg="flat"] .bg-scrim { background: none; backdrop-filter: none; }
+body[data-bg="flat"] .hero-title,
+body[data-bg="flat"] .hero-sub,
+body[data-bg="flat"] .nav-title,
+body[data-bg="flat"] .group-label,
+body[data-bg="flat"] .section-title,
+body[data-bg="flat"] .nav-count { color: var(--ink); text-shadow: none; }
+body[data-bg="flat"] .hero-sub,
+body[data-bg="flat"] .group-label,
+body[data-bg="flat"] .section-title,
+body[data-bg="flat"] .nav-count { color: var(--ink-3); }
+body[data-bg="flat"] .section-title .soft { color: var(--ink-3); opacity: 1; }
