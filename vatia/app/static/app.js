@@ -415,8 +415,8 @@ const eState = {
   data: null,
   hidden: new Set(),
   cursor: null,
-  zoom: 1,        // estiramiento del eje X (1 = ancho del panel)
-  keepScroll: 0,  // scrollLeft a restaurar tras redibujar
+  hover: null,    // punto bajo el dedo, sin fijar
+  zoomed: false,  // el eje no está al completo
 };
 const E_ZOOM_MAX = 12;
 
@@ -513,7 +513,8 @@ function isLightColor(hex) {
 
 function renderEnergyLegend() {
   const d = eState.data;
-  const idx = eState.cursor;
+  // Manda el punto fijado; si no hay, el que esté bajo el dedo.
+  const idx = eState.cursor != null ? eState.cursor : eState.hover;
   // El forecast no tiene leyenda (legend === false).
   const shown = d.series.filter((s) => s.legend !== false);
   $("#e-legend").innerHTML = shown.map((s) => {
@@ -587,231 +588,82 @@ function offsetForDate(value, range) {
   return 0;
 }
 
-/* --- Zoom del eje X --- */
+/* --- Zoom del eje X ---
+   Ya no estira el DOM: el componente mueve el rango del eje, así que aquí solo
+   quedan los botones y el indicador. El factor se deduce del rango visible
+   frente al total, que es la definición honesta de «cuánto estoy ampliando». */
+
+function zoomFactor() {
+  const p = $("#e-chart");
+  const s = p && p._plot && p._plot.scales.x;
+  const xs = p && p._plot && p._plot.data[0];
+  if (!s || !xs || xs.length < 2) return 1;
+  const total = xs[xs.length - 1] - xs[0];
+  const visto = s.max - s.min;
+  return visto > 0 ? Math.max(1, total / visto) : 1;
+}
 
 function syncZoomControls() {
-  $("#e-zoom-val").textContent = `${eState.zoom < 10 ? eState.zoom.toFixed(1) : Math.round(eState.zoom)}×`;
-  $("#e-zoom-out").disabled = eState.zoom <= 1.001;
-  $("#e-zoom-in").disabled = eState.zoom >= E_ZOOM_MAX - 0.001;
+  const z = zoomFactor();
+  $("#e-zoom-val").textContent = `${z < 10 ? z.toFixed(1) : Math.round(z)}×`;
+  $("#e-zoom-out").disabled = z <= 1.001;
+  $("#e-zoom-in").disabled = z >= E_ZOOM_MAX - 0.001;
 }
 
-// Cambia el zoom manteniendo fijo el punto del eje que está bajo `focusRatio`
-// (0–1 del ancho visible), como hace el pinch de iOS. El redibujado se agrupa
-// en un frame de animación: durante un pellizco llegan decenas de eventos y
-// rehacer el gráfico en cada uno lo dejaría a tirones.
-let zoomFrame = 0;
-
-function setZoom(next, focusRatio) {
-  const box = $("#e-chart");
-  const clamped = Math.max(1, Math.min(E_ZOOM_MAX, next));
-  if (Math.abs(clamped - eState.zoom) < 0.002) return;
-  const view = box.clientWidth || 1;
-  const ratio = focusRatio == null ? 0.5 : focusRatio;
-  const anchor = (box.scrollLeft + view * ratio) / (view * eState.zoom);
-  eState.zoom = clamped;
-  eState.keepScroll = Math.max(0, anchor * view * clamped - view * ratio);
-  if (zoomFrame) return;
-  zoomFrame = requestAnimationFrame(() => {
-    zoomFrame = 0;
-    syncZoomControls();
-    // Solo el gráfico: la leyenda y el desglose no dependen del zoom.
-    if (eState.data) renderEnergyChart();
-  });
+/* Acerca o aleja alrededor del centro de lo que se está viendo. */
+function setZoom(mult) {
+  const p = $("#e-chart");
+  const plot = p && p._plot;
+  if (!plot) return;
+  const xs = plot.data[0];
+  const total = xs[xs.length - 1] - xs[0];
+  const s = plot.scales.x;
+  const centro = (s.min + s.max) / 2;
+  const medio = Math.min(total, (s.max - s.min) / mult) / 2;
+  if (total / (medio * 2) > E_ZOOM_MAX) return;
+  let min = centro - medio, max = centro + medio;
+  // No se sale del periodo: se empuja hacia dentro en vez de dejar hueco.
+  if (min < xs[0]) { max += xs[0] - min; min = xs[0]; }
+  if (max > xs[xs.length - 1]) { min -= max - xs[xs.length - 1]; max = xs[xs.length - 1]; }
+  plot.setScale("x", { min: Math.max(min, xs[0]), max: Math.min(max, xs[xs.length - 1]) });
+  syncZoomControls();
 }
 
-// Tramos contiguos de valores no nulos: [[indice, valor], …] por tramo.
-function seriesSegments(values) {
-  const out = [];
-  let run = [];
-  values.forEach((v, i) => {
-    if (v == null) { if (run.length) out.push(run); run = []; return; }
-    run.push([i, v]);
-  });
-  if (run.length) out.push(run);
-  return out;
-}
 
-const E_GUTTER = 46;   // ancho reservado al eje Y (fijo, no se desplaza)
-const E_HEIGHT = 268;  // alto del área de gráfico, en px
-
+/* El gráfico lo dibuja <vatia-chart> sobre uPlot. Aquí solo se le pasan los
+   datos, los colores del tema y el formato del eje: el zoom, el cursor y el
+   pellizco viven dentro, y ya no ensanchan el DOM para desplazarlo. */
 function renderEnergyChart() {
-  const d = eState.data;
   const box = $("#e-chart");
-  const visible = d.series.filter((s) => !eState.hidden.has(s.key));
-  const H = E_HEIGHT, padT = 16, padB = 26, padR = 14, plotL = E_GUTTER;
-  const viewW = Math.max(240, box.clientWidth || 320);
-  const W = Math.round(viewW * eState.zoom);
-  const plotR = Math.max(plotL + 40, W - padR);
-
-  const values = visible.flatMap((s) => s.values.filter((v) => v != null));
-  const rawMax = Math.max(...values, 0.1) * 1.06;
-  // Paso redondeado para que el eje no muestre cifras arbitrarias.
-  const pow = Math.pow(10, Math.floor(Math.log10(rawMax / 4)));
-  const yStep = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
-    .map((m) => m * pow).find((v) => v * 4 >= rawMax) || pow * 10;
-  const max = yStep * 4;
-  const n = d.x.length;
-  const X = (i) => plotL + (n <= 1 ? 0 : (i * (plotR - plotL)) / (n - 1));
-  const Y = (v) => H - padB - (v / max) * (H - padT - padB);
-  const base = (H - padB).toFixed(1);
-
-  let defs = "";
-  let svg = "";
-  for (let i = 0; i <= 4; i++) {
-    const y = Y((max / 4) * i);
-    svg += `<line x1="${plotL}" y1="${y.toFixed(1)}" x2="${plotR}" y2="${y.toFixed(1)}" stroke="currentColor" opacity="0.12"/>`;
-  }
-
-  // Todas las series se pintan como línea con su área translúcida debajo; solo
-  // la previsión va punteada y sin relleno. «Ayer» se dibuja al fondo, con un
-  // área más tenue, para no tapar la curva del día.
-  const ordered = visible.filter((s) => s.key === "yesterday")
-    .concat(visible.filter((s) => s.key !== "yesterday"));
-  ordered.forEach((s, si) => {
-    const dashed = !!s.dashed;  // solo la previsión: el resto, línea con área
-    const faint = s.key === "yesterday";
-    const gid = `eg${si}`;
-    if (!dashed) {
-      defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${esc(seriesColor(s.key))}" stop-opacity="${faint ? 0.16 : 0.34}"/>
-        <stop offset="100%" stop-color="${esc(seriesColor(s.key))}" stop-opacity="0.02"/>
-      </linearGradient>`;
-    }
-    seriesSegments(s.values).forEach((seg) => {
-      const line = seg
-        .map(([i, v], k) => `${k ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
-        .join(" ");
-      if (seg.length === 1) {
-        svg += `<circle cx="${X(seg[0][0]).toFixed(1)}" cy="${Y(seg[0][1]).toFixed(1)}" r="2.8" fill="${esc(seriesColor(s.key))}"/>`;
-        return;
-      }
-      if (!dashed) {
-        svg += `<path d="${line} L${X(seg[seg.length - 1][0]).toFixed(1)},${base} L${X(seg[0][0]).toFixed(1)},${base} Z" fill="url(#${gid})" stroke="none"/>`;
-      }
-      svg += `<path d="${line}" fill="none" stroke="${esc(seriesColor(s.key))}" stroke-width="${dashed || faint ? 1.8 : 2.2}"${dashed ? ' stroke-dasharray="2.5 4.5"' : ""} stroke-linejoin="round" stroke-linecap="round"/>`;
-    });
-  });
-
-  // Cursor: línea vertical con la etiqueta del punto.
-  const idx = eState.cursor;
-  if (idx != null && d.x[idx]) {
-    const x = X(idx);
-    svg += `<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H - padB}" stroke="currentColor" opacity="0.55" stroke-width="1.4"/>`;
-    visible.forEach((s) => {
-      const v = s.values[idx];
-      if (v != null) svg += `<circle cx="${x.toFixed(1)}" cy="${Y(v).toFixed(1)}" r="4" fill="${esc(s.color)}" stroke="var(--glass)" stroke-width="2"/>`;
-    });
-    const anchor = x > W - 90 ? "end" : "start";
-    svg += `<text class="e-cursor-label" x="${(x + (anchor === "end" ? -8 : 8)).toFixed(1)}" y="${padT + 11}" text-anchor="${anchor}">${esc(xLabel(d.x[idx], eState.range))}</text>`;
-  }
-
-  // Etiquetas del eje X: tantas como quepan sin apelotonarse.
-  const slots = Math.max(2, Math.floor((plotR - plotL) / 58));
-  const step = Math.max(1, Math.ceil(n / slots));
-  d.x.forEach((iso, i) => {
-    if (i % step && i !== n - 1) return;
-    svg += `<text class="e-axis" x="${X(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${esc(xLabel(iso, eState.range))}</text>`;
-  });
-
-  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
-    aria-label="Gráfico de ${esc(eState.view)}"><defs>${defs}</defs>${svg}</svg>`;
-  box.scrollLeft = eState.keepScroll;
-
-  // Eje Y en una capa fija, para que no se desplace con el zoom.
-  let gut = "";
-  for (let i = 0; i <= 4; i++) {
-    const y = Y((max / 4) * i);
-    gut += `<text class="e-ylabel" x="${E_GUTTER - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end">${fmtNum.format((max / 4) * i)}</text>`;
-  }
-  $("#e-gutter").innerHTML =
-    `<svg width="${E_GUTTER}" height="${H}" viewBox="0 0 ${E_GUTTER} ${H}">${gut}</svg>`;
-
-  // La geometría se guarda para los gestos, que están enlazados una sola vez
-  // al contenedor (el <svg> se recrea en cada dibujado).
-  chartGeo = { plotL, plotR, n };
+  box.colorFor = (key) => (key.startsWith("--") ? token(key) : seriesColor(key));
+  box.formatX = (ms) => xLabel(new Date(ms).toISOString(), eState.range);
+  box.hidden = eState.hidden;
+  box.data = eState.data;
 }
 
-let chartGeo = { plotL: E_GUTTER, plotR: 0, n: 0 };
-
-// Pulsación para seleccionar un punto, arrastre horizontal para desplazarse y
-// pinza (o ⌘/Ctrl + rueda) para estirar el eje del tiempo. Se enlaza una única
-// vez sobre `#e-chart`, que persiste entre dibujados: si los gestos vivieran en
-// el <svg> se perderían en cuanto el primer paso del pellizco lo sustituyera.
+/* Los gestos y el cursor los publica el componente; aquí solo se recogen. */
 function initChartGestures() {
   const box = $("#e-chart");
-  const pointers = new Map();
-  let pinch = null;
-  let drag = null;
-
-  const pick = (clientX) => {
-    const svgEl = box.querySelector("svg");
-    if (!svgEl || chartGeo.n < 1) return;
-    const rect = svgEl.getBoundingClientRect();
-    const span = Math.max(chartGeo.plotR - chartGeo.plotL, 1);
-    let i = Math.round(((clientX - rect.left - chartGeo.plotL) / span) * (chartGeo.n - 1));
-    i = Math.max(0, Math.min(chartGeo.n - 1, i));
-    if (i !== eState.cursor) { eState.cursor = i; renderEnergy(); }
-  };
-
-  const distance = () => {
-    const xs = [...pointers.values()];
-    return Math.max(Math.abs(xs[0] - xs[1]), 1);
-  };
-
-  box.addEventListener("pointerdown", (ev) => {
-    pointers.set(ev.pointerId, ev.clientX);
-    if (pointers.size === 2) {
-      const xs = [...pointers.values()];
-      pinch = { dist: distance(), zoom: eState.zoom, center: (xs[0] + xs[1]) / 2 };
-      drag = null;
-      return;
-    }
-    if (pointers.size > 2) return;
-    drag = { x: ev.clientX, scroll: box.scrollLeft, moved: false };
-    try { box.setPointerCapture(ev.pointerId); } catch (_) { /* no crítico */ }
+  // Fijar un punto rellena la leyenda con los valores de ese instante.
+  box.addEventListener("pick", (ev) => {
+    eState.cursor = ev.detail.index;
+    renderEnergyLegend();
+    const d = eState.data;
+    const picked = eState.cursor != null && d && d.x[eState.cursor];
+    $("#e-stamp").textContent = picked ? stampLabel(d.x[eState.cursor], eState.range) : (d ? d.label : "—");
+    $("#e-clear").classList.toggle("hidden", !picked);
   });
-
-  box.addEventListener("pointermove", (ev) => {
-    if (!pointers.has(ev.pointerId)) return;
-    pointers.set(ev.pointerId, ev.clientX);
-    if (pinch && pointers.size >= 2) {
-      const rect = box.getBoundingClientRect();
-      setZoom(pinch.zoom * (distance() / pinch.dist), (pinch.center - rect.left) / rect.width);
-      return;
-    }
-    if (!drag) return;
-    const dx = ev.clientX - drag.x;
-    if (Math.abs(dx) > 6) drag.moved = true;
-    if (ev.pointerType === "mouse") {
-      if (ev.buttons) pick(ev.clientX);  // con ratón, arrastrar recorre los puntos
-    } else if (drag.moved) {
-      box.scrollLeft = drag.scroll - dx;  // con el dedo, arrastrar desplaza el eje
-    }
+  // Al mover el dedo por encima, la leyenda sigue al cursor sin fijarlo.
+  box.addEventListener("hover", (ev) => {
+    if (ev.detail.index == null && eState.cursor != null) return;
+    eState.hover = ev.detail.index;
+    renderEnergyLegend();
   });
-
-  const release = (ev) => {
-    pointers.delete(ev.pointerId);
-    if (pointers.size < 2) pinch = null;
-    if (!drag) return;
-    const moved = drag.moved;
-    drag = null;
-    if (!moved && !pointers.size) pick(ev.clientX);  // pulsación, no arrastre
-  };
-  box.addEventListener("pointerup", release);
-  box.addEventListener("pointercancel", (ev) => {
-    pointers.delete(ev.pointerId);
-    if (pointers.size < 2) pinch = null;
-    drag = null;
+  // El rango del eje decide si los controles de zoom están activos.
+  box.addEventListener("range", (ev) => {
+    eState.zoomed = !ev.detail.full;
+    syncZoomControls();
   });
-
-  box.addEventListener("wheel", (ev) => {
-    if (!ev.ctrlKey && !ev.metaKey) return;  // rueda normal: desplazamiento
-    ev.preventDefault();
-    const rect = box.getBoundingClientRect();
-    setZoom(eState.zoom * Math.exp(-ev.deltaY / 180), (ev.clientX - rect.left) / rect.width);
-  }, { passive: false });
-
-  box.addEventListener("scroll", () => { eState.keepScroll = box.scrollLeft; });
 }
 
 function renderEnergyBreakdown() {
@@ -867,16 +719,16 @@ $("#e-prev").addEventListener("click", () => { eState.offset -= 1; loadEnergy();
 $("#e-next").addEventListener("click", () => { if (eState.offset < 0) { eState.offset += 1; loadEnergy(); } });
 
 function resetZoom() {
-  eState.zoom = 1;
-  eState.keepScroll = 0;
+  const p = $("#e-chart");
+  if (p && p.resetZoom) p.resetZoom();
 }
 
 // Volver a los totales del periodo tras seleccionar un punto.
 $("#e-clear").addEventListener("click", () => { eState.cursor = null; renderEnergy(); });
 
 // Zoom del eje del tiempo.
-$("#e-zoom-in").addEventListener("click", () => setZoom(eState.zoom * 1.6));
-$("#e-zoom-out").addEventListener("click", () => setZoom(eState.zoom / 1.6));
+$("#e-zoom-in").addEventListener("click", () => setZoom(1.6));
+$("#e-zoom-out").addEventListener("click", () => setZoom(1 / 1.6));
 $("#e-zoom-val").addEventListener("click", () => { resetZoom(); renderEnergy(); });
 initChartGestures();
 

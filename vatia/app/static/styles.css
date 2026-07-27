@@ -510,11 +510,13 @@ body[data-view="energy"] .bg-scrim {
 .e-chart-wrap { position: relative; }
 /* pan-y deja el desplazamiento vertical de la página al navegador y nos reserva
    los gestos horizontales y el pellizco (que gestionamos con pointer events). */
-.e-chart { overflow-x: auto; overflow-y: hidden; touch-action: pan-y; }
-.e-chart::-webkit-scrollbar { height: 0; }
-.e-chart svg { display: block; height: auto; }
-.e-gutter { position: absolute; top: 0; left: 0; pointer-events: none; }
-.e-gutter svg { display: block; }
+/* El gráfico es un lienzo, no un SVG desplazable: el zoom mueve el rango del
+   eje. `touch-action: none` deja que el componente reciba el pellizco. */
+.e-chart { display: block; touch-action: none; }
+.e-chart .u-legend { display: none; }
+/* uPlot hereda la tinta del contenedor para su cursor y sus ejes. */
+.e-chart .uplot { color: var(--ink-3); font-family: inherit; }
+.e-chart .u-cursor-x, .e-chart .u-cursor-y { border-color: var(--ink-3); }
 /* El eje Y no se desplaza con el zoom: el halo lo separa de las líneas. */
 .e-ylabel {
   fill: var(--ink-3); font-size: 11.5px; font-weight: 500;
