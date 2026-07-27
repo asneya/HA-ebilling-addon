@@ -2,6 +2,38 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.25.0
+
+### Tu tarifa, y el resto de la app al lenguaje del prototipo
+
+- **Ya puedes marcar una tarifa como «la mía»**, desde su tarjeta en la
+  comparativa. La comparativa no cambia por eso —sigue tratándolas a todas
+  igual—: existe para lo único que ninguna comparación puede dar, **el ahorro
+  del día en euros**, que aparece en el cierre del día. La cuenta es la
+  diferencia entre el día que has tenido y el que habrías tenido sin placas ni
+  batería, comprando el mismo consumo entero a la red; hora a hora, porque
+  ahorrar a mediodía no vale lo mismo que ahorrar en punta. Si falta el precio
+  de alguna hora (un PVPC sin publicar) no se estima: no se da la cifra.
+- **Tarjetas de tarifa nuevas** en la comparativa, las del prototipo: barra de
+  color, total grande, «MÁS BARATA» flotante y el desglose plegado, que se abre
+  al tocar. Dentro están «Ver la factura» y el marcado de la tuya, que también
+  asoma en la lista de Tarifas y en Ajustes.
+- **Las gráficas de Facturación ya siguen al tema.** Sus colores estaban
+  escritos a mano, así que las barras no coincidían con los puntos de su propia
+  leyenda: la de «Exportada» llegaba a decir morado con la barra naranja. Ahora
+  salen de los tokens, y cambiar de tema las repinta.
+- **La batería estrena un segundo color para la salida.** Es un nodo con dos
+  sentidos, como la red, y con uno solo «Descarga» y «Exportada» compartían el
+  morado en la misma leyenda de Energía.
+- **Maquetación**: rótulos de sección en versalitas y legibles sobre el cielo
+  (el «· pulsa un día» iba con la tinta de las tarjetas y quedaba casi
+  invisible), tarjetas de cifra con el número grande y cifras de ancho fijo, el
+  selector de vista de Energía en negativo como el chip del prototipo, la tabla
+  de la factura cerrada con una línea y los importes a favor en verde. La
+  leyenda de vertido solo sale si hay vertido.
+
+Queda la fase 3 del rediseño: los electrodomésticos, cuando estén sus sensores.
+
 ## 0.24.0
 
 ### La Home nueva (fase 2 de 3)

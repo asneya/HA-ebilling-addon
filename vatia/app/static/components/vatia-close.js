@@ -66,6 +66,32 @@
       this._render();
     }
 
+    // Las tres cifras del día. El ahorro en euros solo existe si hay una
+    // tarifa marcada como «la mía» en Facturación; sin ella, su sitio lo ocupa
+    // lo producido. Como mucho tres: con cuatro ya no se lee ninguna.
+    _stats(d, w) {
+      const euro = new Intl.NumberFormat("es-ES",
+        { style: "currency", currency: "EUR" });
+      const cells = [];
+      if (d.self_pct != null) {
+        cells.push(`<div><b>${d.self_pct} %</b>
+          <span>te has<br>abastecido solo</span></div>`);
+      }
+      if (d.saved) {
+        cells.push(`<div><b>${esc(euro.format(d.saved.eur))}</b>
+          <span>te has<br>ahorrado hoy</span></div>`);
+      }
+      if (w) {
+        cells.push(`<div><b>${w.pct} %</b>
+          <span>del consumo,<br>en la ventana</span></div>`);
+      }
+      if (cells.length < 3) {
+        cells.push(`<div><b>${esc(nf2.format(d.produced))}</b>
+          <span>kWh<br>producidos</span></div>`);
+      }
+      return `<div class="stats">${cells.slice(0, 3).join("<i></i>")}</div>`;
+    }
+
     _render() {
       if (!this.shadowRoot) return;
       const d = this._data;
@@ -104,16 +130,7 @@
           <div class="date">${esc(fecha)}</div>
           <h2>${esc(animo)}</h2>
           <p class="body">${cuerpo}</p>
-          <div class="stats">
-            ${d.self_pct != null ? `<div><b>${d.self_pct} %</b>
-              <span>te has<br>abastecido solo</span></div>` : ""}
-            ${d.self_pct != null && w ? "<i></i>" : ""}
-            ${w ? `<div><b>${w.pct} %</b>
-              <span>del consumo,<br>en la ventana</span></div>` : ""}
-            ${(d.self_pct != null || w) ? "<i></i>" : ""}
-            <div><b>${esc(nf2.format(d.produced))}</b>
-              <span>kWh<br>producidos</span></div>
-          </div>
+          ${this._stats(d, w)}
           ${nota}
           <button type="button">Ver el día completo</button>
         </div>`;
