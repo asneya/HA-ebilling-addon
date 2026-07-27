@@ -941,44 +941,20 @@ function openBillDetail(tariffId) {
 
 /* ------------- gráficos ------------- */
 
-/* Los tramos de la tarifa y lo vertido salen de los tokens del tema, igual que
-   las series: escritos a mano, las barras no coincidían con los puntos de su
-   propia leyenda —que sí usa los tokens— y la de «Exportada» llegaba a decir
-   morado con la barra pintada de naranja. */
-const PCOLOR = new Proxy({}, { get: (_t, k) => token(`--${k}`) });
-const ECOLOR = () => token("--exp");
-
-function gridAxis(max, padL, padB, padT, width, height) {
-  let svg = "";
-  for (let i = 0; i <= 4; i++) {
-    const val = (max / 4) * i;
-    const y = height - padB - (val / max) * (height - padT - padB);
-    svg += `<line x1="${padL}" y1="${y}" x2="${width}" y2="${y}" stroke="currentColor" opacity="0.12"/>`;
-    svg += `<text x="${padL - 6}" y="${y + 4}" class="c-axis" text-anchor="end">${val.toFixed(1)}</text>`;
-  }
-  return svg;
-}
-
 function renderDailyChart(daily) {
   const c = $("#daily-chart");
   if (!daily || !daily.length) { c.innerHTML = `<p class="empty">Sin datos.</p>`; return; }
-  const bw = 26, gap = 8, padL = 42, padB = 26, padT = 12, height = 220;
-  const width = padL + daily.length * (bw + gap) + 10;
-  const max = Math.max(...daily.map((d) => d.punta + d.llano + d.valle), 0.1);
-  const scale = (height - padT - padB) / max;
-  let svg = gridAxis(max, padL, padB, padT, width, height);
-  daily.forEach((d, i) => {
-    const x = padL + i * (bw + gap);
-    let y = height - padB;
-    for (const p of ["valle", "llano", "punta"]) {
-      const h = d[p] * scale; y -= h;
-      svg += `<rect class="bar-seg" x="${x}" y="${y}" width="${bw}" height="${Math.max(h, 0)}" rx="3" fill="${PCOLOR[p]}"><title>${d.date} · ${p}: ${fmtNum.format(d[p])} kWh</title></rect>`;
-    }
-    if (daily.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${x + bw / 2}" y="${height - 8}" class="c-axis" text-anchor="middle">${d.date.slice(8)}</text>`;
-    }
-  });
-  c.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+  const bars = ensureBars(c, 220);
+  bars.data = {
+    labels: daily.map((d) => d.date.slice(8)),
+    stack: [
+      { key: "valle", label: "Valle", values: daily.map((d) => d.valle) },
+      { key: "llano", label: "Llano", values: daily.map((d) => d.llano) },
+      { key: "punta", label: "Punta", values: daily.map((d) => d.punta) },
+    ],
+    side: [],
+    unit: "kWh",
+  };
 }
 
 /* ========================= BILLING: detalle ========================= */
@@ -1026,63 +1002,75 @@ function renderDetail() {
   else { state.selectedDay = null; $("#d-hourly-wrap").classList.add("hidden"); }
 }
 
+/* Los cuatro gráficos de Facturación, sobre uPlot igual que el de Energía. Los
+   dos de barras usan <vatia-bars>, que apila; los dos acumulados, <vatia-chart>
+   con el eje por índice, porque no van sobre el reloj sino sobre una lista de
+   días o de horas. */
+function chartColor(key) {
+  return key.startsWith("--") ? token(key) : token(`--${key}`);
+}
+
 function renderDailyDetail(days) {
   const c = $("#d-daily");
   if (!days || !days.length) { c.innerHTML = `<p class="empty">Sin datos.</p>`; return; }
-  const gw = 30, gap = 12, padL = 44, padB = 28, padT = 10, height = 240;
-  const width = padL + days.length * (gw + gap) + 10;
-  const max = Math.max(...days.map((d) => Math.max(d.import, d.export)), 0.1);
-  const scale = (height - padT - padB) / max;
-  const iw = 17, ew = 9;
-  let svg = gridAxis(max, padL, padB, padT, width, height);
-  days.forEach((d, i) => {
-    const x = padL + i * (gw + gap);
-    if (state.selectedDay === d.date) {
-      svg += `<rect x="${x - gap / 2}" y="${padT}" width="${gw + gap}" height="${height - padT - padB}" fill="currentColor" opacity="0.07" rx="5"/>`;
-    }
-    let y = height - padB;
-    for (const p of ["valle", "llano", "punta"]) {
-      const h = d[p] * scale; y -= h;
-      svg += `<rect class="bar-seg" data-day="${d.date}" x="${x}" y="${y}" width="${iw}" height="${Math.max(h, 0)}" rx="3" fill="${PCOLOR[p]}" style="cursor:pointer"><title>${d.date} · ${p}: ${fmtNum.format(d[p])} kWh</title></rect>`;
-    }
-    const eh = d.export * scale;
-    svg += `<rect class="bar-seg" data-day="${d.date}" x="${x + iw + 2}" y="${height - padB - eh}" width="${ew}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR()}" style="cursor:pointer"><title>${d.date} · exportada: ${fmtNum.format(d.export)} kWh</title></rect>`;
-    if (days.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${x + gw / 2}" y="${height - 8}" class="c-axis" text-anchor="middle">${d.date.slice(8)}</text>`;
-    }
-  });
-  c.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
-  c.querySelectorAll("[data-day]").forEach((el) =>
-    el.addEventListener("click", () => selectDay(el.getAttribute("data-day"))));
+  const bars = ensureBars(c, 240);
+  bars.data = {
+    labels: days.map((d) => d.date.slice(8)),
+    // El orden es el de apilado, de abajo arriba.
+    stack: [
+      { key: "valle", label: "Valle", values: days.map((d) => d.valle) },
+      { key: "llano", label: "Llano", values: days.map((d) => d.llano) },
+      { key: "punta", label: "Punta", values: days.map((d) => d.punta) },
+    ],
+    side: [{ key: "exp", label: "Exportada", values: days.map((d) => d.export) }],
+    unit: "kWh",
+    selected: days.findIndex((d) => d.date === state.selectedDay),
+  };
+  bars.onpick = (i) => selectDay(days[i].date);
 }
 
-function cumulativeChart(container, points, step) {
+/* Crea el componente una vez y lo reutiliza: rehacerlo en cada dibujado
+   destruiría el lienzo y perdería el cursor. */
+function ensureBars(host, alto) {
+  let el = host.querySelector("vatia-bars");
+  if (!el) {
+    host.textContent = "";
+    el = document.createElement("vatia-bars");
+    el.height = alto;
+    el.colorFor = chartColor;
+    el.addEventListener("pick", (ev) => { if (el.onpick) el.onpick(ev.detail.index); });
+    host.appendChild(el);
+  }
+  return el;
+}
+
+function ensureLines(host) {
+  let el = host.querySelector("vatia-chart");
+  if (!el) {
+    host.textContent = "";
+    el = document.createElement("vatia-chart");
+    el.xMode = "index";
+    el.colorFor = (key) => (key.startsWith("--") ? token(key) : seriesColor(key));
+    host.appendChild(el);
+  }
+  return el;
+}
+
+/* Acumulado: dos líneas que solo crecen. Se le pasa al mismo componente que la
+   pantalla de Energía, con el eje por índice. */
+function cumulativeChart(container, points) {
   if (!points || !points.length) { container.innerHTML = `<p class="empty">Sin datos.</p>`; return; }
-  const height = 220, padL = 44, padB = 26, padT = 14, padR = 50;
-  const width = padL + (points.length - 1) * step + padR;
   const last = points[points.length - 1];
-  const max = Math.max(last.import, last.export, 0.1);
-  const X = (i) => padL + i * step;
-  const Y = (v) => height - padB - (v / max) * (height - padT - padB);
-  let svg = gridAxis(max, padL, padB, padT, width, height);
-  const line = (key, color) => {
-    let path = "";
-    points.forEach((p, i) => { path += `${i ? "L" : "M"}${X(i)},${Y(p[key])} `; });
-    let s = `<path d="${path}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round"/>`;
-    points.forEach((p, i) => {
-      s += `<circle cx="${X(i)}" cy="${Y(p[key])}" r="2.5" fill="${color}"><title>${p.label} · ${fmtNum.format(p[key])} kWh</title></circle>`;
-    });
-    s += `<text x="${X(points.length - 1) + 6}" y="${Y(last[key]) + 4}" font-size="10.5" fill="${color}" font-weight="700">${fmtNum.format(last[key])}</text>`;
-    return s;
+  const el = ensureLines(container);
+  el.data = {
+    x: points.map((p) => p.label),
+    series: [
+      { key: "grid_import", label: "Importada", values: points.map((p) => p.import) },
+      ...(last.export > 0
+        ? [{ key: "grid_export", label: "Exportada", values: points.map((p) => p.export) }]
+        : []),
+    ],
   };
-  svg += line("import", "#0a84ff");
-  if (last.export > 0) svg += line("export", ECOLOR());
-  points.forEach((p, i) => {
-    if (points.length <= 31 || i % 2 === 0) {
-      svg += `<text x="${X(i)}" y="${height - 8}" class="c-axis" text-anchor="middle">${p.label}</text>`;
-    }
-  });
-  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
 }
 
 function renderMonthlyCumulative(days) {
@@ -1090,7 +1078,7 @@ function renderMonthlyCumulative(days) {
   cumulativeChart($("#d-cum-month"), days.map((d) => {
     ci += d.import; ce += d.export;
     return { label: d.date.slice(8), import: ci, export: ce };
-  }), 42);
+  }));
 }
 
 function selectDay(date) {
@@ -1110,26 +1098,30 @@ function renderHourly(date) {
   $("#d-hourly-title").textContent = "Desglose por horas · " +
     new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
-  const bw = 15, gap = 6, group = 2 * bw + 3, padL = 44, padB = 26, padT = 10, height = 200;
-  const width = padL + 24 * (group + gap) + 10;
-  const max = Math.max(...hours.map((h) => Math.max(h.kwh, h.export)), 0.1);
-  const scale = (height - padT - padB) / max;
-  let svg = gridAxis(max, padL, padB, padT, width, height);
-  hours.forEach((h, i) => {
-    const x = padL + i * (group + gap);
-    const ih = h.kwh * scale;
-    svg += `<rect class="bar-seg" x="${x}" y="${height - padB - ih}" width="${bw}" height="${Math.max(ih, 0)}" rx="3" fill="${h.period ? PCOLOR[h.period] : token("--ink-3")}"><title>${String(h.hour).padStart(2, "0")}:00 · ${fmtNum.format(h.kwh)} kWh</title></rect>`;
-    const eh = h.export * scale;
-    svg += `<rect class="bar-seg" x="${x + bw + 3}" y="${height - padB - eh}" width="${bw}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR()}"><title>${String(h.hour).padStart(2, "0")}:00 · exportada ${fmtNum.format(h.export)} kWh</title></rect>`;
-    if (i % 2 === 0) svg += `<text x="${x + group / 2}" y="${height - 8}" class="c-axis sm" text-anchor="middle">${h.hour}</text>`;
-  });
-  $("#d-hourly").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
+  // Cada hora cae en un tramo de la tarifa, así que en vez de apilar tres
+  // series se apila una sola por tramo: la hora aporta a la suya y cero a las
+  // demás. Así la barra sale del color de su periodo y el cursor sigue diciendo
+  // a qué tramo pertenece.
+  const TRAMOS = ["punta", "llano", "valle"];
+  const bars = ensureBars($("#d-hourly"), 200);
+  bars.data = {
+    labels: hours.map((h) => String(h.hour)),
+    stack: TRAMOS.map((t) => ({
+      key: t, label: t[0].toUpperCase() + t.slice(1),
+      values: hours.map((h) => (h.period === t ? h.kwh : 0)),
+    })).concat([{
+      key: "ink-3", label: "Sin periodo",
+      values: hours.map((h) => (h.period ? 0 : h.kwh)),
+    }]),
+    side: [{ key: "exp", label: "Exportada", values: hours.map((h) => h.export) }],
+    unit: "kWh",
+  };
 
   let ci = 0, ce = 0;
   cumulativeChart($("#d-cum-day"), hours.map((h) => {
     ci += h.kwh; ce += h.export;
     return { label: String(h.hour), import: ci, export: ce };
-  }), 34);
+  }));
 
   const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "—");
   $("#d-hourly-table").innerHTML =
@@ -1986,6 +1978,9 @@ function applyTheme(pref) {
   if (eState.data) renderEnergy();
   if (state.simulation) renderSimulation();
   if (state.detail) renderDetail();
+  // Los gráficos de Facturación son lienzos: hay que rehacerlos con los
+  // colores nuevos, igual que el de Energía.
+  $$("vatia-bars, vatia-chart").forEach((el) => el.repaint && el.repaint());
   try { localStorage.setItem("vatia-theme", choice); } catch (e) { /* modo privado */ }
   $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
 }
