@@ -2,6 +2,48 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.27.0
+
+### Crear una tarifa deja de ser un formulario de veinticinco campos
+
+- **El editor son ahora cinco pasos plegables** — Identidad, Energía,
+  Excedentes, Potencia, Impuestos — y se lee de arriba abajo como una lista de
+  comprobación: cada paso cerrado **resume su contenido en una línea**, y el que
+  está incompleto lo dice ahí («Falta el precio de P1 y P2») sin que haya que
+  abrirlo para enterarse. Se abre siempre el primero que falta, así que una
+  tarifa nueva empieza por el nombre y una que ya funciona no abre ninguno.
+  **Guardar vive en la cabecera**, siempre alcanzable, y Cancelar solo pregunta
+  si hay cambios que perder.
+- **La sintaxis de horarios desaparece.** «L-V 10-14,18-22» había que
+  aprendérsela; ahora hay una **rejilla semanal que se pinta arrastrando**, con
+  un color por tramo. Tocar la letra de un día lo pinta entero, hay cuatro
+  atajos (copiar a L–V, fin de semana, festivos = domingo, vaciar) y la cadena
+  equivalente sigue a la vista para quien ya sabía leerla. Las horas que no se
+  pintan caen en el tramo por defecto, así que **es imposible dejar una hora sin
+  precio**. Incluye la fila de festivos, que es lo que el motor entiende como
+  día especial.
+- El preajuste 2.0TD ya se puede editar: llevaba los horarios escritos en el
+  código y la rejilla no habría podido cambiarlos.
+
+### Revisión de la navegación y de Facturación
+
+Repaso de la app contra la auditoría de Liquid Glass del diseño, regla a regla:
+
+- **Los botones eran rectángulos** de radio 12 y la guía los quiere en cápsula
+  de 44 px; los de icono, circulares.
+- **La cabecera no era capa de navegación**: el botón de volver era un glifo
+  sobre un cuadrado y ahora es un control circular de 40 px con su propio
+  material, legible sobre cualquier cielo.
+- **Borde al desplazar**, que faltaba: un degradado de 24 px que aparece solo
+  cuando el contenido se ha movido, no una línea permanente.
+- **Contraste alto** (`prefers-contrast: more`), que no estaba: fondo casi
+  plano, borde visible en todos los controles y tinta al nivel 1.
+- Dos textos por debajo del mínimo de 11 px, la escala de radios del sistema
+  (22/16/14) y zonas táctiles de 44 px en los controles pequeños.
+- En Facturación, el aviso de error era translúcido y el cielo se colaba por
+  detrás: ahora es opaco. Y el interruptor de proyección pasa a su propia fila,
+  con la explicación de qué hace.
+
 ## 0.26.0
 
 ### Los iconos del diseño, y Ajustes deja de ser catorce desplegables ciegos
