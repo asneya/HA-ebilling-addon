@@ -2,6 +2,22 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.29.0
+
+### Y los gráficos de Facturación también
+
+En la versión anterior migré el de Energía y me dejé los de Facturación, que
+resultaron ser **cinco** y no cuatro (al revisarlo apareció también el de la
+Simulación). Ya no queda ni un gráfico dibujado a mano en la app.
+
+- **El consumo diario se apila de verdad**, como en el prototipo: una barra por
+  día repartida por tramo, en vez de tres rectángulos sueltos con la exportada
+  al lado. Sigue eligiéndose el día pulsando su barra, y el elegido se resalta
+  detrás.
+- **El desglose por horas** sale con el color del tramo al que pertenece cada
+  hora, y el cursor lo sigue diciendo.
+- **Los dos acumulados** reaprovechan el componente de Energía.
+
 ## 0.28.0
 
 ### El gráfico de Energía, sobre uPlot
