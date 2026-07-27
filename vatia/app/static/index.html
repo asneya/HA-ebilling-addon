@@ -62,6 +62,13 @@
         </div>
       </header>
 
+      <!-- La ventana de energía gratis. Va antes del caudal: contesta «¿ahora
+           o luego?», que es lo que se viene a mirar. Se queda vacía —y la
+           tarjeta se esconde— si no hay sensor de previsión solar. -->
+      <section class="panel glass hidden" id="window-panel">
+        <vatia-window id="window"></vatia-window>
+      </section>
+
       <section class="panel glass">
         <div class="panel-head">
           <h2>Flujo de energía</h2>
@@ -929,6 +936,7 @@
   <!-- Componentes web del rediseño. Se cargan antes de app.js, que solo
      los instancia y les pasa los datos. -->
   <script src="static/components/vatia-flow.js"></script>
+  <script src="static/components/vatia-window.js"></script>
   <script src="static/app.js"></script>
 </body>
 </html>

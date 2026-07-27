@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -616,6 +616,101 @@ async def diagnostics(
     }
 
 
+# Consumo típico de la casa y ventana de energía gratis. El consumo típico sale
+# de una consulta de siete días, que es caro para un endpoint que se pide cada
+# pocos segundos, así que se guarda un rato.
+_baseline_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": None}
+_BASELINE_TTL = 1800.0
+
+
+async def _house_baseline(
+    settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
+) -> float | None:
+    """Potencia habitual de la casa (W): la mediana de la última semana.
+
+    La mediana y no la media: un día con el horno puesto tres horas sube la
+    media y dejaría la ventana más corta de lo que es. Lo que interesa es el
+    suelo de consumo, lo que la casa gasta sin que nadie haga nada.
+    """
+    entity = (settings.get("flow_sensors") or {}).get("home") or ""
+    if not entity:
+        return None
+    key = f"{entity}|{now.strftime('%Y-%m-%d-%H')}"
+    if (
+        _baseline_cache["key"] == key
+        and time.monotonic() - _baseline_cache["at"] < _BASELINE_TTL
+    ):
+        return _baseline_cache["value"]
+
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)
+    value: float | None = None
+    try:
+        results, units = await series_mod.ws_statistics(
+            settings,
+            [{"ids": [entity], "start": start, "end": now,
+              "period": "hour", "types": ["mean"]}],
+        )
+        factor = series_mod._unit_factor(entity, states, "power", units)
+        rows = series_mod._extract(results[0], entity, "mean", tz, factor)
+        samples = sorted(max(w, 0.0) for w in rows.values())
+        if len(samples) >= 12:
+            value = samples[len(samples) // 2]
+    except Exception:  # noqa: BLE001 - sin histórico no hay ventana, y ya está
+        _LOGGER.warning("No se pudo calcular el consumo típico", exc_info=True)
+    _baseline_cache.update({"key": key, "at": time.monotonic(), "value": value})
+    return value
+
+
+async def free_energy(
+    settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
+) -> dict[str, Any] | None:
+    """La ventana de energía gratis de hoy y de mañana, con su estado.
+
+    ``None`` cuando falta con qué calcularla: sin previsión solar no hay ventana
+    que enseñar, y es mejor no enseñar nada que inventarse una hora.
+    """
+    points = series_mod.forecast_power(
+        series_mod._forecast_states(settings, states), tz
+    )
+    if not points:
+        return None
+    baseline = await _house_baseline(settings, states, tz, now)
+    if baseline is None:
+        return None
+
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today = series_mod.free_window(points, baseline, midnight)
+    tomorrow = series_mod.free_window(points, baseline, midnight + timedelta(days=1))
+
+    # Eje de la línea de tiempo: las horas de luz de hoy, sacadas de la propia
+    # previsión, así no hace falta el sensor del sol. Es la misma cuenta que la
+    # ventana pero con el umbral a cero —«cuándo hay algo de sol»—, y por eso el
+    # eje contiene siempre a la ventana: subir el umbral solo puede acortarla.
+    lit = series_mod.free_window(points, 0.0, midnight)
+    daylight = {"from": lit["start"], "to": lit["end"]} if lit else None
+
+    # pre: aún no ha abierto · open: está abierta · post: ya cerró · none: hoy
+    # no sobra nada (un día de nubes) y solo queda mirar a mañana.
+    state = "none"
+    left_h = 0.0
+    if today:
+        start = datetime.fromisoformat(today["start"])
+        end = datetime.fromisoformat(today["end"])
+        state = "pre" if now < start else "open" if now < end else "post"
+        if state == "open":
+            left_h = (end - now).total_seconds() / 3600.0
+        elif state == "pre":
+            left_h = today["hours"]
+    return {
+        "baseline_w": round(baseline, 1),
+        "today": today,
+        "tomorrow": tomorrow,
+        "daylight": daylight,
+        "state": state,
+        "hours_left": round(left_h, 3),
+    }
+
+
 async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Payload de /api/live."""
     flow_cfg = settings.get("flow_sensors") or {}
@@ -665,6 +760,7 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
         ),
         "weather": _weather(states, settings),
         "phase": _day_phase(states, now),
+        "window": await free_energy(settings, states, now.tzinfo, now),
         "generated_at": now.isoformat(),
     }
 

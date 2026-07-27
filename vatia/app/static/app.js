@@ -274,6 +274,11 @@ function renderLive() {
   $("#home-sub").textContent =
     `${PHASE_TEXT[live.phase] || ""} · ${now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
 
+  // Ventana de energía gratis. Sin previsión solar no hay ventana que enseñar,
+  // y una tarjeta vacía es peor que ninguna: se esconde la tarjeta entera.
+  $("#window").data = live.window || null;
+  $("#window-panel").classList.toggle("hidden", !live.window);
+
   // Flujo
   const configured = live.configured;
   $("#flow-empty").classList.toggle("hidden", configured);

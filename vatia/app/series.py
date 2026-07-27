@@ -303,6 +303,88 @@ def _midnight(moment: datetime) -> datetime:
     return moment.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+# ---------------------------------------------------------------------------
+# La ventana de energía gratis
+# ---------------------------------------------------------------------------
+# El tramo del día en el que la previsión solar da más de lo que la casa gasta
+# de normal. Lo que se ponga a funcionar dentro de la ventana lo paga el sol:
+# fuera, lo paga la red. Es la pregunta que la app tiene que contestar sin que
+# nadie la haga —«¿ahora o luego?»— y de ahí que la ventana salga en Inicio.
+#
+# El umbral no es cero sino el consumo típico de la casa: con 200 W de nevera y
+# 150 W de sol no sobra nada, aunque el panel esté generando.
+
+def free_window(
+    points: list[tuple[datetime, float]], baseline_w: float, day: datetime
+) -> dict[str, Any] | None:
+    """Ventana de un día concreto, o ``None`` si ese día no sobra nada.
+
+    ``points`` es la curva de previsión completa (``forecast_power``) y ``day``
+    la medianoche local del día que interesa. Los cortes se interpolan entre
+    puntos: la previsión viene cada media hora o cada hora, y decir «abre a las
+    12:00» cuando abre a las 11:40 es media hora de energía regalada.
+    """
+    end_of_day = day + timedelta(days=1)
+    curve = [(t, w) for t, w in points if day <= t < end_of_day]
+    if len(curve) < 2:
+        return None
+
+    # Cortes con el umbral. Cada tramo entre dos puntos se trata como una recta,
+    # así que el cruce se despeja sin iterar.
+    def cross(a: tuple[datetime, float], b: tuple[datetime, float]) -> datetime:
+        span = b[1] - a[1]
+        if span == 0:
+            return a[0]
+        ratio = max(min((baseline_w - a[1]) / span, 1.0), 0.0)
+        return a[0] + (b[0] - a[0]) * ratio
+
+    start: datetime | None = None
+    end: datetime | None = None
+    for index in range(len(curve) - 1):
+        left, right = curve[index], curve[index + 1]
+        if left[1] <= baseline_w < right[1]:
+            moment = cross(left, right)
+            if start is None:
+                start = moment
+        elif right[1] <= baseline_w < left[1]:
+            end = cross(left, right)
+    # La previsión puede empezar o acabar ya por encima del umbral (curva
+    # recortada, o un día en el que amanece generando).
+    if start is None and curve[0][1] > baseline_w:
+        start = curve[0][0]
+    if end is None and curve[-1][1] > baseline_w:
+        end = curve[-1][0]
+    if start is None or end is None or end <= start:
+        return None
+
+    # Energía que sobra dentro de la ventana: la integral del excedente. Se
+    # integra sobre la curva recortada a la ventana, incluidos los extremos
+    # interpolados, para no contar de más ni de menos.
+    inside = [(t, w) for t, w in curve if start < t < end]
+    shape = [(start, baseline_w)] + inside + [(end, baseline_w)]
+    surplus_wh = 0.0
+    peak = 0.0
+    for index in range(len(shape) - 1):
+        (t0, w0), (t1, w1) = shape[index], shape[index + 1]
+        hours = (t1 - t0).total_seconds() / 3600.0
+        above0 = max(w0 - baseline_w, 0.0)
+        above1 = max(w1 - baseline_w, 0.0)
+        surplus_wh += (above0 + above1) / 2.0 * hours
+        peak = max(peak, above0, above1)
+
+    hours = (end - start).total_seconds() / 3600.0
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "hours": round(hours, 3),
+        "kwh": round(surplus_wh / 1000.0, 3),
+        # La media es lo que se puede enchufar y mantener; el pico, lo que cabe
+        # en el mejor momento.
+        "surplus_w": round(surplus_wh / hours, 1) if hours > 0 else 0.0,
+        "peak_w": round(peak, 1),
+    }
+
+
 def _interpolate(points: list[tuple[datetime, float]], grid: list[datetime]) -> dict[str, float]:
     """Interpola la curva de previsión sobre la rejilla del eje X."""
     if not points:
