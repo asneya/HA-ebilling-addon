@@ -26,6 +26,10 @@
        funciona en WebKit, el motor de la app de Home Assistant en iOS. -->
   <!--ICONOS-->
 
+  <!-- Borde superior al desplazar: aparece solo cuando el contenido se ha
+       movido, como degradado y no como línea (§07). -->
+  <div class="scroll-top" aria-hidden="true"></div>
+
   <!-- Indicador de progreso: visible mientras hay peticiones en vuelo -->
   <div class="progress" role="progressbar" aria-label="Cargando" aria-hidden="true"></div>
 
@@ -219,12 +223,12 @@
             <div class="period-label" id="period-label">—</div>
             <button id="next-cycle" class="icon-btn" title="Ciclo siguiente">›</button>
           </div>
-          <div class="row-actions">
-            <label class="switch">
-              <input type="checkbox" id="projection-toggle" class="ios-switch">
-              <span>Proyección fin de ciclo</span>
-            </label>
-            <div class="spacer"></div>
+          <label class="switch-row">
+            <span class="li-txt"><b>Proyección fin de ciclo</b>
+              <small>Estima el total como si el ciclo estuviera completo</small></span>
+            <input type="checkbox" id="projection-toggle" class="ios-switch">
+          </label>
+          <div class="row-actions split">
             <button id="cp-toggle" class="btn subtle">Periodo</button>
             <button id="refresh-btn" class="btn subtle">Actualizar</button>
           </div>
@@ -797,21 +801,43 @@
   </nav>
 
   <!-- ===================== MODALES ===================== -->
+  <!-- Editor de tarifa: hoja de cinco pasos plegables. Cada uno resume su
+       contenido cerrado, así que la hoja se lee de arriba abajo como una lista
+       de comprobación, y se abre siempre el primero que está incompleto.
+       Guardar vive en la cabecera, no al final de veinticinco campos. -->
   <div id="tariff-modal" class="modal hidden">
-    <div class="sheet glass">
-      <div class="sheet-head">
+    <div class="sheet glass tall">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <div class="sheet-bar">
+        <button class="sheet-act" id="cancel-tariff-btn">Cancelar</button>
         <h3 id="tariff-modal-title">Nueva tarifa</h3>
-        <button class="icon-btn" id="close-tariff-modal">✕</button>
+        <button class="sheet-act strong" id="save-tariff-btn">Guardar</button>
       </div>
       <div class="sheet-body">
-        <div class="grid2">
+        <span id="tariff-error" class="error-text block"></span>
+        <details class="step" id="step-id">
+          <summary>
+            <span class="step-n">1</span>
+            <span class="step-txt"><b>Identidad</b><small id="sum-id">—</small></span>
+            <svg class="i step-chev"><use href="#i-desplegar"/></svg>
+          </summary>
+          <div class="step-body">
+<div class="grid2">
           <label class="field"><span>Nombre</span><input id="t-name"></label>
           <label class="field"><span>Compañía</span><input id="t-company"></label>
           <label class="field"><span>Color</span><input id="t-color" type="color" value="#4a6cf7"></label>
         </div>
 
-        <h4>Término de energía</h4>
-        <label class="field"><span>Estructura</span>
+                  </div>
+        </details>
+        <details class="step" id="step-energy">
+          <summary>
+            <span class="step-n">2</span>
+            <span class="step-txt"><b>Energía</b><small id="sum-energy">—</small></span>
+            <svg class="i step-chev"><use href="#i-desplegar"/></svg>
+          </summary>
+          <div class="step-body">
+<label class="field"><span>Estructura</span>
           <select id="t-etype">
             <option value="td3">3 tramos 2.0TD (punta/llano/valle)</option>
             <option value="custom">Tramos personalizados (1 a 6)</option>
@@ -823,6 +849,10 @@
           <label class="field"><span>Llano €/kWh</span><input id="t-td3-llano" type="number" step="0.000001" min="0"></label>
           <label class="field"><span>Valle €/kWh</span><input id="t-td3-valle" type="number" step="0.000001" min="0"></label>
         </div>
+        <button type="button" class="btn subtle block" id="t-open-grid">
+          Cuándo se aplica cada periodo
+        </button>
+        <p class="li-note" id="t-grid-sum">—</p>
         <div id="t-etype-custom" class="hidden">
           <div id="t-periods" class="period-rows"></div>
           <button class="btn subtle" id="t-add-period">+ Añadir tramo</button>
@@ -832,8 +862,16 @@
           <label class="field"><span>Margen sobre PVPC (€/kWh)</span><input id="t-pvpc-margin" type="number" step="0.0001" value="0"></label>
         </div>
 
-        <h4>Compensación de excedentes</h4>
-        <label class="field"><span>Tipo</span>
+                  </div>
+        </details>
+        <details class="step" id="step-surplus">
+          <summary>
+            <span class="step-n">3</span>
+            <span class="step-txt"><b>Excedentes</b><small id="sum-surplus">—</small></span>
+            <svg class="i step-chev"><use href="#i-desplegar"/></svg>
+          </summary>
+          <div class="step-body">
+<label class="field"><span>Tipo</span>
           <select id="t-surplus-type">
             <option value="none">Sin compensación</option>
             <option value="flat">Precio fijo</option>
@@ -852,14 +890,30 @@
           <p class="li-note">Acumula como saldo el valor de los excedentes que superan el tope legal en lugar de perderlo.</p>
         </div>
 
-        <h4>Término de potencia (€/kW·día)</h4>
-        <div class="grid2">
+                  </div>
+        </details>
+        <details class="step" id="step-power">
+          <summary>
+            <span class="step-n">4</span>
+            <span class="step-txt"><b>Potencia</b><small id="sum-power">—</small></span>
+            <svg class="i step-chev"><use href="#i-desplegar"/></svg>
+          </summary>
+          <div class="step-body">
+<div class="grid2">
           <label class="field"><span>Punta P1</span><input id="t-power-p1" type="number" step="0.000001" min="0"></label>
           <label class="field"><span>Valle P2</span><input id="t-power-p2" type="number" step="0.000001" min="0"></label>
         </div>
 
-        <h4>Cargos y servicios</h4>
-        <div class="grid2">
+                  </div>
+        </details>
+        <details class="step" id="step-taxes">
+          <summary>
+            <span class="step-n">5</span>
+            <span class="step-txt"><b>Impuestos y cargos fijos</b><small id="sum-taxes">—</small></span>
+            <svg class="i step-chev"><use href="#i-desplegar"/></svg>
+          </summary>
+          <div class="step-body">
+<div class="grid2">
           <label class="field"><span>Bono social (€/día)</span><input id="t-bono" type="number" step="0.000001" min="0"></label>
           <label class="field"><span>Alquiler contador (€/día)</span><input id="t-meter" type="number" step="0.00001" min="0"></label>
           <label class="field"><span>Servicios (€/mes)</span><input id="t-services" type="number" step="0.01" min="0"></label>
@@ -872,11 +926,25 @@
           <label class="field"><span>IVA energía %</span><input id="t-vat-energy" type="number" step="0.1" min="0"></label>
           <label class="field"><span>IVA servicios %</span><input id="t-vat-services" type="number" step="0.1" min="0"></label>
         </div>
+                </div>
+        </details>
       </div>
-      <div class="sheet-foot">
-        <span id="tariff-error" class="error-text"></span>
-        <button class="btn subtle" id="cancel-tariff-btn">Cancelar</button>
-        <button class="btn primary" id="save-tariff-btn">Guardar</button>
+    </div>
+  </div>
+
+  <!-- Subhoja del horario: la rejilla vive aquí y no dentro del paso 2, para
+       que las celdas lleguen a 19 px y los cinco pasos se sigan leyendo
+       detrás. -->
+  <div id="grid-modal" class="modal hidden">
+    <div class="sheet glass tall">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <div class="sheet-bar">
+        <button class="sheet-act" id="grid-back">Atrás</button>
+        <h3>Horario semanal</h3>
+        <button class="sheet-act strong" id="grid-done">Hecho</button>
+      </div>
+      <div class="sheet-body">
+        <vatia-schedule id="grid-editor"></vatia-schedule>
       </div>
     </div>
   </div>
@@ -933,6 +1001,7 @@
   <script src="static/components/vatia-flow.js"></script>
   <script src="static/components/vatia-window.js"></script>
   <script src="static/components/vatia-close.js"></script>
+  <script src="static/components/vatia-schedule.js"></script>
   <script src="static/app.js"></script>
 </body>
 </html>

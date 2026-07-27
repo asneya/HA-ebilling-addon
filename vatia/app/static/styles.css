@@ -88,9 +88,10 @@
   --valle: var(--s-batt);
   --imp: var(--s-grid);
   --exp: var(--s-exp);
-  --r-lg: 24px;
-  --r-md: 20px;
-  --r-sm: 12px;
+  /* Radios concéntricos del §07: interior = exterior − relleno. */
+  --r-lg: 22px;   /* tarjeta */
+  --r-md: 16px;   /* bloque interior */
+  --r-sm: 14px;   /* fila y campo */
   /* §07: cristal regular — desenfoque de 30 px, saturación 180 %. */
   --blur: saturate(180%) blur(30px);
   color-scheme: light dark;
@@ -381,7 +382,7 @@ body[data-view="energy"] .bg-scrim {
 .pf-io { font-size: 11.5px; font-weight: 600; }
 .pf-lbl { fill: var(--ink-3); font-size: 12.5px; font-weight: 500; }
 .pf-flowval {
-  fill: var(--ink-2); font-size: 10.5px; font-weight: 600;
+  fill: var(--ink-2); font-size: 11px; font-weight: 600;
   paint-order: stroke; stroke: var(--glass); stroke-width: 3.5px; stroke-linejoin: round;
 }
 
@@ -429,7 +430,17 @@ body[data-view="energy"] .bg-scrim {
 .tappable:active { transform: scale(.985); }
 .disclosure { color: var(--ink-3); font-size: 20px; font-weight: 300; margin-left: 2px; }
 
-.nav-head { display: flex; align-items: center; gap: 10px; padding: 6px 0 16px; }
+.nav-head {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 4px 0 14px;
+}
+/* El botón de volver y las acciones de la cabecera: 40 px circulares con
+   material propio, para leerse sobre cualquier fase del cielo. */
+.nav-head .icon-btn {
+  width: 40px; height: 40px; font-size: 20px;
+  background: var(--glass); border-color: var(--glass-brd);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+}
 .nav-title {
   flex: 1 1 auto; text-align: center; margin: 0; font-size: 19px; font-weight: 650;
   color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.35);
@@ -654,8 +665,8 @@ body[data-view="energy"] .bg-scrim {
    desenfoque no tenía nada que desenfocar, solo coste. */
 .btn {
   border: 1px solid var(--sep); background: var(--glass-2); color: var(--ink);
-  padding: 9px 15px; border-radius: 12px; cursor: pointer; font: inherit;
-  font-size: 14px; font-weight: 600;
+  min-height: 44px; padding: 0 18px; border-radius: 999px; cursor: pointer; font: inherit;
+  font-size: 15px; font-weight: 600;
   text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn:active { transform: scale(.97); }
@@ -665,12 +676,18 @@ body[data-view="energy"] .bg-scrim {
 .btn.danger { color: var(--bad); }
 /* 44×44 es el mínimo recomendado por las HIG de Apple para zonas táctiles. */
 .icon-btn {
-  width: 44px; height: 44px; flex: 0 0 auto; border-radius: 13px; cursor: pointer;
+  width: 44px; height: 44px; flex: 0 0 auto; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--sep); background: var(--glass-2); color: var(--ink); font-size: 19px;
   display: inline-flex; align-items: center; justify-content: center; line-height: 1;
 }
 .icon-btn:disabled { opacity: .35; }
 .row-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Dos acciones a partes iguales: con los botones en cápsula de 44 px, tres
+   elementos en una línea se desbordaban. */
+.row-actions.split > .btn { flex: 1; }
+/* Fila de interruptor con su explicación, como las de Ajustes. */
+.switch-row { display: flex; align-items: center; gap: 12px;
+  padding: 4px 2px 12px; cursor: pointer; }
 .row-actions.panel { padding: 12px 14px; }
 .spacer { flex: 1 1 auto; }
 .switch { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
@@ -872,7 +889,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .bill-actions { display: flex; gap: 8px; margin-top: 11px; flex-wrap: wrap; }
 .prices { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 7px; margin: 11px 0; }
 .price { background: var(--glass-2); border-radius: 10px; padding: 7px 9px; text-align: center; }
-.price .pl { font-size: 10.5px; color: var(--ink-3); }
+.price .pl { font-size: 11px; color: var(--ink-3); }
 .price .pv { font-weight: 700; font-size: 13px; }
 
 /* ---------------- gráficos y tablas ---------------- */
@@ -885,7 +902,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .chart { width: 100%; overflow-x: auto; }
 .chart svg { display: block; }
 .c-axis { fill: var(--ink-3); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.c-axis.sm { font-size: 10px; }
+.c-axis.sm { font-size: 11px; }
 .bar-seg:hover { opacity: .82; }
 .table-panel { padding: 6px 14px; overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -904,7 +921,11 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   border-radius: var(--r-md); padding: 12px 15px; margin-bottom: 12px; font-size: 13.5px;
   background: var(--solid); border: 1px solid var(--hair);
 }
-.banner.error { background: rgba(255, 69, 58, .16); border-color: rgba(255, 69, 58, .3); }
+.banner.error {
+  background: color-mix(in srgb, var(--bad) 12%, var(--solid));
+  border-color: color-mix(in srgb, var(--bad) 34%, var(--solid));
+  color: var(--ink);
+}
 
 /* ---------------- modales (sheets) ---------------- */
 .modal {
@@ -1020,3 +1041,110 @@ body[data-bg="flat"] .group-label,
 body[data-bg="flat"] .section-title,
 body[data-bg="flat"] .nav-count { color: var(--ink-3); }
 body[data-bg="flat"] .section-title .soft { color: var(--ink-3); opacity: 1; }
+
+/* Zona táctil de 44 px en los controles que se dibujan más pequeños. El área
+   crece con un pseudoelemento, así que el aspecto no cambia (§07). */
+.nav-head .icon-btn, .chip-clear, .zoom-btn, .srow-assign, .tf-btn { position: relative; }
+.nav-head .icon-btn::after, .chip-clear::after, .zoom-btn::after,
+.srow-assign::after, .tf-btn::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
+
+/* Contraste alto (§07): fondos casi planos, borde de 1 px en todos los
+   controles y tinta al nivel 1 — los grises de nivel 3 desaparecen. Se hace
+   sobre los mismos tokens, sin marcado alternativo. */
+@media (prefers-contrast: more) {
+  :root {
+    --ink-2: var(--ink);
+    --ink-3: #3d4752;
+    --hair: rgba(10, 16, 23, .28);
+    --hair-2: rgba(10, 16, 23, .42);
+    --glass: var(--solid);
+    --glass-brd: var(--hair-2);
+    --on-bg-2: #fff;
+  }
+  :root[data-theme="dark"] {
+    --ink-3: #cfd8e2;
+    --hair: rgba(255, 255, 255, .3);
+    --hair-2: rgba(255, 255, 255, .46);
+  }
+  /* Fondo casi plano: el cielo deja de competir con la tinta. */
+  .bg > *:not(.bg-scrim) { display: none; }
+  .bg { background: var(--page); }
+  .hero-title, .hero-sub, .nav-title, .group-label, .section-title, .nav-count {
+    color: var(--ink); text-shadow: none;
+  }
+  .btn, .icon-btn, .seg, .tab, .vt, .tf-btn, .srow-assign,
+  select, input[type="text"], input[type="number"], input[type="date"] {
+    border: 1px solid var(--hair-2);
+  }
+  .glass-nav, .weather { backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: var(--solid); }
+}
+
+/* Borde al desplazar (§07): un degradado de 24 px del color de la barra en el
+   borde del contenido, para que el texto no cruce el material a medio camino.
+   No es una línea de 1 px: la guía lo pide expresamente como degradado, y solo
+   cuando el contenido se ha movido. */
+.scroll-top {
+  position: fixed; left: 0; right: 0; top: 0; height: 24px; z-index: 38;
+  pointer-events: none; opacity: 0; transition: opacity .2s ease;
+  background: linear-gradient(to bottom, var(--page), transparent);
+}
+body.scrolled .scroll-top { opacity: .95; }
+@media (prefers-reduced-motion: reduce) { .scroll-top { transition: none; } }
+
+/* ---------------- Editor de tarifa: cinco pasos ----------------
+   El modal de veinticinco campos pasa a una hoja que se lee como una lista de
+   comprobación: cada paso resume su contenido cuando está cerrado y solo uno
+   está abierto a la vez. El paso con un error lo dice en el resumen, sin que
+   haya que abrirlo para enterarse. */
+.sheet.tall { max-height: 92vh; }
+.sheet-grip {
+  display: block; width: 38px; height: 5px; border-radius: 999px;
+  background: var(--hair-2); margin: 8px auto 2px;
+}
+/* Guardar vive en la cabecera y es siempre alcanzable, no al final del
+   formulario (§05). */
+.sheet-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.sheet-bar h3 { flex: 1; text-align: center; margin: 0; font-size: 17px;
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-act {
+  flex: none; min-height: 44px; padding: 0 6px; border: 0; background: none;
+  font: inherit; font-size: 15px; color: var(--accent); cursor: pointer;
+}
+.sheet-act.strong { font-weight: 600; }
+.sheet-act:disabled { opacity: .4; cursor: default; }
+
+.step { border-bottom: 1px solid var(--hair); }
+.step:last-of-type { border-bottom: 0; }
+.step > summary {
+  display: flex; align-items: center; gap: 12px; padding: 14px 2px;
+  cursor: pointer; list-style: none; min-height: 44px;
+}
+.step > summary::-webkit-details-marker { display: none; }
+.step-n {
+  flex: none; width: 24px; height: 24px; border-radius: 999px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  background: var(--seg-track); color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.step[open] .step-n { background: var(--accent); color: #fff; }
+.step.done .step-n { background: var(--good-chip); color: var(--good); }
+.step.bad .step-n { background: var(--warn-chip); color: var(--warn); }
+.step-txt { min-width: 0; margin-right: auto; }
+.step-txt b { display: block; font-size: 15.5px; font-weight: 600; }
+.step-txt small { display: block; font-size: 12.5px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step.bad .step-txt small { color: var(--warn); font-weight: 600; }
+.step-chev { flex: none; width: 20px; height: 20px; color: var(--ink-3);
+  transition: transform .2s ease; }
+.step[open] .step-chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .step-chev { transition: none; } }
+.step-body { padding: 0 2px 16px; display: grid; gap: 12px; }
+.error-text.block { display: block; margin: 0 0 4px; }
