@@ -381,7 +381,7 @@ async def daily_energy(
     }
     power_ids = list(dict.fromkeys(s for s in power_of.values() if s))
     if not ids and not power_ids:
-        return {"totals": {}, "flows": None, "sources": {}}
+        return {"totals": {}, "flows": None, "sources": {}, "buckets": {}}
 
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{','.join(power_ids)}"
@@ -391,7 +391,8 @@ async def daily_energy(
     ):
         cached = {"totals": dict(_daily_cache["value"]["totals"]),
                   "flows": _daily_cache["value"]["flows"],
-                  "sources": dict(_daily_cache["value"].get("sources") or {})}
+                  "sources": dict(_daily_cache["value"].get("sources") or {}),
+                  "buckets": _daily_cache["value"].get("buckets") or {}}
         if mode == "daily":
             # El estado va al segundo; el reparto viene cacheado. El estado
             # tampoco manda si marca cero y la potencia dice otra cosa.
@@ -542,11 +543,14 @@ async def daily_energy(
     out = {key: max(value, 0.0) for key, value in out.items()}
 
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
-    value = {"totals": out, "flows": flows, "sources": sources}
+    # Los buckets salen fuera para poder cruzarlos con la ventana en el cierre
+    # del día: ya están descargados, así que no cuesta ninguna petición extra.
+    value = {"totals": out, "flows": flows, "sources": sources, "buckets": per_bucket}
     _daily_cache.update({"key": cache_key, "at": time.monotonic(),
                          "value": {"totals": dict(out), "flows": flows,
                                    "power": dict(power_totals),
-                                   "sources": dict(sources)}})
+                                   "sources": dict(sources),
+                                   "buckets": per_bucket}})
     return value
 
 
@@ -711,6 +715,88 @@ async def free_energy(
     }
 
 
+def _sunset(states: dict[str, Any], now: datetime) -> datetime | None:
+    """Puesta de sol de hoy, de ``sun.sun``."""
+    attrs = (states.get("sun.sun") or {}).get("attributes") or {}
+    moment = series_mod._parse_dt(attrs.get("next_setting"), now.tzinfo)
+    if moment is None:
+        return None
+    # `next_setting` es la *próxima*: si cae mañana, la de hoy ya pasó y se
+    # obtiene restando un día. Entre dos puestas seguidas hay un par de minutos
+    # de diferencia, y aquí solo sirve para redactar una frase.
+    while moment.date() > now.date():
+        moment -= timedelta(days=1)
+    return moment
+
+
+def day_close(
+    states: dict[str, Any],
+    energy: dict[str, Any],
+    buckets: dict[str, dict[str, float]],
+    window: dict[str, Any] | None,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """El cierre del día, al anochecer. ``None`` mientras haya sol.
+
+    Cuando el sol se pone ya no queda nada que decidir: el día está hecho, y lo
+    que toca es contarlo. Sale de datos que ya están en el payload, así que no
+    cuesta ninguna petición.
+
+    Lo que no lleva y podría parecer que falta: el ahorro en euros y la racha de
+    días. El ahorro necesitaría una tarifa «la mía», y la app justamente compara
+    tarifas sin elegir ninguna; la racha necesitaría guardar un histórico propio
+    que hoy no existe. Ponerlos a ojo sería inventarse la cifra que más se mira.
+    """
+    sunset = _sunset(states, now)
+    if sunset is None or now < sunset:
+        return None
+
+    home = energy.get("home") or {}
+    generation = energy.get("generation") or {}
+    consumed = float(home.get("total") or 0.0)
+    from_grid = next(
+        (float(r["kwh"]) for r in home.get("rows") or [] if r["key"] == "from_grid"), 0.0
+    )
+    # Autosuficiencia: la parte del consumo que no ha venido de la red. Sin
+    # consumo medido no hay porcentaje que dar.
+    self_pct = round((1 - from_grid / consumed) * 100) if consumed > 0 else None
+
+    # Cuánto de lo que gastó la casa cayó dentro de la ventana. Es el número que
+    # dice si el día se aprovechó o no, y sale de cruzar los buckets de 5
+    # minutos —ya descargados— con las horas de la ventana.
+    today = (window or {}).get("today")
+    in_window = None
+    if today and buckets:
+        start = datetime.fromisoformat(today["start"])
+        end = datetime.fromisoformat(today["end"])
+        total = 0.0
+        inside = 0.0
+        for iso, values in buckets.items():
+            kwh = values.get("home_energy")
+            if kwh is None:
+                continue
+            total += kwh
+            moment = datetime.fromisoformat(iso)
+            if start <= moment < end:
+                inside += kwh
+        if total > 0:
+            in_window = {
+                "kwh": round(inside, 2),
+                "pct": round(inside / total * 100),
+            }
+
+    return {
+        "date": now.date().isoformat(),
+        "sunset": sunset.isoformat(),
+        "minutes_since": max(1, round((now - sunset).total_seconds() / 60)),
+        "produced": round(float(generation.get("total") or 0.0), 2),
+        "consumed": round(consumed, 2),
+        "self_pct": self_pct,
+        "in_window": in_window,
+        "tomorrow": (window or {}).get("tomorrow"),
+    }
+
+
 async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Payload de /api/live."""
     flow_cfg = settings.get("flow_sensors") or {}
@@ -746,6 +832,9 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
     if home_power is None:
         home_power = flows["solar_home"] + flows["grid_home"] + flows["battery_home"]
 
+    energy_summary = _energy_summary(energy, daily["flows"])
+    window = await free_energy(settings, states, now.tzinfo, now)
+
     return {
         "configured": configured,
         "power": {
@@ -754,13 +843,14 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
             "battery_soc": round(soc, 1) if soc is not None else None,
         },
         "flows": {k: round(v, 1) for k, v in flows.items()},
-        "energy": _energy_summary(energy, daily["flows"]),
+        "energy": energy_summary,
         "has_battery": bool(
             flow_cfg.get("battery_charge") or flow_cfg.get("battery_discharge")
         ),
         "weather": _weather(states, settings),
         "phase": _day_phase(states, now),
-        "window": await free_energy(settings, states, now.tzinfo, now),
+        "window": window,
+        "close": day_close(states, energy_summary, daily.get("buckets") or {}, window, now),
         "generated_at": now.isoformat(),
     }
 

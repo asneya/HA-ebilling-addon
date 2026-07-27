@@ -274,10 +274,17 @@ function renderLive() {
   $("#home-sub").textContent =
     `${PHASE_TEXT[live.phase] || ""} · ${now.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`;
 
+  // El cierre del día sale con la puesta de sol y sustituye a la ventana. Al
+  // descartarlo («Ver el día completo») se recuerda la fecha, para que no
+  // vuelva a asomar esa misma noche pero sí a la siguiente.
+  const closing = live.close && localStorage.getItem("vatia-close-seen") !== live.close.date;
+  $("#close").data = closing ? live.close : null;
+  $("#close-panel").classList.toggle("hidden", !closing);
+
   // Ventana de energía gratis. Sin previsión solar no hay ventana que enseñar,
   // y una tarjeta vacía es peor que ninguna: se esconde la tarjeta entera.
-  $("#window").data = live.window || null;
-  $("#window-panel").classList.toggle("hidden", !live.window);
+  $("#window").data = closing ? null : live.window || null;
+  $("#window-panel").classList.toggle("hidden", closing || !live.window);
 
   // Flujo
   const configured = live.configured;
@@ -822,6 +829,14 @@ function openEnergy() {
   showView("energy");
   loadEnergy();
 }
+
+// «Ver el día completo»: se apunta la fecha para que el cierre no vuelva esa
+// noche, y se repinta la Home con lo último recibido.
+$("#close").addEventListener("dismiss", () => {
+  const c = $("#close").data;
+  if (c) localStorage.setItem("vatia-close-seen", c.date);
+  if (state.live) renderLive();
+});
 
 $("#summary-panel").addEventListener("click", openEnergy);
 $("#summary-panel").addEventListener("keydown", (e) => {
