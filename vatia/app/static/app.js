@@ -331,7 +331,7 @@ const SERIES_VAR = {
   solar: "--s-solar", home: "--s-home", grid: "--s-grid",
   grid_import: "--s-grid", grid_export: "--s-exp",
   battery: "--s-batt", battery_charge: "--s-batt", battery_discharge: "--s-batt-out",
-  yesterday: "--ink-3", forecast: "--s-solar",
+  yesterday: "--ink-3", forecast: "--s-forecast",
   to_load: "--s-home", to_battery: "--s-batt", to_grid: "--s-exp",
   from_solar: "--s-solar", from_battery: "--s-batt", from_grid: "--s-grid",
 };

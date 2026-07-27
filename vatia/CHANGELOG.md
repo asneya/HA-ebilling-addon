@@ -2,6 +2,29 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.30.1
+
+### La previsión aparece donde la maqueta la pone
+
+No se pintaba, y no era un fallo de dibujo: **la vista general no la pedía**. El
+servidor solo añadía la serie de previsión en la vista de solar, y la general es
+la que se abre al entrar en Energía, así que lo normal era no verla nunca. La
+maqueta dice lo contrario —«rango día, vista general, con la previsión punteada
+en las horas futuras y ayer como referencia»— y ahora va en las dos, también en
+los rangos de semana y mes.
+
+Ya puestos, la línea se ajusta a lo que dice el sistema de diseño:
+
+- **Color propio**: `#B87A10` en claro y `#F5C46B` en oscuro, en vez del ámbar
+  del solar. Importa justo ahora: en la vista general la punteada continúa a la
+  continua, y con el mismo color no se veía dónde acaba lo medido.
+- **Punteada 6/5**, y escalada a la densidad de la pantalla. uPlot escala el
+  grosor pero pasa el guion tal cual al lienzo, así que en un móvil 2× el patrón
+  salía a mitad de tamaño y la línea parecía casi continua.
+- **Arranca en el último punto real** y no en la hora del reloj. El estadístico
+  del recorder va unos minutos por detrás, y cortando por el reloj quedaba un
+  hueco entre la línea y la punteada.
+
 ## 0.30.0
 
 ### Repaso de uso

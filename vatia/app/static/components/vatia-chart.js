@@ -126,18 +126,24 @@
 
       const datos = [xs, ...orden.map((s) => s.values.map((v) => (v == null ? null : v)))];
 
+      const ratio = window.devicePixelRatio || 1;
       const series = orden.map((s) => {
         const color = this._colorFor(s.key);
         const tenue = s.key === "yesterday";
         return {
           label: s.label || s.key,
           stroke: color,
-          width: s.dashed || tenue ? 1.8 : 2.2,
+          width: s.dashed ? 2 : (tenue ? 1.8 : 2.2),
           // La previsión va punteada y sin relleno; el resto, línea con su área.
           // El relleno se apaga con un color transparente y no con `undefined`:
           // uPlot pone uno por defecto cuando la propiedad no viene, y la
           // previsión salía con área.
-          dash: s.dashed ? [2.5, 4.5] : undefined,
+          //
+          // El patrón de la maqueta es 6/5, en píxeles de CSS. uPlot escala el
+          // grosor por la densidad de pantalla pero pasa el guion tal cual al
+          // lienzo, así que hay que escalarlo aquí: en una pantalla 2× un 6/5
+          // sin escalar sale como un 3/2,5 y la línea parece casi continua.
+          dash: s.dashed ? [6 * ratio, 5 * ratio] : undefined,
           fill: s.dashed ? "rgba(0,0,0,0)" : gradiente(color, tenue ? 0.16 : 0.34),
           // Los huecos no se interpolan: `null` deja el hueco, que es lo que
           // distingue «no hay dato» de «hay un cero».

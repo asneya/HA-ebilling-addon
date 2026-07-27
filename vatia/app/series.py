@@ -817,9 +817,11 @@ async def _build_power(
         wanted.append(("grid_import", "Importada", flow.get("grid_import", "")))
         wanted.append(("grid_export", "Exportada", flow.get("grid_export", "")))
 
-    # Previsión de generación: solo si el intervalo alcanza tiempo futuro.
+    # Previsión de generación: solo si el intervalo alcanza tiempo futuro. Va
+    # tanto en la vista general como en la de solar, que es como está en la
+    # maqueta: la general del día lleva la punteada de las horas que quedan.
     forecast_points: list[tuple[datetime, float]] = []
-    if view == "solar" and end > now:
+    if view in ("overview", "solar") and end > now:
         forecast_points = forecast_power(_forecast_states(settings, states), tz)
         forecast_points = [p for p in forecast_points if start <= p[0] <= end]
 
@@ -934,11 +936,20 @@ async def _build_power(
     if forecast_points:
         grid = [datetime.fromisoformat(k) for k in x_keys]
         values = _interpolate(forecast_points, grid)
-        # Solo la parte futura (desde el bucket en curso, para que la línea
-        # punteada enlace con la real); del pasado ya informa la serie medida.
+        # Solo la parte futura; del pasado ya informa la serie medida. La
+        # maqueta pide que la punteada «arranque exactamente en el último punto
+        # real», así que el corte es ese punto y no la hora del reloj: el
+        # estadístico del recorder va unos minutos por detrás, y cortando por el
+        # reloj quedaba un hueco entre la línea continua y la punteada.
         cut = now - timedelta(
             minutes=now.minute % 5, seconds=now.second, microseconds=now.microsecond
         )
+        medidos = curves.get("solar") or {}
+        if medidos:
+            # `min` y no el último punto a secas: si el sensor va *adelantado*
+            # respecto al reloj, la previsión no debe empezar más tarde que
+            # ahora y dejar el tramo de en medio sin nada.
+            cut = min(cut, datetime.fromisoformat(max(medidos)))
         future = {
             moment.isoformat(): values[moment.isoformat()]
             for moment in grid
@@ -1162,7 +1173,7 @@ async def _build_energy(
     # Previsión de generación para los buckets futuros (solo semana y mes, que
     # es el alcance de los integradores de forecast).
     fc_daily: dict[str, float] = {}
-    if view == "solar" and end > now and range_key in ("week", "month"):
+    if view in ("overview", "solar") and end > now and range_key in ("week", "month"):
         for day, kwh in forecast_daily(_forecast_states(settings, states), tz).items():
             if start <= day < end and day >= _midnight(now):
                 fc_daily[day.isoformat()] = kwh

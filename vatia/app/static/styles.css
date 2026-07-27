@@ -57,6 +57,10 @@
      compartiendo el morado en la misma leyenda. */
   --s-batt-out: #0f7d8a;
   --s-exp: #7a46d6;
+  /* La previsión tiene color propio y no el del solar: en la vista general las
+     dos van juntas —la punteada continúa a la continua— y con el mismo ámbar no
+     se distinguía dónde acaba lo medido y empieza lo previsto. */
+  --s-forecast: #b87a10;
   /* semánticos */
   --good: #0e7a52;
   --good-chip: rgba(22, 164, 111, .14);
@@ -124,6 +128,7 @@
   --s-batt: #35d69b;
   --s-batt-out: #3ecdd8;
   --s-exp: #b08cff;
+  --s-forecast: #f5c46b;
   --good: #35d69b;
   --good-chip: rgba(53, 214, 155, .16);
   --warn: #f0a22e;
