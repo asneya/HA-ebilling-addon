@@ -21,6 +21,8 @@ const fmtEUR4 = new Intl.NumberFormat("es-ES", {
 });
 const fmtNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
 const fmtKwh = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+// Precios unitarios: cuatro decimales y sin símbolo, que la unidad va aparte.
+const nf4 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
@@ -1408,8 +1410,152 @@ function openTariffModal(tariffId = null) {
   $("#t-elec-tax").value = t?.electricity_tax_pct ?? 0.5;
   $("#t-vat-energy").value = t?.vat_energy_pct ?? 10;
   $("#t-vat-services").value = t?.vat_services_pct ?? 21;
+  // El horario arranca del que ya tenga la tarifa; `null` significa «el del
+   // preajuste», que es lo que quiere una tarifa nueva.
+  editorState.schedules = (energy.periods || []).length
+    ? energy.periods.map((x) => x.schedule || "") : null;
+  editorState.dirty = false;
   updateEditorVisibility();
+  openFirstIncompleteStep();
   $("#tariff-modal").classList.remove("hidden");
+}
+
+/* Se abre siempre el primer paso incompleto: en una tarifa nueva es el 1, y al
+   editar una que ya funciona no se abre ninguno y la hoja se lee de un vistazo. */
+function openFirstIncompleteStep() {
+  const res = refreshStepSummaries();
+  const orden = ["id", "energy", "surplus", "power", "taxes"];
+  const primero = orden.find((k) => res[k] && !res[k].ok);
+  orden.forEach((k) => {
+    const step = $(`#step-${k}`);
+    if (step) step.open = k === primero;
+  });
+}
+
+/* Horarios del editor. Con el preajuste 2.0TD venían fijos en el código, así
+   que la rejilla no habría podido cambiarlos: ahora se guardan aquí en cuanto
+   se toca el horario, y `tariffFromForm` los usa si existen. */
+const TD3_SCHEDULES = ["L-V 10-14,18-22", "L-V 8-10,14-18,22-24", ""];
+const editorState = { schedules: null };
+
+/* Los periodos tal y como están ahora en el formulario, que es lo que la rejilla
+   necesita para pintarse. */
+function editorPeriods() {
+  const etype = $("#t-etype").value;
+  if (etype === "pvpc") return [];
+  if (etype === "td3") {
+    const h = editorState.schedules || TD3_SCHEDULES;
+    return ["Punta", "Llano", "Valle"].map((name, i) => ({ name, schedule: h[i] ?? "" }));
+  }
+  const filas = readPeriodRows($("#t-periods"));
+  return filas.map((p, i) => ({
+    ...p,
+    schedule: editorState.schedules ? (editorState.schedules[i] ?? "") : p.schedule,
+  }));
+}
+
+/* El resumen de cada paso cerrado. Es lo que convierte la hoja en una lista de
+   comprobación: se ve qué falta sin abrir nada, y el paso incompleto lo dice en
+   su propia línea en vez de esperar al error de guardar. */
+function stepSummaries() {
+  const val = (sel) => $(sel).value.trim();
+  const num = (sel) => { const v = parseFloat($(sel).value); return Number.isFinite(v) ? v : null; };
+  const eur = (v) => nf4.format(v) + " €/kWh";
+  const etype = $("#t-etype").value;
+  const out = {};
+
+  // 1 · Identidad
+  const nombre = val("#t-name");
+  out.id = nombre
+    ? { txt: [val("#t-company") || "sin compañía",
+              $("#t-virtual-wallet").checked ? "monedero activo" : null]
+             .filter(Boolean).join(" · "), ok: true }
+    : { txt: "Falta el nombre", ok: false };
+
+  // 2 · Energía
+  if (etype === "pvpc") {
+    const m = num("#t-pvpc-margin") || 0;
+    out.energy = { txt: `PVPC${m ? ` · margen ${eur(m)}` : " sin margen"}`, ok: true };
+  } else if (etype === "td3") {
+    const faltan = ["Punta", "Llano", "Valle"]
+      .filter((k) => !(num(`#t-td3-${k.toLowerCase()}`) > 0));
+    out.energy = faltan.length
+      ? { txt: `Falta el precio de ${faltan.join(", ")}`, ok: false }
+      : { txt: `Punta ${eur(num("#t-td3-punta"))} · 3 tramos`, ok: true };
+  } else {
+    const filas = readPeriodRows($("#t-periods")).filter((r) => r.name);
+    const sinPrecio = filas.filter((r) => !(r.price > 0));
+    out.energy = !filas.length ? { txt: "Sin tramos", ok: false }
+      : sinPrecio.length ? { txt: `Falta el precio de ${sinPrecio.map((r) => r.name).join(", ")}`, ok: false }
+      : { txt: `${filas.length} tramo${filas.length === 1 ? "" : "s"}`, ok: true };
+  }
+
+  // 3 · Excedentes
+  const stype = $("#t-surplus-type").value;
+  out.surplus = stype === "none" ? { txt: "Sin compensación", ok: true }
+    : stype === "flat"
+      ? (num("#t-surplus-price") > 0
+        ? { txt: `Compensación simplificada · ${eur(num("#t-surplus-price"))}`, ok: true }
+        : { txt: "Falta el precio del excedente", ok: false })
+      : { txt: "Por tramos", ok: true };
+
+  // 4 · Potencia
+  const p1 = num("#t-power-p1"), p2 = num("#t-power-p2");
+  const faltaP = [p1 > 0 ? null : "P1", p2 > 0 ? null : "P2"].filter(Boolean);
+  out.power = faltaP.length
+    ? { txt: `Falta el precio de ${faltaP.join(" y ")}`, ok: false }
+    : { txt: `P1 ${nf4.format(p1)} · P2 ${nf4.format(p2)} €/kW·día`, ok: true };
+
+  // 5 · Impuestos y cargos
+  const serv = num("#t-services");
+  out.taxes = {
+    txt: [`IE ${fmtNum.format(num("#t-elec-tax") ?? 0)} %`,
+          `IVA ${fmtNum.format(num("#t-vat-energy") ?? 0)} %`,
+          num("#t-meter") ? `contador ${fmtNum.format(num("#t-meter") * 30)} €/mes` : null,
+          serv ? `servicios ${fmtNum.format(serv)} €/mes` : null]
+      .filter(Boolean).join(" · "),
+    ok: true,
+  };
+  return out;
+}
+
+function refreshStepSummaries() {
+  const res = stepSummaries();
+  for (const [key, r] of Object.entries(res)) {
+    const el = $(`#sum-${key}`);
+    const step = $(`#step-${key}`);
+    if (el) el.textContent = r.txt;
+    if (step) {
+      step.classList.toggle("bad", !r.ok);
+      step.classList.toggle("done", r.ok);
+    }
+  }
+  // El resumen del horario, en el paso 2.
+  const periodos = editorPeriods();
+  const linea = periodos.filter((p) => (p.schedule || "").trim())
+    .map((p) => `${p.name} ${p.schedule.replace(/\s*\|\s*/g, " y ")}`).join(" · ");
+  const resto = periodos.find((p) => !(p.schedule || "").trim());
+  $("#t-grid-sum").textContent = periodos.length
+    ? (linea || "Un solo tramo, todas las horas") +
+      (resto && linea ? ` · resto ${resto.name}` : "")
+    : "Los precios los marca el mercado hora a hora.";
+  return res;
+}
+
+function openGridSheet() {
+  const periods = editorPeriods();
+  if (!periods.length) return;
+  $("#grid-editor").periods = periods;
+  $("#grid-modal").classList.remove("hidden");
+}
+
+/* «Hecho» se queda con los horarios que haya pintado la rejilla. */
+function closeGridSheet(guardar) {
+  if (guardar) {
+    editorState.schedules = $("#grid-editor").periods.map((p) => p.schedule);
+    refreshStepSummaries();
+  }
+  $("#grid-modal").classList.add("hidden");
 }
 
 function tariffFromForm() {
@@ -1419,13 +1565,17 @@ function tariffFromForm() {
   if (etype === "pvpc") energy = { type: "pvpc", preset: null, periods: [], pvpc_margin: num("#t-pvpc-margin") };
   else if (etype === "td3") energy = {
     type: "schedule", preset: "td3", pvpc_margin: 0,
-    periods: [
-      { name: "Punta", price: num("#t-td3-punta"), schedule: "L-V 10-14,18-22" },
-      { name: "Llano", price: num("#t-td3-llano"), schedule: "L-V 8-10,14-18,22-24" },
-      { name: "Valle", price: num("#t-td3-valle"), schedule: "" },
-    ],
+    periods: ["punta", "llano", "valle"].map((k, i) => ({
+      name: k[0].toUpperCase() + k.slice(1),
+      price: num(`#t-td3-${k}`),
+      schedule: (editorState.schedules || TD3_SCHEDULES)[i] ?? "",
+    })),
   };
-  else energy = { type: "schedule", preset: null, periods: readPeriodRows($("#t-periods")), pvpc_margin: 0 };
+  else energy = { type: "schedule", preset: null, pvpc_margin: 0,
+    periods: readPeriodRows($("#t-periods")).map((p, i) => ({
+      ...p,
+      schedule: editorState.schedules ? (editorState.schedules[i] ?? p.schedule) : p.schedule,
+    })) };
   const stype = $("#t-surplus-type").value;
   const services = num("#t-services", 0);
   return {
@@ -1902,8 +2052,32 @@ $("#d-refresh").addEventListener("click", loadDetail);
 
 $("#add-tariff-btn").addEventListener("click", () => openTariffModal(null));
 $("#save-tariff-btn").addEventListener("click", saveTariff);
-$("#cancel-tariff-btn").addEventListener("click", () => $("#tariff-modal").classList.add("hidden"));
-$("#close-tariff-modal").addEventListener("click", () => $("#tariff-modal").classList.add("hidden"));
+// Un solo paso abierto: al abrir uno se cierran los demás (§05).
+$$("#tariff-modal .step").forEach((step) =>
+  step.addEventListener("toggle", () => {
+    if (!step.open) return;
+    $$("#tariff-modal .step").forEach((otro) => { if (otro !== step) otro.open = false; });
+  }));
+// Los resúmenes se refrescan mientras se escribe, no al guardar.
+$("#tariff-modal").addEventListener("input", () => {
+  editorState.dirty = true;
+  refreshStepSummaries();
+});
+$("#tariff-modal").addEventListener("change", () => {
+  editorState.dirty = true;
+  refreshStepSummaries();
+});
+$("#t-open-grid").addEventListener("click", openGridSheet);
+$("#grid-back").addEventListener("click", () => closeGridSheet(false));
+$("#grid-done").addEventListener("click", () => closeGridSheet(true));
+$("#grid-editor").addEventListener("change", () => { editorState.dirty = true; });
+
+$("#cancel-tariff-btn").addEventListener("click", () => {
+  // Cancelar pregunta solo si hay algo que perder.
+  if (editorState.dirty &&
+      !confirm("Se descartarán los cambios de esta tarifa. ¿Salir?")) return;
+  $("#tariff-modal").classList.add("hidden");
+});
 $("#s-dynamic-bg").addEventListener("change", (ev) => setBackground(ev.target.checked));
 $("#close-pick-modal").addEventListener("click", () => $("#pick-modal").classList.add("hidden"));
 $("#close-bill-modal").addEventListener("click", () => $("#bill-modal").classList.add("hidden"));

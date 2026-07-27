@@ -1095,3 +1095,56 @@ body[data-bg="flat"] .section-title .soft { color: var(--ink-3); opacity: 1; }
 }
 body.scrolled .scroll-top { opacity: .95; }
 @media (prefers-reduced-motion: reduce) { .scroll-top { transition: none; } }
+
+/* ---------------- Editor de tarifa: cinco pasos ----------------
+   El modal de veinticinco campos pasa a una hoja que se lee como una lista de
+   comprobación: cada paso resume su contenido cuando está cerrado y solo uno
+   está abierto a la vez. El paso con un error lo dice en el resumen, sin que
+   haya que abrirlo para enterarse. */
+.sheet.tall { max-height: 92vh; }
+.sheet-grip {
+  display: block; width: 38px; height: 5px; border-radius: 999px;
+  background: var(--hair-2); margin: 8px auto 2px;
+}
+/* Guardar vive en la cabecera y es siempre alcanzable, no al final del
+   formulario (§05). */
+.sheet-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.sheet-bar h3 { flex: 1; text-align: center; margin: 0; font-size: 17px;
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-act {
+  flex: none; min-height: 44px; padding: 0 6px; border: 0; background: none;
+  font: inherit; font-size: 15px; color: var(--accent); cursor: pointer;
+}
+.sheet-act.strong { font-weight: 600; }
+.sheet-act:disabled { opacity: .4; cursor: default; }
+
+.step { border-bottom: 1px solid var(--hair); }
+.step:last-of-type { border-bottom: 0; }
+.step > summary {
+  display: flex; align-items: center; gap: 12px; padding: 14px 2px;
+  cursor: pointer; list-style: none; min-height: 44px;
+}
+.step > summary::-webkit-details-marker { display: none; }
+.step-n {
+  flex: none; width: 24px; height: 24px; border-radius: 999px;
+  display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  background: var(--seg-track); color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.step[open] .step-n { background: var(--accent); color: #fff; }
+.step.done .step-n { background: var(--good-chip); color: var(--good); }
+.step.bad .step-n { background: var(--warn-chip); color: var(--warn); }
+.step-txt { min-width: 0; margin-right: auto; }
+.step-txt b { display: block; font-size: 15.5px; font-weight: 600; }
+.step-txt small { display: block; font-size: 12.5px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step.bad .step-txt small { color: var(--warn); font-weight: 600; }
+.step-chev { flex: none; width: 20px; height: 20px; color: var(--ink-3);
+  transition: transform .2s ease; }
+.step[open] .step-chev { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) { .step-chev { transition: none; } }
+.step-body { padding: 0 2px 16px; display: grid; gap: 12px; }
+.error-text.block { display: block; margin: 0 0 4px; }
