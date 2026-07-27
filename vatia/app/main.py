@@ -799,7 +799,13 @@ def _index_html() -> str:
 
 @app.get("/")
 async def index():
-    return HTMLResponse(_index_html())
+    # Sin caché, y a propósito. El documento es lo único que sabe cómo se carga
+    # la app —con `type="module"` desde que está repartida en core/ y
+    # screens/—, así que un index.html viejo guardado por el navegador junto a
+    # un app.js nuevo daría una pantalla en blanco tras actualizar el add-on, y
+    # solo se arreglaría recargando a la fuerza. Los estáticos sí se cachean:
+    # llevan su ETag y se revalidan solos.
+    return HTMLResponse(_index_html(), headers={"Cache-Control": "no-store"})
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

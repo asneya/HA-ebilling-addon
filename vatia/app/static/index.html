@@ -1021,6 +1021,9 @@
   <script src="static/components/vatia-schedule.js"></script>
   <script src="static/components/vatia-chart.js"></script>
   <script src="static/components/vatia-bars.js"></script>
-  <script src="static/app.js"></script>
+  <!-- La app va en módulos (core/ y screens/). Un módulo se aplaza siempre, así
+     que se evalúa con el documento ya montado y después de los componentes de
+     arriba, que son scripts clásicos y se registran durante el análisis. -->
+  <script type="module" src="static/app.js"></script>
 </body>
 </html>
