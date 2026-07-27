@@ -2,6 +2,32 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.28.0
+
+### El gráfico de Energía, sobre uPlot
+
+Era la última pieza grande del rediseño y la que lo motivaba. El gráfico se
+dibujaba regenerando el SVG entero, que creaba **unos 1.700 nodos por
+repintado**: el pellizco iba a tirones porque el navegador tenía que rehacer el
+documento en cada fotograma. Ahora es un lienzo y el mismo gráfico —288 puntos,
+seis series— deja **15 nodos**.
+
+Lo que cambia al usarlo:
+
+- **El pellizco y el zoom mueven el rango del eje** en vez de estirar el gráfico
+  y desplazarlo. El gesto se agarra al punto que queda entre los dedos.
+- **La leyenda sigue al dedo**: al pasar por encima enseña los valores de ese
+  instante, sin tener que fijar el punto.
+- El eje del tiempo va en la **hora de tu casa**, no en la del navegador.
+
+Se conserva todo lo de antes: área translúcida bajo cada línea, previsión
+punteada, «ayer» al fondo, huecos sin interpolar (un hueco sigue significando
+«no hay dato» y no «hay un cero») y el techo del eje redondeado.
+
+uPlot va **copiado dentro del add-on** como las tipografías: 53 kB en total,
+licencia MIT, sin dependencias y sin una sola petición externa. Se descargó del
+registro de npm y se verificó su firma sha512 antes de usarlo.
+
 ## 0.27.0
 
 ### Crear una tarifa deja de ser un formulario de veinticinco campos
