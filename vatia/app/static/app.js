@@ -368,136 +368,21 @@ function renderSummaryMeters(home, meters) {
     : "";
 }
 
-/* ------------- diagrama de flujo ------------- */
+/* ------------- caudal en tiempo real ------------- */
 
-const FLOW_COLORS = new Proxy({}, {
-  get: (_t, k) => seriesColor(k === "battery" ? "battery" : k),
-});
-const NR = 46, FCX = 200, FCY = 212, LANE = 18, CORN = 16;
-const EXT = Math.sqrt(NR * NR - LANE * LANE);
-const LT = FCY - LANE, LB = FCY + LANE, LL = FCX - LANE, LR = FCX + LANE;
-const FN = {
-  solar: { x: FCX, y: 76, label: "Solar", above: true },
-  grid: { x: 76, y: FCY, label: "Red" },
-  home: { x: 324, y: FCY, label: "Casa" },
-  battery: { x: FCX, y: 348, label: "Batería" },
-};
-const FLOW_PATHS = [
-  ["solar_battery", "solar", `M${FCX},${FN.solar.y + NR} V${FN.battery.y - NR}`, [FCX, 162]],
-  ["grid_home", "grid", `M${FN.grid.x + NR},${FCY} H${FN.home.x - NR}`, [252, 206]],
-  ["solar_grid", "solar", `M${LL},${FN.solar.y + EXT} V${LT - CORN} Q${LL},${LT} ${LL - CORN},${LT} H${FN.grid.x + EXT}`, [142, LT - 8]],
-  ["solar_home", "solar", `M${LR},${FN.solar.y + EXT} V${LT - CORN} Q${LR},${LT} ${LR + CORN},${LT} H${FN.home.x - EXT}`, [258, LT - 8]],
-  ["grid_battery", "grid", `M${FN.grid.x + EXT},${LB} H${LL - CORN} Q${LL},${LB} ${LL},${LB + CORN} V${FN.battery.y - EXT}`, [142, LB + 15]],
-  ["battery_home", "battery", `M${LR},${FN.battery.y - EXT} V${LB + CORN} Q${LR},${LB} ${LR + CORN},${LB} H${FN.home.x - EXT}`, [258, LB + 15]],
-];
-
-function pW(w) {
-  const a = Math.abs(w);
-  return a >= 1000 ? `${(w / 1000).toFixed(2)} kW` : `${Math.round(w)} W`;
-}
-function polar(cx, cy, r, deg) {
-  const rad = ((deg - 90) * Math.PI) / 180;
-  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
-}
-function fIcon(cx, cy, type, color, s = 1) {
-  const open = `<g transform="translate(${(cx - 12 * s).toFixed(2)},${(cy - 12 * s).toFixed(2)}) scale(${s})" fill="none" stroke="${color}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">`;
-  if (type === "solar") {
-    return open + `<path d="M4.5,16.5 L8.2,7.5 H20 L17,16.5 Z"/><path d="M12.2,7.5 L9.6,16.5 M16.1,7.5 L13.3,16.5"/><path d="M6.6,12 H18.6"/><path d="M11,16.5 V19.5 M8.5,19.5 H13.5"/></g>`;
-  }
-  if (type === "grid") {
-    return open + `<path d="M9.2,4.5 H14.8"/><path d="M12,4.5 L6.6,19.5 M12,4.5 L17.4,19.5"/><path d="M9.9,10.4 H14.1 M8.8,13.8 H15.2 M7.7,17 H16.3"/></g>`;
-  }
-  if (type === "battery") {
-    return open + `<path d="M10.2,3.6 H13.8"/><rect x="7.8" y="5.4" width="8.4" height="14.6" rx="1.8"/><rect class="bat-fill" x="9.3" y="18.5" width="5.4" height="0" rx="0.9" fill="${color}" stroke="none"/></g>`;
-  }
-  return `<g transform="translate(${(cx - 12 * s).toFixed(2)},${(cy - 12 * s).toFixed(2)}) scale(${s})"><path d="M12,4.2 L21,12.4 h-2.6 V20 H5.6 V12.4 H3 Z" fill="${color}"/></g>`;
-}
-
+/* El diagrama de nodos lo sustituye <vatia-flow>, que dibuja un Sankey: el
+   ancho de cada corriente es su potencia. La composición del consumo la expresa
+   el propio haz, así que el anillo que llevaba el nodo de la casa ya no hace
+   falta. El componente vive en static/components/ y se encarga de su estilo. */
 function renderFlow(live) {
-  const f = live.flows, p = live.power, e = live.energy;
-  const inkColor = "currentColor";
-  let lines = "", balls = "", labels = "";
-  for (const [id, from, d, pos] of FLOW_PATHS) {
-    const color = FLOW_COLORS[from];
-    const w = f[id] || 0, on = w > 5;
-    const dur = on ? Math.max(0.6, Math.min(3.4, Math.round((3000 / w) * 5) / 5)) : 2;
-    lines += `<path class="pf-base" d="${d}"/>`;
-    lines += `<path class="pf-live" d="${d}" stroke="${color}" style="opacity:${on ? 0.5 : 0}"/>`;
-    if (on) {
-      balls += `<g><circle r="5" fill="${color}" style="filter:drop-shadow(0 0 3px ${color})"/>
-        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="linear" keyPoints="0;1" keyTimes="0;1" path="${d}"/></g>`;
-      labels += `<text class="pf-flowval" x="${pos[0]}" y="${pos[1]}" text-anchor="middle">${pW(w)}</text>`;
-    }
+  const host = $("#flow");
+  let node = host.querySelector("vatia-flow");
+  if (!node) {
+    host.textContent = "";
+    node = document.createElement("vatia-flow");
+    host.appendChild(node);
   }
-
-  // Anillo de la casa: reparto del consumo del día por fuente.
-  const rows = e.home.rows.filter((r) => r.kwh > 0);
-  const totalRing = rows.reduce((s, r) => s + r.kwh, 0);
-  let ring = `<circle cx="${FN.home.x}" cy="${FN.home.y}" r="${NR}" fill="none" stroke="${inkColor}" stroke-opacity="0.14" stroke-width="5"/>`;
-  if (totalRing > 0) {
-    const RING_COLOR = { from_solar: FLOW_COLORS.solar, from_grid: FLOW_COLORS.grid, from_battery: FLOW_COLORS.battery };
-    let ang = 0;
-    const gap = rows.length > 1 ? 5 : 0;
-    for (const r of rows) {
-      const span = (r.kwh / totalRing) * 360;
-      const a0 = ang + gap / 2, a1 = ang + span - gap / 2;
-      if (a1 > a0) {
-        const [x0, y0] = polar(FN.home.x, FN.home.y, NR, a0);
-        const [x1, y1] = polar(FN.home.x, FN.home.y, NR, a1);
-        ring += `<path d="M${x0.toFixed(2)},${y0.toFixed(2)} A${NR},${NR} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)},${y1.toFixed(2)}" fill="none" stroke="${RING_COLOR[r.key]}" stroke-width="5" stroke-linecap="round"><title>${esc(r.label)}: ${fmtNum.format(r.kwh)} kWh (${r.pct}%)</title></path>`;
-      }
-      ang += span;
-    }
-  }
-
-  // Cada nodo del diagrama muestra su propio contador del día (lo que ha
-  // pasado por ese punto), no la atribución por fuentes: esa vive en el anillo
-  // de la casa y en el resumen de energía.
-  const m = e.meters || {};
-  const kwh = (key, fallback) => {
-    const v = m[key] != null ? m[key] : fallback;
-    return `${fmtNum.format(v || 0)} kWh`;
-  };
-  const homeDay = m.home != null ? m.home : e.home.total;
-  const soc = p.battery_soc;
-  const fill = soc != null ? (12.6 * Math.max(0, Math.min(100, soc))) / 100 : 0;
-
-  const svg = `
-    <svg viewBox="0 0 400 420" role="img" aria-label="Flujo de energía en vivo">
-      ${lines}${balls}
-      <g>
-        <circle cx="${FN.solar.x}" cy="${FN.solar.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.solar}" stroke-width="2.5"/>
-        ${fIcon(FN.solar.x, FN.solar.y - 14, "solar", FLOW_COLORS.solar, 1.05)}
-        <text class="pf-val" x="${FN.solar.x}" y="${FN.solar.y + 9}" text-anchor="middle">${pW(p.pv || 0)}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.solar.x}" y="${FN.solar.y + 24}" text-anchor="middle">${kwh("pv", e.generation.total)}</text>
-      </g>
-      <g>
-        <circle cx="${FN.grid.x}" cy="${FN.grid.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.grid}" stroke-width="2.5"/>
-        ${fIcon(FN.grid.x, FN.grid.y - 20, "grid", FLOW_COLORS.grid, 0.95)}
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.grid.x}" y="${FN.grid.y + 3}" text-anchor="middle">← ${kwh("grid_export")}</text>
-        <text class="pf-io" style="fill:${FLOW_COLORS.grid}" x="${FN.grid.x}" y="${FN.grid.y + 20}" text-anchor="middle">→ ${kwh("grid_import")}</text>
-      </g>
-      <g>
-        <circle cx="${FN.battery.x}" cy="${FN.battery.y}" r="${NR}" fill="none" stroke="${FLOW_COLORS.battery}" stroke-width="2.5"/>
-        ${fIcon(FN.battery.x, FN.battery.y - 20, "battery", FLOW_COLORS.battery, 0.95)}
-        <text class="pf-io" style="fill:var(--bad)" x="${FN.battery.x}" y="${FN.battery.y + 3}" text-anchor="middle">↑ ${kwh("battery_discharge")}</text>
-        <text class="pf-io" style="fill:${FLOW_COLORS.battery}" x="${FN.battery.x}" y="${FN.battery.y + 20}" text-anchor="middle">↓ ${kwh("battery_charge")}</text>
-      </g>
-      <g>
-        ${ring}
-        ${fIcon(FN.home.x, FN.home.y - 14, "home", inkColor, 0.95)}
-        <text class="pf-val" x="${FN.home.x}" y="${FN.home.y + 9}" text-anchor="middle">${pW(p.home || 0)}</text>
-        <text class="pf-io" style="fill:var(--ink-3)" x="${FN.home.x}" y="${FN.home.y + 24}" text-anchor="middle">${fmtNum.format(homeDay)} kWh</text>
-      </g>
-      <text class="pf-lbl" x="${FN.solar.x}" y="${FN.solar.y - NR - 11}" text-anchor="middle">Solar</text>
-      <text class="pf-lbl" x="${FN.grid.x}" y="${FN.grid.y + NR + 20}" text-anchor="middle">Red</text>
-      <text class="pf-lbl" x="${FN.home.x}" y="${FN.home.y + NR + 20}" text-anchor="middle">Casa</text>
-      <text class="pf-lbl" x="${FN.battery.x}" y="${FN.battery.y + NR + 20}" text-anchor="middle">${soc != null ? `Batería · ${Math.round(soc)}%` : "Batería"}</text>
-      ${labels}
-    </svg>`;
-  $("#flow").innerHTML = svg;
-  const bf = $("#flow .bat-fill");
-  if (bf) { bf.setAttribute("height", fill.toFixed(2)); bf.setAttribute("y", (18.5 - fill).toFixed(2)); }
+  node.data = live;
 }
 
 /* ========================= ENERGÍA (pantalla de detalle) ========================= */
