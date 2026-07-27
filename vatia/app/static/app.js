@@ -1554,7 +1554,11 @@ function renderSettingsIndex(s) {
   const SOURCES = { demo: "Demostración", homeassistant: "Home Assistant", influxdb: "InfluxDB" };
   $("#nav-sub-source").textContent = SOURCES[s.source] || "Sin configurar";
   const n = (state.config?.tariffs || []).length;
-  $("#nav-sub-tariffs").textContent = n === 1 ? "1 tarifa" : `${n} tarifas`;
+  // Se nombra la tarifa contratada: es la que decide el ahorro del cierre, y
+  // conviene poder comprobar de un vistazo que está bien elegida.
+  const mine = (state.config?.tariffs || []).find((t) => t.id === s.my_tariff_id);
+  $("#nav-sub-tariffs").textContent = (n === 1 ? "1 tarifa" : `${n} tarifas`) +
+    (mine ? ` · la tuya es ${mine.name}` : "");
   $("#nav-sub-contract").textContent =
     `${fmtNum.format(s.contracted_power?.p1 ?? 0)} / ${fmtNum.format(s.contracted_power?.p2 ?? 0)} kW · ciclo el día ${s.billing_day ?? 1}`;
   $("#nav-sub-publish").textContent = s.export_sensors === false
