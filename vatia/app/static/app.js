@@ -205,37 +205,37 @@ function weatherFamily(raw) {
   if (has("lightning", "thunder", "tormenta", "electric")) return "lightning";
   if (has("pouring", "chubasc", "diluv", "heavy rain", "lluvia fuerte")) return "pouring";
   if (has("rain", "lluvia", "llov", "drizzle", "llovizna", "shower")) return "rainy";
-  if (has("snow", "niev", "nieve", "hail", "granizo")) return "snowy";
+  if (has("hail", "granizo", "pedrisc")) return "hail";
+  if (has("snow", "niev", "nieve")) return "snowy";
   if (has("fog", "niebla", "neblina", "mist", "bruma", "haze", "calima")) return "fog";
   if (has("partlycloudy", "partly", "parcial", "poco nub", "intervalos nub")) return "partlycloudy";
   if (has("cloud", "nub", "cubierto", "overcast")) return "cloudy";
-  if (has("wind", "viento")) return "partlycloudy";
+  if (has("wind", "viento")) return "windy";
   return "clear";
 }
 
-function weatherIcon(condition, phase) {
-  const night = phase === "night";
-  const O = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">`;
-  const sun = `<circle cx="12" cy="12" r="4.2"/>` + Array.from({ length: 8 }, (_, i) => {
-    const a = (i * Math.PI) / 4;
-    return `<line x1="${(12 + Math.cos(a) * 6.6).toFixed(1)}" y1="${(12 + Math.sin(a) * 6.6).toFixed(1)}" x2="${(12 + Math.cos(a) * 9.4).toFixed(1)}" y2="${(12 + Math.sin(a) * 9.4).toFixed(1)}"/>`;
-  }).join("");
-  const moon = `<path d="M15.6 3.6a8.4 8.4 0 1 0 4.8 12.2A9 9 0 0 1 15.6 3.6Z"/>`;
-  const cloud = `<path d="M7.2 18h9.4a3.4 3.4 0 0 0 .3-6.8 5.2 5.2 0 0 0-10-1.4A3.6 3.6 0 0 0 7.2 18Z"/>`;
-  const smallSun = `<circle cx="16.6" cy="7.4" r="2.8"/><path d="M16.6 2.6v1.4M21.4 7.4H20M19.9 4.1l-1 1M19.9 10.7l-1-1"/>`;
-  const smallMoon = `<path d="M17.9 4.2a3.4 3.4 0 1 0 2 4.9 3.6 3.6 0 0 1-2-4.9Z"/>`;
+/* Los ocho glifos del tiempo del sprite mapean uno a uno con las familias de
+   `weather.condition`, como manda el diseño. Antes se dibujaban a mano aquí y
+   dos familias se perdían por el camino: el viento se enseñaba como nubes
+   parciales y el granizo como nieve. Ahora cada una tiene el suyo.
 
-  switch (weatherFamily(condition)) {
-    case "clear": return O + (night ? moon : sun) + `</svg>`;
-    case "partlycloudy": return O + (night ? smallMoon : smallSun) + cloud + `</svg>`;
-    case "cloudy": return O + cloud + `</svg>`;
-    case "fog": return O + cloud + `<path d="M5 20.6h9M8 22.8h8"/></svg>`;
-    case "rainy": return O + cloud + `<path d="M9 20.4l-.8 2M13 20.4l-.8 2M17 20.4l-.8 2"/></svg>`;
-    case "pouring": return O + cloud + `<path d="M8.4 19.8l-1.2 3.2M12.4 19.8l-1.2 3.2M16.4 19.8l-1.2 3.2"/></svg>`;
-    case "lightning": return O + cloud + `<path d="M13 19.6l-3 3.2h2.6l-.6 2.4 3-3.4h-2.4Z"/></svg>`;
-    case "snowy": return O + cloud + `<path d="M9 21.6h.01M13 21.6h.01M17 21.6h.01M11 23.4h.01M15 23.4h.01"/></svg>`;
-    default: return O + sun + `</svg>`;
+   La única excepción es la luna: el set no trae glifo nocturno, así que el
+   despejado de noche conserva el trazo de siempre en vez de enseñar un sol a
+   las tres de la mañana. */
+const WEATHER_GLYPH = {
+  clear: "solar", partlycloudy: "parcial", cloudy: "nubes", fog: "niebla",
+  rainy: "lluvia", pouring: "lluvia", lightning: "tormenta",
+  snowy: "nieve", hail: "granizo", windy: "viento",
+};
+
+function weatherIcon(condition, phase) {
+  const family = weatherFamily(condition);
+  if (family === "clear" && phase === "night") {
+    return `<svg class="i" aria-hidden="true" viewBox="0 0 24 24"><path
+      d="M15.6 3.6a8.4 8.4 0 1 0 4.8 12.2A9 9 0 0 1 15.6 3.6Z"/></svg>`;
   }
+  return `<svg class="i" aria-hidden="true"><use href="#i-${
+    WEATHER_GLYPH[family] || "solar"}"/></svg>`;
 }
 
 const PHASE_TEXT = { night: "Noche", dawn: "Amanecer", day: "Día", sunset: "Atardecer" };

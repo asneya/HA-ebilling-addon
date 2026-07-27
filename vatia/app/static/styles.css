@@ -91,7 +91,8 @@
   --r-lg: 24px;
   --r-md: 20px;
   --r-sm: 12px;
-  --blur: saturate(180%) blur(26px);
+  /* §07: cristal regular — desenfoque de 30 px, saturación 180 %. */
+  --blur: saturate(180%) blur(30px);
   color-scheme: light dark;
 }
 
@@ -330,7 +331,7 @@ body[data-view="energy"] .bg-scrim {
   text-shadow: 0 1px 8px rgba(0, 0, 0, .4);
 }
 .weather-icon { display: grid; place-items: center; width: 30px; height: 30px; }
-.weather-icon svg { width: 30px; height: 30px; }
+.weather-icon .i { width: 28px; height: 28px; }
 .weather-temp { font-size: 19px; font-weight: 700; letter-spacing: -.3px; }
 
 /* ---------------- paneles ---------------- */
@@ -341,6 +342,24 @@ body[data-view="energy"] .bg-scrim {
   margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   background: var(--glass-2); border: 1px solid var(--sep); padding: 3px 10px; border-radius: 999px;
 }
+/* Iconos del sistema: los 42 glifos del sprite, en caja de 24 y trazo de 1,75.
+   El color entra por `currentColor`, así que el mismo glifo vale en cualquier
+   tinta y en color de estado.
+
+   El diseño redibuja cada glifo por tamaño para que a 16 px no se emborrone;
+   el handoff trae solo la caja de 24, así que se consigue el mismo efecto con
+   `non-scaling-stroke`: el trazo se mide en píxeles de pantalla y no encoge
+   con el glifo, que es literalmente «el trazo no escala con el tamaño». */
+.i {
+  width: 24px; height: 24px; flex: none; display: inline-block;
+  fill: none; stroke: currentColor; stroke-width: 1.75;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.i * { vector-effect: non-scaling-stroke; }
+.i-20 { width: 20px; height: 20px; }
+.i-16 { width: 16px; height: 16px; }
+
 /* Rótulo de sección: la etiqueta en versalitas del prototipo. Va sobre el
    cielo, así que su tinta es la de fondo —incluido el `.soft` de dentro, que
    con `--ink-3` quedaba casi invisible contra el degradado. */
@@ -428,7 +447,7 @@ body[data-view="energy"] .bg-scrim {
   min-height: 44px; border-radius: 999px; color: var(--ink-2); display: grid; place-items: center;
   transition: background .18s ease, color .18s ease;
 }
-.vt svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.vt .i { width: 24px; height: 24px; }
 .vt.active { background: var(--ink); color: var(--solid); }
 
 .e-stamp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -439,7 +458,7 @@ body[data-view="energy"] .bg-scrim {
   border-radius: 999px; padding: 7px 11px; min-height: 34px; font: inherit;
   font-size: 12.5px; font-weight: 600;
 }
-.chip-clear svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.chip-clear .i { width: 14px; height: 14px; }
 .chip-clear:active { transform: scale(.96); }
 .e-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 14px; }
 .e-serie {
@@ -565,11 +584,13 @@ body[data-view="energy"] .bg-scrim {
   place-items: center; background: var(--ico, var(--accent));
   box-shadow: 0 2px 8px rgba(10, 18, 35, .18);
 }
-.nav-ico svg { width: 20px; height: 20px; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* El glifo hereda trazo y remate de `.i`; aquí solo su tamaño y que la
+   tinta sea blanca sobre la pastilla de color. */
+.nav-ico .i { width: 20px; height: 20px; stroke: #fff; }
 .nav-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .nav-txt b { font-size: 15px; font-weight: 600; }
 .nav-txt small { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-chev { flex: 0 0 auto; width: 17px; height: 17px; fill: none; stroke: var(--ink-3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.nav-chev { width: 18px; height: 18px; stroke: var(--ink-3); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -605,7 +626,7 @@ body[data-view="energy"] .bg-scrim {
   color: var(--ink-3); font: inherit; font-size: 11px; font-weight: 600;
   transition: background .2s ease, color .2s ease;
 }
-.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tab .i { width: 22px; height: 22px; }
 .tab.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ---------------- segmented control ---------------- */
@@ -628,10 +649,13 @@ body[data-view="energy"] .bg-scrim {
 .subview.active { display: block; }
 
 /* ---------------- controles ---------------- */
+/* Sin material: el botón vive dentro de una tarjeta, y §07 reserva el cristal
+   para la capa que flota sobre el contenido. Encima de una superficie sólida el
+   desenfoque no tenía nada que desenfocar, solo coste. */
 .btn {
   border: 1px solid var(--sep); background: var(--glass-2); color: var(--ink);
   padding: 9px 15px; border-radius: 12px; cursor: pointer; font: inherit;
-  font-size: 14px; font-weight: 600; backdrop-filter: var(--blur);
+  font-size: 14px; font-weight: 600;
   text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
 }
 .btn:active { transform: scale(.97); }
@@ -663,7 +687,7 @@ body[data-view="energy"] .bg-scrim {
   cursor: pointer; padding: 0 8px;
 }
 .period-picker:active { background: var(--glass-2); }
-.period-picker .chev { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: var(--ink-3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.period-picker .chev { width: 16px; height: 16px; stroke: var(--ink-3); }
 .period-picker .period-input {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0;
   border: 0; background: transparent; color: transparent; opacity: 0; cursor: pointer;
@@ -871,9 +895,10 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .table .detail { color: var(--ink-3); font-size: 11.5px; font-weight: 400; }
 
 /* ---------------- banners ---------------- */
+/* Los avisos son contenido, así que superficie sólida (§07). */
 .banner {
   border-radius: var(--r-md); padding: 12px 15px; margin-bottom: 12px; font-size: 13.5px;
-  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: var(--blur);
+  background: var(--solid); border: 1px solid var(--hair);
 }
 .banner.error { background: rgba(255, 69, 58, .16); border-color: rgba(255, 69, 58, .3); }
 

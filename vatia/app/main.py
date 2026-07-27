@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import billing
@@ -756,9 +756,31 @@ async def _sensor_publisher_loop() -> None:
 # ---------------------------------------------------------------------------
 
 
+# La página con el sprite de iconos ya incrustado. Se arma una vez y se guarda:
+# `<use href="fichero.svg#id">` no funciona en WebKit —que es el motor de la app
+# de Home Assistant en iOS—, y una petición aparte solo para los iconos haría
+# que la primera pintada saliera sin ellos.
+_INDEX_CACHE: dict[str, str] = {}
+
+
+def _index_html() -> str:
+    if "html" not in _INDEX_CACHE:
+        with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        try:
+            with open(os.path.join(STATIC_DIR, "iconos.svg"), encoding="utf-8") as fh:
+                sprite = fh.read()
+        except OSError:
+            # Sin sprite la app sigue en pie: se ven huecos donde los iconos.
+            _LOGGER.warning("No se pudo leer el sprite de iconos", exc_info=True)
+            sprite = ""
+        _INDEX_CACHE["html"] = html.replace("<!--ICONOS-->", sprite)
+    return _INDEX_CACHE["html"]
+
+
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return HTMLResponse(_index_html())
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
