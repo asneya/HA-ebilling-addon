@@ -61,11 +61,10 @@
   <main class="app">
     <!-- ===================== HOME ===================== -->
     <section class="view active" id="view-home">
-      <header class="hero">
-        <div>
-          <h1 class="hero-title">Energía</h1>
-          <p class="hero-sub" id="home-sub">—</p>
-        </div>
+      <!-- Sin titular: la maqueta abre la Home directamente con el caudal. El
+           tiempo y el momento del día viven en la píldora flotante. -->
+      <header class="hero home-hero">
+        <p class="hero-sub" id="home-sub">—</p>
         <div class="weather glass-soft" id="weather" title="Meteorología exterior">
           <span class="weather-icon" id="weather-icon"></span>
           <span class="weather-temp" id="weather-temp">—</span>
@@ -78,6 +77,17 @@
         <vatia-close id="close"></vatia-close>
       </section>
 
+      <!-- Tras descartar el cierre queda esta fila, para poder volver a verlo:
+           antes se iba hasta la noche siguiente sin manera de recuperarlo. -->
+      <button class="panel glass nav-row hidden" id="reopen-close">
+        <span class="nav-ico" style="--ico:#c86a48">
+          <svg class="i"><use href="#i-calendario"/></svg>
+        </span>
+        <span class="nav-txt"><b>Cómo ha terminado el día</b>
+          <small id="reopen-close-sub">El resumen de hoy</small></span>
+        <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+      </button>
+
       <!-- La ventana de energía gratis. Va antes del caudal: contesta «¿ahora
            o luego?», que es lo que se viene a mirar. Se queda vacía —y la
            tarjeta se esconde— si no hay sensor de previsión solar. -->
@@ -86,9 +96,9 @@
       </section>
 
       <section class="panel glass">
-        <div class="panel-head">
-          <h2>Flujo de energía</h2>
-          <span class="chip" id="flow-chip">en vivo</span>
+        <div class="band-head">
+          <span class="band-live"><i class="pulse" aria-hidden="true"></i>Ahora mismo</span>
+          <span class="band-caption" id="flow-chip">—</span>
         </div>
         <div id="flow" class="flow"></div>
         <p class="empty hidden" id="flow-empty">
@@ -114,10 +124,8 @@
 
     <!-- ===================== ENERGÍA (detalle) ===================== -->
     <section class="view" id="view-energy">
-      <header class="nav-head">
-        <button class="icon-btn" id="energy-back" aria-label="Volver">‹</button>
-        <h1 class="nav-title">Energía</h1>
-        <span class="nav-spacer"></span>
+      <header class="hero compact">
+        <h1 class="hero-title">Energía</h1>
       </header>
 
       <div class="panel glass controls">
@@ -264,6 +272,7 @@
             <span><i class="dot valle"></i>Valle</span>
           </div>
           <div id="daily-chart" class="chart"></div>
+          <ul class="readout" id="ro-daily-chart" aria-live="polite"></ul>
         </div>
       </div>
 
@@ -292,6 +301,7 @@
             <span class="leg-export"><i class="dot export"></i>Exportada</span>
           </div>
           <div id="d-daily" class="chart"></div>
+          <ul class="readout" id="ro-d-daily" aria-live="polite"></ul>
         </div>
 
         <h2 class="section-title">Evolución acumulada</h2>
@@ -301,17 +311,19 @@
             <span class="leg-export"><i class="dot export"></i>Exportada</span>
           </div>
           <div id="d-cum-month" class="chart"></div>
+          <ul class="readout" id="ro-d-cum-month" aria-live="polite"></ul>
         </div>
 
         <div id="d-hourly-wrap" class="hidden">
           <h2 class="section-title" id="d-hourly-title">Desglose por horas</h2>
-          <div class="panel glass chart-panel"><div id="d-hourly" class="chart"></div></div>
+          <div class="panel glass chart-panel"><div id="d-hourly" class="chart"></div><ul class="readout" id="ro-d-hourly" aria-live="polite"></ul></div>
           <div class="panel glass chart-panel">
             <div class="legend">
               <span><i class="dot imp"></i>Importada</span>
               <span class="leg-export"><i class="dot export"></i>Exportada</span>
             </div>
             <div id="d-cum-day" class="chart"></div>
+          <ul class="readout" id="ro-d-cum-day" aria-live="polite"></ul>
           </div>
           <div class="panel glass table-panel"><table class="table" id="d-hourly-table"></table></div>
         </div>
@@ -789,6 +801,10 @@
     <button class="tab active" data-view="home">
       <svg class="i"><use href="#i-casa"/></svg>
       <span>Home</span>
+    </button>
+    <button class="tab" data-view="energy">
+      <svg class="i"><use href="#i-vista-general"/></svg>
+      <span>Energía</span>
     </button>
     <button class="tab" data-view="billing">
       <svg class="i"><use href="#i-factura"/></svg>

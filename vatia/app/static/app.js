@@ -67,12 +67,11 @@ $$(".seg[data-sub]").forEach((seg) => seg.addEventListener("click", () => showSu
 function showView(name) {
   state.view = name;
   document.body.dataset.view = name;
-  // «energy» es una pantalla apilada sobre Home: no tiene pestaña propia.
-  const tabFor = name === "energy" ? "home" : name;
-  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === tabFor));
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (name === "home") loadLive();
+  if (name === "energy" && !eState.data) loadEnergy();
   if (name === "billing") {
     // Facturación entra siempre con una subvista activa (Simulación por
     // defecto), sin tener que pulsar su segmento.
@@ -286,14 +285,26 @@ function renderLive() {
   // El cierre del día sale con la puesta de sol y sustituye a la ventana. Al
   // descartarlo («Ver el día completo») se recuerda la fecha, para que no
   // vuelva a asomar esa misma noche pero sí a la siguiente.
-  const closing = live.close && localStorage.getItem("vatia-close-seen") !== live.close.date;
+  const descartado = live.close &&
+    localStorage.getItem("vatia-close-seen") === live.close.date;
+  const closing = !!live.close && (!descartado || closeState.reopened);
   $("#close").data = closing ? live.close : null;
   $("#close-panel").classList.toggle("hidden", !closing);
+  // Si se descartó, queda la fila que lo devuelve.
+  $("#reopen-close").classList.toggle("hidden", !(live.close && descartado && !closeState.reopened));
 
   // Ventana de energía gratis. Sin previsión solar no hay ventana que enseñar,
   // y una tarjeta vacía es peor que ninguna: se esconde la tarjeta entera.
   $("#window").data = closing ? null : live.window || null;
   $("#window-panel").classList.toggle("hidden", closing || !live.window);
+
+  // El pie de la banda del caudal, como la maqueta: lo que está pasando con la
+   // red ahora mismo, que es la pregunta que la persona tiene en la cabeza.
+  const f = live.flows || {};
+  const exportando = (f.solar_grid || 0) > 20;
+  const importando = (f.grid_home || 0) + (f.grid_battery || 0) > 20;
+  $("#flow-chip").textContent = exportando ? "Exportando a la red"
+    : importando ? "Comprando a la red" : "Sin tocar la red";
 
   // Flujo
   const configured = live.configured;
@@ -420,6 +431,23 @@ const eState = {
 };
 const E_ZOOM_MAX = 12;
 
+/* Un aviso de error con su salida: el §04 pide que el banner ofrezca la acción
+   —«Reintentar»— en vez de dejar a la persona con el mensaje y nada que hacer. */
+function fallo(banner, mensaje, reintentar, opciones) {
+  const texto = (opciones && opciones.html) ? mensaje : esc(mensaje);
+  banner.innerHTML = `<div>${texto}</div>` + (reintentar
+    ? `<div class="banner-act"><button type="button" class="btn subtle">Reintentar</button></div>`
+    : "");
+  const boton = banner.querySelector("button");
+  if (boton) {
+    boton.addEventListener("click", () => {
+      banner.classList.add("hidden");
+      reintentar();
+    });
+  }
+  banner.classList.remove("hidden");
+}
+
 async function loadEnergy() {
   const banner = $("#e-error");
   banner.classList.add("hidden");
@@ -432,8 +460,7 @@ async function loadEnergy() {
     eState.cursor = null;
     renderEnergy();
   } catch (err) {
-    banner.textContent = err.message;
-    banner.classList.remove("hidden");
+    fallo(banner, err.message, loadEnergy);
     $("#e-chart").innerHTML = "";
   } finally {
     $("#e-busy").classList.add("hidden");
@@ -693,17 +720,28 @@ function openEnergy() {
 
 // «Ver el día completo»: se apunta la fecha para que el cierre no vuelva esa
 // noche, y se repinta la Home con lo último recibido.
+/* El cierre se descarta por fecha, así que no vuelve esa noche pero sí la
+   siguiente. `reopened` es solo para esta sesión: si lo abres a mano, se queda
+   abierto hasta que lo vuelvas a cerrar. */
+const closeState = { reopened: false };
+
 $("#close").addEventListener("dismiss", () => {
   const c = $("#close").data;
   if (c) localStorage.setItem("vatia-close-seen", c.date);
+  closeState.reopened = false;
   if (state.live) renderLive();
+});
+
+$("#reopen-close").addEventListener("click", () => {
+  closeState.reopened = true;
+  if (state.live) renderLive();
+  $("#close-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
 
 $("#summary-panel").addEventListener("click", openEnergy);
 $("#summary-panel").addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEnergy(); }
 });
-$("#energy-back").addEventListener("click", () => showView("home"));
 $$(".seg[data-range]").forEach((b) => b.addEventListener("click", () => {
   eState.range = b.dataset.range;
   eState.offset = 0;
@@ -784,9 +822,12 @@ function renderSimulation() {
   if (!sim) return;
   $("#demo-banner").classList.toggle("hidden", sim.source !== "demo");
   if (sim.errors && sim.errors.length) {
-    $("#error-banner").innerHTML = sim.errors
-      .map((e) => `<div><b>${esc(e.tariff)}</b>: ${esc(e.error)}</div>`).join("");
-    $("#error-banner").classList.remove("hidden");
+    // Con acción: casi siempre es ESIOS que no responde, y reintentar basta.
+    fallo($("#error-banner"), sim.errors
+      .map((e) => `<b>${esc(e.tariff)}</b>: ${esc(e.error)}`).join("<br>"),
+      loadSimulation, { html: true });
+  } else {
+    $("#error-banner").classList.add("hidden");
   }
   const custom = !!workingPeriod();
   $("#period-label").textContent = periodShort(sim.period.start, sim.period.end) +
@@ -955,6 +996,8 @@ function renderDailyChart(daily) {
     side: [],
     unit: "kWh",
   };
+  bars.onread = "daily-chart";
+  renderReadout("daily-chart", null, "Toca un día para ver su reparto");
 }
 
 /* ========================= BILLING: detalle ========================= */
@@ -966,8 +1009,7 @@ async function loadDetail() {
     state.detail = await api(`detail?cycles_back=${state.detailCyclesBack}`);
     renderDetail();
   } catch (err) {
-    banner.textContent = err.message;
-    banner.classList.remove("hidden");
+    fallo(banner, err.message, loadDetail);
   }
 }
 
@@ -1026,7 +1068,24 @@ function renderDailyDetail(days) {
     unit: "kWh",
     selected: days.findIndex((d) => d.date === state.selectedDay),
   };
+  bars.onread = "d-daily";
   bars.onpick = (i) => selectDay(days[i].date);
+  renderReadout("d-daily", null, "Toca un día para ver su reparto");
+}
+
+/* La línea de lectura de un gráfico: lo que hay bajo el dedo, con su color.
+   Vacía enseña la pista de que se puede tocar, para que el hueco no parezca un
+   fallo. */
+function renderReadout(id, read, pista) {
+  const el = $(`#ro-${id}`);
+  if (!el) return;
+  if (!read || !read.rows.length) {
+    el.innerHTML = `<li class="ro-hint">${esc(pista || "Toca el gráfico para ver un punto")}</li>`;
+    return;
+  }
+  el.innerHTML = `<li class="ro-x">${esc(read.label)}</li>` + read.rows.map((r) =>
+    `<li><i style="background:${esc(chartColor(r.key))}"></i>${esc(r.label)}
+      <b>${esc(fmtNum.format(r.value))} ${esc(read.unit)}</b></li>`).join("");
 }
 
 /* Crea el componente una vez y lo reutiliza: rehacerlo en cada dibujado
@@ -1038,19 +1097,38 @@ function ensureBars(host, alto) {
     el = document.createElement("vatia-bars");
     el.height = alto;
     el.colorFor = chartColor;
-    el.addEventListener("pick", (ev) => { if (el.onpick) el.onpick(ev.detail.index); });
+    el.addEventListener("pick", (ev) => {
+      if (el.onread) renderReadout(el.onread, ev.detail.read);
+      if (el.onpick) el.onpick(ev.detail.index);
+    });
+    // Al pasar el dedo, la lectura sigue al cursor sin fijar nada.
+    el.addEventListener("hover", (ev) => {
+      if (el.onread) renderReadout(el.onread, ev.detail.read);
+    });
     host.appendChild(el);
   }
   return el;
 }
 
-function ensureLines(host) {
+function ensureLines(host, roId) {
   let el = host.querySelector("vatia-chart");
   if (!el) {
     host.textContent = "";
     el = document.createElement("vatia-chart");
     el.xMode = "index";
     el.colorFor = (key) => (key.startsWith("--") ? token(key) : seriesColor(key));
+    // Los acumulados también dicen qué hay bajo el dedo.
+    const leer = (i) => {
+      const d = el.data;
+      if (!d || i == null) return null;
+      return {
+        label: d.x[i], unit: "kWh",
+        rows: d.series.map((sr) => ({ key: sr.key, label: sr.label, value: sr.values[i] || 0 }))
+          .filter((r) => r.value > 0),
+      };
+    };
+    el.addEventListener("hover", (ev) => renderReadout(roId, leer(ev.detail.index)));
+    el.addEventListener("pick", (ev) => renderReadout(roId, leer(ev.detail.index)));
     host.appendChild(el);
   }
   return el;
@@ -1061,7 +1139,8 @@ function ensureLines(host) {
 function cumulativeChart(container, points) {
   if (!points || !points.length) { container.innerHTML = `<p class="empty">Sin datos.</p>`; return; }
   const last = points[points.length - 1];
-  const el = ensureLines(container);
+  const roId = container.id;
+  const el = ensureLines(container, roId);
   el.data = {
     x: points.map((p) => p.label),
     series: [
@@ -1071,6 +1150,7 @@ function cumulativeChart(container, points) {
         : []),
     ],
   };
+  renderReadout(roId, null, "Toca un punto para ver el acumulado");
 }
 
 function renderMonthlyCumulative(days) {
@@ -1116,6 +1196,8 @@ function renderHourly(date) {
     side: [{ key: "exp", label: "Exportada", values: hours.map((h) => h.export) }],
     unit: "kWh",
   };
+  bars.onread = "d-hourly";
+  renderReadout("d-hourly", null, "Toca una hora para ver sus valores");
 
   let ci = 0, ce = 0;
   cumulativeChart($("#d-cum-day"), hours.map((h) => {
@@ -1626,6 +1708,12 @@ async function openSensorPicker(slot) {
   sensorState.picking = fila;
 
   $("#pick-title").textContent = fila.label;
+  if (!state.grouped) await loadGrouped();
+  const todas = (state.grouped && state.grouped[fila.kind]) || [];
+
+  // Los candidatos primero; debajo, un buscador sobre la lista entera. El §04
+  // lo pide así a propósito: con trescientas entidades, un desplegable no se
+  // puede recorrer, pero escribir «solar» sí acota.
   const sugerencias = fila.suggestions.length
     ? `<div class="pick-sugg">${fila.suggestions.map((e) => `
         <button type="button" data-pick="${esc(e.entity_id)}">
@@ -1633,18 +1721,47 @@ async function openSensorPicker(slot) {
           ${e.unit ? `<small>${esc(e.unit)}</small>` : ""}
         </button>`).join("")}</div>`
     : "";
-  if (!state.grouped) await loadGrouped();
+
   $("#pick-body").innerHTML = `
     ${sugerencias}
-    <label class="li"><span class="li-label">Todas las entidades</span>
-      <select id="pick-select">${optionsFor(fila.kind, fila.entity)}</select></label>
+    <label class="pick-search">
+      <svg class="i" aria-hidden="true"><use href="#i-buscar"/></svg>
+      <input type="search" id="pick-q" placeholder="Buscar por nombre, id o unidad"
+             autocomplete="off" aria-label="Buscar entidad">
+      <span class="pick-count" id="pick-count"></span>
+    </label>
+    <div class="pick-list" id="pick-list"></div>
+    ${fila.entity ? `<div class="banner-act">
+      <button type="button" class="btn subtle" data-pick="">Quitar la asignación</button>
+    </div>` : ""}
     <p class="li-note">Se puede poner el <b>mismo sensor en las dos casillas</b>
       de un par si es bidireccional: se separa por el signo.</p>`;
 
-  $$("#pick-body [data-pick]").forEach((b) =>
-    b.addEventListener("click", () => assignSensor(slot, b.dataset.pick)));
-  $("#pick-select").addEventListener("change", (ev) => assignSensor(slot, ev.target.value));
+  const pintar = (q) => {
+    const t = q.trim().toLowerCase();
+    const vistos = t
+      ? todas.filter((e) => `${e.entity_id} ${e.name} ${e.unit}`.toLowerCase().includes(t))
+      : todas;
+    $("#pick-count").textContent = t
+      ? `${vistos.length} de ${todas.length}` : `${todas.length} entidades`;
+    $("#pick-list").innerHTML = vistos.length
+      ? vistos.slice(0, 60).map((e) => `
+          <button type="button" data-pick="${esc(e.entity_id)}"
+            ${e.entity_id === fila.entity ? 'aria-current="true"' : ""}>
+            <b>${esc(e.name)}</b>
+            <small>${esc(e.entity_id)}${e.unit ? ` · ${esc(e.unit)}` : ""}</small>
+          </button>`).join("")
+      : `<p class="pick-none">Ninguna entidad coincide con «${esc(q)}».</p>`;
+    $$("#pick-list [data-pick]").forEach((b) =>
+      b.addEventListener("click", () => assignSensor(slot, b.dataset.pick)));
+  };
+  pintar("");
+  $("#pick-q").addEventListener("input", (ev) => pintar(ev.target.value));
+
+  $$("#pick-body .pick-sugg [data-pick], #pick-body .banner-act [data-pick]")
+    .forEach((b) => b.addEventListener("click", () => assignSensor(slot, b.dataset.pick)));
   $("#pick-modal").classList.remove("hidden");
+  $("#pick-q").focus();
 }
 
 async function assignSensor(slot, entity) {
