@@ -2,6 +2,50 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.30.0
+
+### Repaso de uso
+
+Ocho cosas que solo se ven usando la app en el móvil, no leyendo el código. Las
+tres primeras eran fallos míos del cambio a uPlot:
+
+- **No se podía bajar por la pantalla con el dedo sobre un gráfico.** Para
+  recibir el pellizco había puesto `touch-action: none`, y con eso me quedé
+  también el desplazamiento vertical, que es de la página. Ahora es `pan-y`: el
+  navegador conserva el vertical y el componente solo el horizontal.
+- **Con zoom no se podía recorrer el eje.** Solo había pellizco de dos dedos, así
+  que al ampliar te quedabas mirando ese trozo. Un dedo en horizontal lo recorre,
+  y solo si el gesto es claramente horizontal; si no, se deja pasar y la página se
+  desplaza.
+- **El punto fijado se perdía al ampliar.** uPlot recoloca su cursor cuando
+  cambia el rango, y la leyenda se quedaba sin valores. El punto se guarda ahora
+  en el componente y se vuelve a marcar tras cada cambio de eje; si queda fuera de
+  lo que se ve, el eje se trae hasta él en vez de perderlo.
+- **Los gráficos de Facturación no decían nada al tocarlos.** Respondían al dedo
+  pero no había dónde leer el resultado, que es peor que no responder. Cada uno
+  estrena su línea de lectura, con los valores del punto y el color de su tramo, y
+  un aviso de que se puede tocar mientras está vacía, para que el hueco no parezca
+  un fallo.
+
+Y cuatro de maqueta:
+
+- **Energía era una pantalla apilada y en la maqueta es una pestaña.** Ahora la
+  navegación tiene cuatro, con su icono, y desaparece el botón de volver.
+- **La Home llevaba un titular que la maqueta no tiene** —y encima decía
+  «Energía», que es el nombre de otra pantalla—. Abre directamente con el caudal,
+  cuya banda estrena el punto que respira, el «AHORA MISMO» y el pie que dice qué
+  está pasando con la red.
+- Los titulares de pantalla pasan de 32 a los **26 px** de la maqueta.
+- **El cierre del día se podía perder para siempre.** Al descartarlo queda una
+  fila que lo devuelve.
+
+Del catálogo de controles del §04 faltaban cinco; se añaden tres: el interruptor
+deshabilitado, el **buscador del selector de entidad** —que es lo que el
+documento destaca, porque con trescientas entidades un desplegable no se recorre
+pero escribir «solar» sí acota— y el **«Reintentar»** de los avisos de error, que
+hasta ahora decían qué había pasado sin ofrecer salida. Quedan dos: el estado
+«Guardando» de los botones y el esqueleto de carga.
+
 ## 0.29.0
 
 ### Y los gráficos de Facturación también
