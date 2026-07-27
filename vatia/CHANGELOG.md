@@ -2,6 +2,39 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.24.0
+
+### La Home nueva (fase 2 de 3)
+
+La segunda pasada del rediseño: la pantalla de inicio deja de ser un panel de
+cifras y pasa a contar el día. Tres piezas, y las tres estrenan el formato de
+componente web (shadow DOM, estilo encapsulado), pensando en que algún día la
+app viva fuera del add-on.
+
+- **El caudal** sustituye al diagrama de nodos: cada corriente es una cinta
+  cuyo ancho es su potencia, con los orígenes a la izquierda y los destinos a
+  la derecha. Por debajo del kilovatio se enseñan vatios —«0,0 kW» con la cinta
+  dibujada parecía un error— y los contadores del día pasan a una fila propia
+  que hace también de leyenda.
+- **La ventana de energía gratis**: el tramo del día en el que la previsión
+  solar da más de lo que la casa gasta de normal. Dentro, lo que se enchufe lo
+  paga el sol; fuera, la red. El umbral es el consumo típico de la casa (la
+  mediana de la última semana, no la media) y los cortes se interpolan entre
+  puntos de la previsión: decir «abre a las 12:00» cuando abre a las 11:40 es
+  media hora regalada. Necesita el sensor de previsión solar de Ajustes; sin
+  él, la tarjeta no aparece.
+- **El cierre del día**: con la puesta de sol, la ventana deja paso a un
+  resumen — lo producido, lo consumido, la autosuficiencia y qué parte del
+  consumo cayó dentro de la ventana. «Ver el día completo» lo despide hasta
+  la noche siguiente.
+- Las horas de la ventana se enseñan **en la hora de la casa**, no en la del
+  navegador: mirándola de viaje ya no sale desplazada.
+
+Del prototipo quedan fuera, a conciencia, el ahorro en euros y la racha de
+días: pedirían una tarifa «la mía» y un histórico propio que hoy no existen, y
+antes que inventar la cifra que más se mira, no se enseña. La fase 3 (los
+electrodomésticos, con sus sensores) sigue pendiente.
+
 ## 0.23.0
 
 ### El sistema visual del prototipo (fase 1 de 3)

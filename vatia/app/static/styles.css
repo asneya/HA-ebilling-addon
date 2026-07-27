@@ -61,6 +61,17 @@
   --bad: #c8382c;
   --switch-on: #16a46f;
   --switch-off: #d5dbe3;
+  /* Píldoras de estado. Fondo saturado y tinta oscura, iguales en los dos
+     temas: la píldora dice de un vistazo si la energía es gratis ahora, y para
+     eso tiene que cantar tanto sobre el papel claro como sobre el oscuro. */
+  --pill-good: rgba(53, 214, 155, .92);
+  --pill-good-ink: #06301f;
+  --pill-warn: rgba(240, 162, 46, .92);
+  --pill-warn-ink: #2a1806;
+  /* El tramo de energía gratis en la línea de tiempo. Menta clara: es lo bueno
+     del día y tiene que apetecer, no avisar. */
+  --free-from: #7be3b6;
+  --free-to: #35d69b;
   /* texto directamente sobre el cielo, nunca sobre una tarjeta */
   --on-bg: #fff;
   --on-bg-2: rgba(255, 255, 255, .88);
