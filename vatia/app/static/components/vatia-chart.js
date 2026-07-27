@@ -193,6 +193,8 @@
           setCursor: [() => self._emitHover()],
           setScale: [(u, key) => {
             if (key !== "x") return;
+            // El punto fijado se vuelve a marcar: el zoom no debe perderlo.
+            if (self._picked != null) requestAnimationFrame(() => self._markPicked());
             const s = u.scales.x;
             self.dispatchEvent(new CustomEvent("range", {
               detail: { min: s.min, max: s.max, full: s.min <= xs[0] && s.max >= xs[xs.length - 1] },
@@ -212,52 +214,120 @@
     }
 
     _emitPick() {
-      this.dispatchEvent(new CustomEvent("pick",
-        { detail: { index: this._plot.cursor.idx ?? null } }));
+      this._picked = this._plot.cursor.idx ?? null;
+      this.dispatchEvent(new CustomEvent("pick", { detail: { index: this._picked } }));
     }
 
-    /* Pellizco: mueve el rango del eje en vez de estirar el DOM. Se ancla el
-       punto que queda entre los dedos, que es lo que hace que el gesto se sienta
-       agarrado a los datos y no a la pantalla. */
+    /* El punto fijado, que sobrevive al zoom. `null` lo suelta. */
+    set picked(i) { this._picked = i; this._markPicked(); }
+    get picked() { return this._picked; }
+
+    /* Se vuelve a poner el cursor de uPlot donde está el punto fijado. Sin esto,
+       al mover el rango del eje el cursor se recolocaba y la leyenda se quedaba
+       sin los valores del punto. */
+    _markPicked() {
+      if (!this._plot) return;
+      const i = this._picked;
+      if (i == null) { this._plot.setCursor({ left: -10, top: -10 }); return; }
+      const xs = this._plot.data[0];
+      if (i < 0 || i >= xs.length) return;
+      const s = this._plot.scales.x;
+      // Si el punto se queda fuera de lo que se ve, se trae el eje hasta él en
+      // vez de perderlo: es el punto que la persona ha elegido.
+      if (xs[i] < s.min || xs[i] > s.max) {
+        const medio = (s.max - s.min) / 2;
+        this._plot.setScale("x", {
+          min: Math.max(xs[0], xs[i] - medio),
+          max: Math.min(xs[xs.length - 1], xs[i] + medio),
+        });
+      }
+      const left = this._plot.valToPos(xs[i], "x");
+      this._plot.setCursor({ left, top: this._plot.bbox.height / 2 / devicePixelRatio });
+    }
+
+    /* Gestos.
+       Con un dedo: el navegador se queda el desplazamiento vertical de la
+       página —`touch-action: pan-y`— y nosotros el horizontal, que sirve para
+       recorrer el eje cuando está ampliado. Con dos: pellizco, anclado al punto
+       que queda entre los dedos.
+
+       El reparto importa: antes se capturaba todo y no se podía bajar por la
+       página con el dedo encima del gráfico. */
     _pinch() {
       const dedos = new Map();
-      let inicio = null;
+      let inicio = null;      // estado al empezar el pellizco
+      let arrastre = null;    // estado al empezar el arrastre de un dedo
       const over = this._plot.over;
 
-      const xEn = (clientX) => {
+      const valorEn = (clientX) => {
         const r = over.getBoundingClientRect();
         return this._plot.posToVal(clientX - r.left, "x");
       };
+      const limites = () => {
+        const xs = this._plot.data[0];
+        return [xs[0], xs[xs.length - 1]];
+      };
+      const ampliado = () => {
+        const s = this._plot.scales.x;
+        const [a, b] = limites();
+        return s.min > a + 1e-9 || s.max < b - 1e-9;
+      };
 
       over.addEventListener("pointerdown", (ev) => {
-        dedos.set(ev.pointerId, ev.clientX);
-        if (dedos.size === 2) {
+        dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        if (dedos.size === 1) {
+          const s = this._plot.scales.x;
+          arrastre = { x: ev.clientX, y: ev.clientY, min: s.min, max: s.max,
+                       porUnidad: (s.max - s.min) / over.clientWidth, movido: false };
+        } else if (dedos.size === 2) {
+          arrastre = null;
           const [a, b] = [...dedos.values()];
           const s = this._plot.scales.x;
-          inicio = { sep: Math.abs(a - b), min: s.min, max: s.max,
-                     ancla: xEn((a + b) / 2) };
+          inicio = { sep: Math.abs(a.x - b.x), min: s.min, max: s.max,
+                     ancla: valorEn((a.x + b.x) / 2) };
         }
       }, { passive: true });
 
       over.addEventListener("pointermove", (ev) => {
         if (!dedos.has(ev.pointerId)) return;
-        dedos.set(ev.pointerId, ev.clientX);
-        if (dedos.size !== 2 || !inicio) return;
-        const [a, b] = [...dedos.values()];
-        const sep = Math.abs(a - b);
-        if (sep < 20 || inicio.sep < 20) return;
-        const factor = inicio.sep / sep;              // separar dedos = acercar
-        const izq = inicio.ancla - inicio.min;
-        const der = inicio.max - inicio.ancla;
-        this._plot.setScale("x", {
-          min: inicio.ancla - izq * factor,
-          max: inicio.ancla + der * factor,
-        });
+        dedos.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+
+        if (dedos.size === 2 && inicio) {
+          const [a, b] = [...dedos.values()];
+          const sep = Math.abs(a.x - b.x);
+          if (sep < 20 || inicio.sep < 20) return;
+          const factor = inicio.sep / sep;         // separar los dedos = acercar
+          const izq = inicio.ancla - inicio.min;
+          const der = inicio.max - inicio.ancla;
+          const [lo, hi] = limites();
+          this._plot.setScale("x", {
+            min: Math.max(lo, inicio.ancla - izq * factor),
+            max: Math.min(hi, inicio.ancla + der * factor),
+          });
+          return;
+        }
+
+        // Un dedo: solo se recorre el eje si hay zoom y el gesto es claramente
+        // horizontal. Si no, se deja pasar y la página se desplaza.
+        if (dedos.size !== 1 || !arrastre || !ampliado()) return;
+        const dx = ev.clientX - arrastre.x;
+        const dy = ev.clientY - arrastre.y;
+        if (!arrastre.movido) {
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          if (Math.abs(dy) > Math.abs(dx)) { arrastre = null; return; }  // es scroll
+          arrastre.movido = true;
+        }
+        const [lo, hi] = limites();
+        const ancho = arrastre.max - arrastre.min;
+        let min = arrastre.min - dx * arrastre.porUnidad;
+        min = Math.max(lo, Math.min(hi - ancho, min));
+        this._plot.setScale("x", { min, max: min + ancho });
       }, { passive: true });
 
       const soltar = (ev) => {
         dedos.delete(ev.pointerId);
         if (dedos.size < 2) inicio = null;
+        if (dedos.size === 0) arrastre = null;
       };
       over.addEventListener("pointerup", soltar, { passive: true });
       over.addEventListener("pointercancel", soltar, { passive: true });

@@ -64,6 +64,9 @@
 
     _ancho() { return Math.max(240, this.clientWidth || 320); }
 
+    /* Los valores de un punto, para poder pedirlos sin esperar a un gesto. */
+    readAt(i) { return this._readAt ? this._readAt(i) : null; }
+
     _build() {
       if (!this.isConnected || !this._host) return;
       if (this._plot) { this._plot.destroy(); this._plot = null; }
@@ -167,6 +170,15 @@
         ],
         series,
         hooks: {
+          // El aviso del cursor va en el hook y no en un `pointermove` propio:
+          // así se lee cuando uPlot ya ha colocado el índice, no antes.
+          setCursor: [(u) => {
+            const i = u.cursor.idx;
+            if (i === self._ultimo) return;
+            self._ultimo = i;
+            self.dispatchEvent(new CustomEvent("hover",
+              { detail: { index: i ?? null, read: self._readAt ? self._readAt(i ?? null) : null } }));
+          }],
           // El día elegido se marca con una banda detrás de las barras.
           drawClear: [(u) => {
             const sel = d.selected;
@@ -183,18 +195,24 @@
       }, datos, this._host);
 
       // Tocar una barra elige su punto (el día, en el gráfico diario).
+      // Los valores del punto, para la línea de lectura de la página.
+      this._readAt = (i) => (i == null ? null : {
+        index: i,
+        label: d.labels[i],
+        rows: [...pila, ...seriesLado]
+          .map((x) => ({ key: x.key, label: x.label, value: (propio.get(x.key) || [])[i] || 0 }))
+          .filter((r) => r.value > 0),
+        unit: d.unit || "",
+      });
+
       this._plot.over.addEventListener("click", () => {
         const i = this._plot.cursor.idx;
         if (i != null) {
-          this.dispatchEvent(new CustomEvent("pick", { detail: { index: i } }));
+          this.dispatchEvent(new CustomEvent("pick",
+            { detail: { index: i, read: this._readAt(i) } }));
         }
       });
-      this._plot.over.addEventListener("pointermove", () => {
-        const i = this._plot.cursor.idx;
-        if (i === this._ultimo) return;
-        this._ultimo = i;
-        this.dispatchEvent(new CustomEvent("hover", { detail: { index: i ?? null } }));
-      });
+      this._plot.over.style.touchAction = "pan-y";
     }
   }
 

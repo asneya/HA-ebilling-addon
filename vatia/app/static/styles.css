@@ -312,7 +312,7 @@ body[data-view="energy"] .bg-scrim {
 .hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 10px 4px 18px; }
 .hero.compact { padding-bottom: 12px; }
 .hero-title {
-  margin: 0; font-size: 32px; line-height: 1.12; font-weight: 700; letter-spacing: -.6px;
+  margin: 0; font-size: 26px; line-height: 1.15; font-weight: 600; letter-spacing: -.025em;
   color: var(--on-bg); text-shadow: var(--on-bg-shadow);
 }
 .hero-sub {
@@ -510,9 +510,10 @@ body[data-view="energy"] .bg-scrim {
 .e-chart-wrap { position: relative; }
 /* pan-y deja el desplazamiento vertical de la página al navegador y nos reserva
    los gestos horizontales y el pellizco (que gestionamos con pointer events). */
-/* El gráfico es un lienzo, no un SVG desplazable: el zoom mueve el rango del
-   eje. `touch-action: none` deja que el componente reciba el pellizco. */
-.e-chart { display: block; touch-action: none; }
+/* `pan-y`: el navegador se queda el desplazamiento vertical de la página y el
+   componente el horizontal, que es lo que recorre el eje con el zoom puesto.
+   Con `none` no se podía bajar por la pantalla con el dedo sobre el gráfico. */
+.e-chart { display: block; touch-action: pan-y; }
 .e-chart .u-legend { display: none; }
 /* uPlot hereda la tinta del contenedor para su cursor y sus ejes. */
 .e-chart .uplot { color: var(--ink-3); font-family: inherit; }
@@ -1150,3 +1151,75 @@ body.scrolled .scroll-top { opacity: .95; }
 @media (prefers-reduced-motion: reduce) { .step-chev { transition: none; } }
 .step-body { padding: 0 2px 16px; display: grid; gap: 12px; }
 .error-text.block { display: block; margin: 0 0 4px; }
+
+/* ---------------- Lectura del punto en un gráfico ----------------
+   Lo que hay bajo el dedo, con su color. Sin esto los gráficos de Facturación
+   respondían al tacto pero no decían nada, que es peor que no responder. */
+.readout {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
+  min-height: 22px; margin: 8px 2px 0; font-size: 12.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.readout .ro-x { font-weight: 600; color: var(--ink); }
+.readout li { display: flex; align-items: center; gap: 6px; list-style: none; }
+.readout i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.readout b { color: var(--ink-2); font-weight: 600; }
+.readout .ro-hint { color: var(--ink-3); opacity: .8; }
+
+/* ---------------- Home según la maqueta ----------------
+   Sin titular: la pantalla abre con el caudal, y el momento del día y el tiempo
+   viven en la píldora flotante de la derecha. */
+.home-hero { align-items: center; padding-bottom: 12px; }
+.home-hero .hero-sub { margin: 0; }
+
+/* Banda del caudal: el punto que respira dice «esto está vivo» mejor que la
+   palabra «en vivo», y el pie de la derecha dice qué pasa con la red. */
+.band-head { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 0 2px 8px; }
+.band-live { display: flex; align-items: center; gap: 8px;
+  font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  font-weight: 600; color: var(--ink-3); }
+.band-live .pulse { width: 7px; height: 7px; border-radius: 999px;
+  background: var(--good); animation: band-breathe 2.4s ease-in-out infinite; }
+@keyframes band-breathe {
+  0%, 100% { opacity: .55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .band-live .pulse { animation: none; opacity: 1; }
+}
+.band-caption { font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+
+/* Interruptor deshabilitado (§04): 55 % de opacidad y sin sombra en el pulgar,
+   para que se lea como «no se puede tocar» y no como «apagado». */
+.ios-switch:disabled { opacity: .55; cursor: default; }
+.ios-switch:disabled::after { box-shadow: none; }
+
+/* Buscador del selector de entidad (§04): filtra por nombre, id y unidad, que
+   es lo que hace manejable una lista de trescientas. */
+.pick-search {
+  display: flex; align-items: center; gap: 9px; margin: 0 0 10px;
+  padding: 0 13px; height: 44px; border-radius: 999px;
+  background: var(--node); border: 1px solid var(--hair);
+}
+.pick-search .i { width: 18px; height: 18px; color: var(--ink-3); }
+.pick-search input {
+  flex: 1; min-width: 0; border: 0; background: none; font: inherit;
+  font-size: 15px; color: var(--ink); outline: none;
+}
+.pick-count { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.pick-list { display: grid; gap: 6px; max-height: 46vh; overflow-y: auto; }
+.pick-list button {
+  display: grid; gap: 2px; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--hair); background: var(--solid); color: var(--ink);
+  border-radius: 14px; padding: 10px 13px; font: inherit;
+}
+.pick-list b { font-size: 14.5px; font-weight: 600; }
+.pick-list small { font-size: 11.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+.pick-none { font-size: 13px; color: var(--ink-3); padding: 12px 2px; }
+
+/* Aviso con acción (§04): el error dice qué hacer, no solo qué ha pasado. */
+.banner-act { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.banner-act .btn { min-height: 36px; padding: 0 14px; font-size: 13.5px; }
