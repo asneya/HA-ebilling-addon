@@ -53,6 +53,9 @@
       this._data = value;
       this._build();
     }
+    /* «time» (por defecto) usa las cadenas ISO de `x`; «index» las trata como
+       etiquetas ya formateadas, para las series que no van sobre el reloj. */
+    set xMode(mode) { this._xMode = mode; }
     get data() { return this._data; }
 
     set hidden(set) {
@@ -111,10 +114,13 @@
       if (this._plot) { this._plot.destroy(); this._plot = null; }
       if (!d || !d.x || !d.x.length) { this._host.textContent = ""; return; }
 
-      // uPlot trabaja con números: el eje son segundos de época, y el desfase de
-      // la casa se aplica al formatear.
-      const off = offsetOf(d.x[0]) * 60;
-      const xs = d.x.map((iso) => new Date(iso).getTime() / 1000);
+      const porIndice = this._xMode === "index";
+      // uPlot trabaja con números: en modo tiempo son segundos de época y el
+      // desfase de la casa se aplica al formatear; en modo índice, la posición.
+      const off = porIndice ? 0 : offsetOf(d.x[0]) * 60;
+      const xs = porIndice
+        ? d.x.map((_, i) => i)
+        : d.x.map((iso) => new Date(iso).getTime() / 1000);
       const orden = this._ordered();
       this._orderKeys = orden.map((s) => s.key);
 
@@ -155,7 +161,10 @@
           // leyenda con los valores de ese instante.
           bind: { mouseup: (u, t, f) => (e) => { f(e); self._emitPick(); return null; } },
         },
-        scales: { x: { time: true }, y: { range: rangoY } },
+        scales: {
+          x: porIndice ? { time: false } : { time: true },
+          y: { range: rangoY },
+        },
         axes: [
           {
             stroke: this._colorFor("--ink-3"),
@@ -163,7 +172,12 @@
             ticks: { show: false },
             font: "11px Geist, sans-serif",
             size: 30,
-            values: (_u, vals) => vals.map((v) => self._fmtX((v + off) * 1000)),
+            values: (_u, vals) => vals.map((v) => (porIndice
+              ? (d.x[Math.round(v)] ?? "")
+              : self._fmtX((v + off) * 1000))),
+            splits: porIndice
+              ? () => xs.filter((i) => xs.length <= 16 || i % Math.ceil(xs.length / 16) === 0)
+              : undefined,
           },
           {
             stroke: this._colorFor("--ink-3"),
