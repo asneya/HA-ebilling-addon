@@ -290,10 +290,33 @@ function renderLive() {
 
 /* ------------- tabla «Resumen de energía» ------------- */
 
-const SUM_COLORS = {
-  to_load: "#c9c443", to_battery: "#61b87f", to_grid: "#7d92f0",
-  from_solar: "#eea154", from_battery: "#61b87f", from_grid: "#7d92f0",
+/* Los colores de las series y de los flujos salen de los tokens del tema, no
+   del servidor: en claro van saturados para leerse sobre blanco y en oscuro se
+   aclaran, y el servidor no sabe qué tema tienes puesto. Se resuelven contra
+   :root para poder pintarlos dentro de un SVG, donde `var()` no llega a los
+   atributos de presentación. */
+const SERIES_VAR = {
+  solar: "--s-solar", home: "--s-home", grid: "--s-grid",
+  grid_import: "--s-grid", grid_export: "--s-exp",
+  battery: "--s-batt", battery_charge: "--s-batt", battery_discharge: "--s-exp",
+  yesterday: "--ink-3", forecast: "--s-solar",
+  to_load: "--s-home", to_battery: "--s-batt", to_grid: "--s-exp",
+  from_solar: "--s-solar", from_battery: "--s-batt", from_grid: "--s-grid",
 };
+let _tokenCache = {};
+function token(name) {
+  if (_tokenCache[name] === undefined) {
+    _tokenCache[name] = getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim() || "#8e97ad";
+  }
+  return _tokenCache[name];
+}
+function seriesColor(key) { return token(SERIES_VAR[key] || "--ink-3"); }
+// Al cambiar de tema los tokens cambian: hay que olvidar lo memorizado.
+function forgetTokens() { _tokenCache = {}; }
+
+const SUM_COLORS = new Proxy({}, { get: (_t, k) => seriesColor(k) });
+
 
 function summaryColumn(title, block) {
   const rows = block.rows;
@@ -347,7 +370,9 @@ function renderSummaryMeters(home, meters) {
 
 /* ------------- diagrama de flujo ------------- */
 
-const FLOW_COLORS = { solar: "#f5a524", grid: "#6b8afd", battery: "#10b981" };
+const FLOW_COLORS = new Proxy({}, {
+  get: (_t, k) => seriesColor(k === "battery" ? "battery" : k),
+});
 const NR = 46, FCX = 200, FCY = 212, LANE = 18, CORN = 16;
 const EXT = Math.sqrt(NR * NR - LANE * LANE);
 const LT = FCY - LANE, LB = FCY + LANE, LL = FCX - LANE, LR = FCX + LANE;
@@ -597,8 +622,8 @@ function renderEnergyLegend() {
               aria-pressed="${!off}" title="Mostrar u ocultar ${esc(s.label)}">
         <span class="n">${esc(s.label)}</span>
         <span class="v">
-          <span class="check ${isLightColor(s.color) ? "on-light" : ""}"
-                style="background:${esc(s.color)}">${off ? "" : "✓"}</span>
+          <span class="check ${isLightColor(seriesColor(s.key)) ? "on-light" : ""}"
+                style="background:${esc(seriesColor(s.key))}">${off ? "" : "✓"}</span>
           <span class="num">${value}</span>
         </span>
       </button>`;
@@ -742,8 +767,8 @@ function renderEnergyChart() {
     const gid = `eg${si}`;
     if (!dashed) {
       defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${esc(s.color)}" stop-opacity="${faint ? 0.16 : 0.34}"/>
-        <stop offset="100%" stop-color="${esc(s.color)}" stop-opacity="0.02"/>
+        <stop offset="0%" stop-color="${esc(seriesColor(s.key))}" stop-opacity="${faint ? 0.16 : 0.34}"/>
+        <stop offset="100%" stop-color="${esc(seriesColor(s.key))}" stop-opacity="0.02"/>
       </linearGradient>`;
     }
     seriesSegments(s.values).forEach((seg) => {
@@ -751,13 +776,13 @@ function renderEnergyChart() {
         .map(([i, v], k) => `${k ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
         .join(" ");
       if (seg.length === 1) {
-        svg += `<circle cx="${X(seg[0][0]).toFixed(1)}" cy="${Y(seg[0][1]).toFixed(1)}" r="2.8" fill="${esc(s.color)}"/>`;
+        svg += `<circle cx="${X(seg[0][0]).toFixed(1)}" cy="${Y(seg[0][1]).toFixed(1)}" r="2.8" fill="${esc(seriesColor(s.key))}"/>`;
         return;
       }
       if (!dashed) {
         svg += `<path d="${line} L${X(seg[seg.length - 1][0]).toFixed(1)},${base} L${X(seg[0][0]).toFixed(1)},${base} Z" fill="url(#${gid})" stroke="none"/>`;
       }
-      svg += `<path d="${line}" fill="none" stroke="${esc(s.color)}" stroke-width="${dashed || faint ? 1.8 : 2.2}"${dashed ? ' stroke-dasharray="2.5 4.5"' : ""} stroke-linejoin="round" stroke-linecap="round"/>`;
+      svg += `<path d="${line}" fill="none" stroke="${esc(seriesColor(s.key))}" stroke-width="${dashed || faint ? 1.8 : 2.2}"${dashed ? ' stroke-dasharray="2.5 4.5"' : ""} stroke-linejoin="round" stroke-linecap="round"/>`;
     });
   });
 
@@ -894,10 +919,10 @@ function renderEnergyBreakdown() {
   $("#e-bd-unit").textContent = bd.unit;
   const total = bd.rows.reduce((s, r) => s + r.kwh, 0) || 1;
   $("#e-bd-bar").innerHTML = bd.rows.filter((r) => r.kwh > 0)
-    .map((r) => `<i style="width:${(r.kwh / total) * 100}%;background:${esc(r.color)}"></i>`).join("");
+    .map((r) => `<i style="width:${(r.kwh / total) * 100}%;background:${esc(seriesColor(r.key))}"></i>`).join("");
   $("#e-bd-rows").innerHTML = bd.rows.map((r) => `
     <div class="e-bd-row">
-      <div class="l" style="color:${esc(r.color)}">${esc(r.label)}</div>
+      <div class="l" style="color:${esc(seriesColor(r.key))}">${esc(r.label)}</div>
       <div class="p">${r.pct}%</div>
       <div class="k">${fmtNum.format(r.kwh)} kWh</div>
     </div>`).join("");
@@ -1829,6 +1854,9 @@ function applyTheme(pref) {
   const choice = THEMES[pref] ? pref : "auto";
   const dark = choice === "dark" || (choice !== "light" && prefersDark());
   document.documentElement.dataset.theme = dark ? "dark" : "light";
+  forgetTokens();          // los colores de las series cambian con el tema
+  if (state.live) renderFlow(state.live);
+  if (eState.data) renderEnergy();
   try { localStorage.setItem("vatia-theme", choice); } catch (e) { /* modo privado */ }
   $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
   const sub = $("#nav-sub-theme");

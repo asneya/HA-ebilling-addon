@@ -788,7 +788,10 @@
   </main>
 
   <!-- ===================== TAB BAR ===================== -->
-  <nav class="tabbar glass" role="tablist">
+  <!-- Velo que disuelve el contenido antes de llegar a la barra: sin él, el
+       texto se transparenta a través del material y no se lee. -->
+  <div class="scroll-edge" aria-hidden="true"></div>
+  <nav class="tabbar glass-nav" role="tablist">
     <button class="tab active" data-view="home">
       <svg viewBox="0 0 24 24"><path d="M4 11.5 12 4l8 7.5" /><path d="M6.5 10.5V20h11v-9.5"/></svg>
       <span>Home</span>

@@ -1,4 +1,11 @@
-Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+Copyright (c) 2023 Vercel, Inc. (https://github.com/vercel/geist-font)
+  — Geist, empaquetada aquí como geist-latin.woff2 (subconjunto latino).
+Copyright (c) 2023 Instrument (https://github.com/Instrument/instrument-serif)
+  — Instrument Serif, empaquetada aquí como instrument-serif-latin.woff2.
+
+Ambas familias se distribuyen bajo la SIL Open Font License 1.1, cuyo texto
+es el que sigue. Los ficheros se han descargado del servicio de Google Fonts
+y se sirven desde el propio add-on: no se hace ninguna petición externa.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
