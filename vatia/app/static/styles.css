@@ -52,6 +52,10 @@
   --s-home: #c93f63;
   --s-grid: #3a63d8;
   --s-batt: #0e8a5f;
+  /* Salida de la batería. La batería es un nodo con dos sentidos, como la red,
+     y necesita dos colores: con uno solo, «Descarga» y «Exportada» acababan
+     compartiendo el morado en la misma leyenda. */
+  --s-batt-out: #0f7d8a;
   --s-exp: #7a46d6;
   /* semánticos */
   --good: #0e7a52;
@@ -116,6 +120,7 @@
   --s-home: #f2708f;
   --s-grid: #7c9eff;
   --s-batt: #35d69b;
+  --s-batt-out: #3ecdd8;
   --s-exp: #b08cff;
   --good: #35d69b;
   --good-chip: rgba(53, 214, 155, .16);
@@ -336,10 +341,14 @@ body[data-view="energy"] .bg-scrim {
   margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   background: var(--glass-2); border: 1px solid var(--sep); padding: 3px 10px; border-radius: 999px;
 }
+/* Rótulo de sección: la etiqueta en versalitas del prototipo. Va sobre el
+   cielo, así que su tinta es la de fondo —incluido el `.soft` de dentro, que
+   con `--ink-3` quedaba casi invisible contra el degradado. */
 .section-title {
-  font-size: 18px; font-weight: 650; letter-spacing: -.2px; margin: 24px 4px 10px;
-  color: var(--on-bg); text-shadow: var(--on-bg-shadow);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  margin: 24px 6px 9px; color: var(--on-bg-2); text-shadow: var(--on-bg-shadow);
 }
+.section-title .soft { color: var(--on-bg-2); opacity: .72; font-weight: 600; }
 .soft { color: var(--ink-3); font-weight: 500; }
 .empty { color: var(--ink-2); font-size: 14.5px; text-align: center; padding: 18px 8px; margin: 0; }
 .hidden { display: none !important; }
@@ -411,13 +420,16 @@ body[data-view="energy"] .bg-scrim {
 .controls { padding: 12px 12px 10px; }
 .segmented.ranges .seg { font-size: 13px; padding: 11px 4px; min-height: 44px; }
 .viewtabs { display: flex; gap: 6px; justify-content: space-between; margin-top: 4px; }
+/* El selector de vista es el chip del prototipo, en versión de icono: cinco
+   vistas no caben con su nombre a 414 px. El activo va en negativo, como allí,
+   que se distingue de un vistazo mejor que un fondo apenas más claro. */
 .vt {
   flex: 1; border: 0; background: transparent; cursor: pointer; padding: 10px 4px;
-  min-height: 46px; border-radius: 14px; color: var(--ink-3); display: grid; place-items: center;
-  transition: background .2s ease, color .2s ease;
+  min-height: 44px; border-radius: 999px; color: var(--ink-2); display: grid; place-items: center;
+  transition: background .18s ease, color .18s ease;
 }
-.vt svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.vt.active { background: var(--glass); color: var(--ink); box-shadow: 0 2px 10px rgba(10,18,35,.10); }
+.vt svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.vt.active { background: var(--ink); color: var(--solid); }
 
 .e-stamp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .e-stamp { font-size: 15px; font-weight: 600; flex: 1 1 auto; }
@@ -756,12 +768,16 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 
 /* ---------------- stats ---------------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 11px; margin-bottom: 6px; }
-.stat { padding: 13px 15px; border-radius: var(--r-md); }
-.stat .l { font-size: 12.5px; color: var(--ink-3); }
-.stat .v { font-size: 21px; font-weight: 700; letter-spacing: -.4px; margin-top: 1px; }
-.stat .s { font-size: 11.5px; color: var(--ink-3); }
+/* Tarjeta de cifra del prototipo: rótulo en versalitas, número grande con
+   cifras de ancho fijo y una línea de contexto debajo. */
+.stat { padding: 14px 15px; border-radius: var(--r-md); }
+.stat .l { font-size: 11px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-3); }
+.stat .v { font-size: 24px; font-weight: 600; letter-spacing: -.025em;
+  margin-top: 5px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat .s { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
 .stat.punta .v { color: var(--punta); }
-.stat.llano .v { color: #d9a406; }
+.stat.llano .v { color: var(--llano); }
 .stat.valle .v { color: var(--valle); }
 .stat.export .v { color: var(--exp); }
 
@@ -847,8 +863,11 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .table td { padding: 8px 6px; border-bottom: 1px solid var(--sep); }
 .table td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-.table tr.group-row td { padding-top: 15px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-3); border-bottom: 0; }
-.table tr.total-row td { font-size: 16px; font-weight: 800; border-top: 2px solid var(--ink); border-bottom: 0; padding-top: 12px; }
+.table tr.group-row td { padding-top: 15px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); border-bottom: 0; }
+/* La fila del total se cierra con una línea más marcada, como en el prototipo,
+   en vez de con un peso tipográfico que la tipografía variable ni tiene. */
+.table tr.total-row td { font-size: 15.5px; font-weight: 600; border-top: 1px solid var(--hair-2); border-bottom: 0; padding-top: 12px; }
+.table td.credit:last-child { color: var(--good); }
 .table .detail { color: var(--ink-3); font-size: 11.5px; font-weight: 400; }
 
 /* ---------------- banners ---------------- */

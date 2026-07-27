@@ -310,7 +310,7 @@ function renderLive() {
 const SERIES_VAR = {
   solar: "--s-solar", home: "--s-home", grid: "--s-grid",
   grid_import: "--s-grid", grid_export: "--s-exp",
-  battery: "--s-batt", battery_charge: "--s-batt", battery_discharge: "--s-exp",
+  battery: "--s-batt", battery_charge: "--s-batt", battery_discharge: "--s-batt-out",
   yesterday: "--ink-3", forecast: "--s-solar",
   to_load: "--s-home", to_battery: "--s-batt", to_grid: "--s-exp",
   from_solar: "--s-solar", from_battery: "--s-batt", from_grid: "--s-grid",
@@ -1062,7 +1062,8 @@ function openBillDetail(tariffId) {
     if (!lines.length) continue;
     rows += `<tr class="group-row"><td colspan="2">${label}</td></tr>`;
     rows += lines.map((l) =>
-      `<tr><td>${esc(l.concept)}<div class="detail">${esc(l.detail)}</div></td><td>${fmtEUR.format(l.amount)}</td></tr>`).join("");
+      `<tr><td>${esc(l.concept)}<div class="detail">${esc(l.detail)}</div></td><td class="${
+        l.amount < 0 ? "credit" : ""}">${fmtEUR.format(l.amount)}</td></tr>`).join("");
   }
   rows += `<tr class="total-row"><td>TOTAL (${fmtNum.format(shown.days)} días · ${fmtNum.format(shown.kwh_total)} kWh)</td><td>${fmtEUR.format(shown.total)}</td></tr>`;
   let extra = "";
@@ -1079,8 +1080,12 @@ function openBillDetail(tariffId) {
 
 /* ------------- gráficos ------------- */
 
-const PCOLOR = { punta: "#ff6b81", llano: "#ffcf5c", valle: "#34d399" };
-const ECOLOR = "#ff9f0a";
+/* Los tramos de la tarifa y lo vertido salen de los tokens del tema, igual que
+   las series: escritos a mano, las barras no coincidían con los puntos de su
+   propia leyenda —que sí usa los tokens— y la de «Exportada» llegaba a decir
+   morado con la barra pintada de naranja. */
+const PCOLOR = new Proxy({}, { get: (_t, k) => token(`--${k}`) });
+const ECOLOR = () => token("--exp");
 
 function gridAxis(max, padL, padB, padT, width, height) {
   let svg = "";
@@ -1149,6 +1154,11 @@ function renderDetail() {
   tiles += tile("Valle", `${fmtNum.format(t.valle)} kWh`, pct(t.valle, t.import), "valle");
   $("#d-stats").innerHTML = tiles;
 
+  // La leyenda de vertido solo si hay vertido: prometer un color que no
+  // aparece en ninguna barra hace dudar de si falta un dato o no hay ninguno.
+  const hasExport = d.has_export || t.export > 0;
+  $$(".leg-export").forEach((el) => el.classList.toggle("hidden", !hasExport));
+
   renderDailyDetail(d.days);
   renderMonthlyCumulative(d.days);
   if (state.selectedDay && d.days.some((x) => x.date === state.selectedDay)) renderHourly(state.selectedDay);
@@ -1175,7 +1185,7 @@ function renderDailyDetail(days) {
       svg += `<rect class="bar-seg" data-day="${d.date}" x="${x}" y="${y}" width="${iw}" height="${Math.max(h, 0)}" rx="3" fill="${PCOLOR[p]}" style="cursor:pointer"><title>${d.date} · ${p}: ${fmtNum.format(d[p])} kWh</title></rect>`;
     }
     const eh = d.export * scale;
-    svg += `<rect class="bar-seg" data-day="${d.date}" x="${x + iw + 2}" y="${height - padB - eh}" width="${ew}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR}" style="cursor:pointer"><title>${d.date} · exportada: ${fmtNum.format(d.export)} kWh</title></rect>`;
+    svg += `<rect class="bar-seg" data-day="${d.date}" x="${x + iw + 2}" y="${height - padB - eh}" width="${ew}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR()}" style="cursor:pointer"><title>${d.date} · exportada: ${fmtNum.format(d.export)} kWh</title></rect>`;
     if (days.length <= 31 || i % 2 === 0) {
       svg += `<text x="${x + gw / 2}" y="${height - 8}" class="c-axis" text-anchor="middle">${d.date.slice(8)}</text>`;
     }
@@ -1205,7 +1215,7 @@ function cumulativeChart(container, points, step) {
     return s;
   };
   svg += line("import", "#0a84ff");
-  if (last.export > 0) svg += line("export", ECOLOR);
+  if (last.export > 0) svg += line("export", ECOLOR());
   points.forEach((p, i) => {
     if (points.length <= 31 || i % 2 === 0) {
       svg += `<text x="${X(i)}" y="${height - 8}" class="c-axis" text-anchor="middle">${p.label}</text>`;
@@ -1247,9 +1257,9 @@ function renderHourly(date) {
   hours.forEach((h, i) => {
     const x = padL + i * (group + gap);
     const ih = h.kwh * scale;
-    svg += `<rect class="bar-seg" x="${x}" y="${height - padB - ih}" width="${bw}" height="${Math.max(ih, 0)}" rx="3" fill="${h.period ? PCOLOR[h.period] : "#8e97ad"}"><title>${String(h.hour).padStart(2, "0")}:00 · ${fmtNum.format(h.kwh)} kWh</title></rect>`;
+    svg += `<rect class="bar-seg" x="${x}" y="${height - padB - ih}" width="${bw}" height="${Math.max(ih, 0)}" rx="3" fill="${h.period ? PCOLOR[h.period] : token("--ink-3")}"><title>${String(h.hour).padStart(2, "0")}:00 · ${fmtNum.format(h.kwh)} kWh</title></rect>`;
     const eh = h.export * scale;
-    svg += `<rect class="bar-seg" x="${x + bw + 3}" y="${height - padB - eh}" width="${bw}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR}"><title>${String(h.hour).padStart(2, "0")}:00 · exportada ${fmtNum.format(h.export)} kWh</title></rect>`;
+    svg += `<rect class="bar-seg" x="${x + bw + 3}" y="${height - padB - eh}" width="${bw}" height="${Math.max(eh, 0)}" rx="3" fill="${ECOLOR()}"><title>${String(h.hour).padStart(2, "0")}:00 · exportada ${fmtNum.format(h.export)} kWh</title></rect>`;
     if (i % 2 === 0) svg += `<text x="${x + group / 2}" y="${height - 8}" class="c-axis sm" text-anchor="middle">${h.hour}</text>`;
   });
   $("#d-hourly").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${svg}</svg>`;
@@ -1804,8 +1814,12 @@ function applyTheme(pref) {
   const dark = choice === "dark" || (choice !== "light" && prefersDark());
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   forgetTokens();          // los colores de las series cambian con el tema
+  // Todo lo pintado a mano con colores de token hay que volverlo a pintar: el
+  // SVG lleva los colores en atributos, y esos no los alcanza `var()`.
   if (state.live) renderFlow(state.live);
   if (eState.data) renderEnergy();
+  if (state.simulation) renderSimulation();
+  if (state.detail) renderDetail();
   try { localStorage.setItem("vatia-theme", choice); } catch (e) { /* modo privado */ }
   $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
   const sub = $("#nav-sub-theme");
