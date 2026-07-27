@@ -1979,6 +1979,15 @@ async function setBackground(on) {
   if (state.config) state.config.settings.dynamic_background = !!on;
 }
 
+/* El borde de la cabecera solo existe cuando hay contenido por encima. Se
+   marca en <body> y el CSS hace el resto. */
+function watchScroll() {
+  const marcar = () => document.body.classList.toggle("scrolled", window.scrollY > 8);
+  addEventListener("scroll", marcar, { passive: true });
+  marcar();
+}
+watchScroll();
+
 function prefersDark() {
   return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
 }

@@ -26,6 +26,10 @@
        funciona en WebKit, el motor de la app de Home Assistant en iOS. -->
   <!--ICONOS-->
 
+  <!-- Borde superior al desplazar: aparece solo cuando el contenido se ha
+       movido, como degradado y no como línea (§07). -->
+  <div class="scroll-top" aria-hidden="true"></div>
+
   <!-- Indicador de progreso: visible mientras hay peticiones en vuelo -->
   <div class="progress" role="progressbar" aria-label="Cargando" aria-hidden="true"></div>
 
@@ -219,12 +223,12 @@
             <div class="period-label" id="period-label">—</div>
             <button id="next-cycle" class="icon-btn" title="Ciclo siguiente">›</button>
           </div>
-          <div class="row-actions">
-            <label class="switch">
-              <input type="checkbox" id="projection-toggle" class="ios-switch">
-              <span>Proyección fin de ciclo</span>
-            </label>
-            <div class="spacer"></div>
+          <label class="switch-row">
+            <span class="li-txt"><b>Proyección fin de ciclo</b>
+              <small>Estima el total como si el ciclo estuviera completo</small></span>
+            <input type="checkbox" id="projection-toggle" class="ios-switch">
+          </label>
+          <div class="row-actions split">
             <button id="cp-toggle" class="btn subtle">Periodo</button>
             <button id="refresh-btn" class="btn subtle">Actualizar</button>
           </div>
