@@ -740,6 +740,10 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   border-top: 1px solid var(--sep); font-size: 14.5px;
 }
 .li.col { flex-direction: column; align-items: stretch; gap: 6px; }
+/* Fila de dos líneas: rótulo y su explicación debajo, como las de Apariencia. */
+.li-txt { min-width: 0; margin-right: auto; }
+.li-txt b { display: block; font-size: 15px; font-weight: 600; }
+.li-txt small { display: block; font-size: 12px; color: var(--ink-3); }
 .li-label { flex: 0 0 44%; color: var(--ink-2); font-size: 15px; }
 /* ---------------- diagnóstico ---------------- */
 .diag-side + .diag-side { border-top: 1px solid var(--sep); }
@@ -951,3 +955,68 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
   margin-top: 10px;
 }
+
+/* ---------------- Ajustes · sensores por función ----------------
+   La regla del diseño: «sensores por función, no por entidad». Cada casilla es
+   una fila que dice qué entidad tiene, cuánto marca ahora y si responde, en vez
+   de un desplegable con trescientas entradas. Una casilla vacía no es un hueco
+   callado: tiñe su fila y ofrece los candidatos. */
+.nav-count { font-size: 12.5px; font-weight: 600; color: var(--on-bg-2);
+  text-shadow: var(--on-bg-shadow); white-space: nowrap; }
+
+.sgroup { margin-bottom: 12px; }
+.sgroup-head { display: flex; align-items: center; gap: 9px; padding: 13px 15px 10px; }
+.sgroup-head .i { width: 19px; height: 19px; color: var(--ink-3); }
+.sgroup-head b { font-size: 11px; font-weight: 600; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--ink-3); }
+
+.srow { display: flex; align-items: center; gap: 11px; width: 100%; border: 0;
+  background: transparent; font: inherit; text-align: left; cursor: pointer;
+  padding: 11px 15px; border-top: 1px solid var(--hair); color: var(--ink); }
+.srow-dot { width: 8px; height: 8px; border-radius: 999px; flex: none;
+  background: var(--good); }
+.srow.down .srow-dot { background: var(--bad); }
+.srow.empty .srow-dot { background: var(--warn); }
+.srow.optional.empty .srow-dot { background: var(--ink-3); opacity: .5; }
+/* La fila sin asignar se tiñe, para que no pase por configurada. */
+.srow.empty:not(.optional) { background: var(--warn-chip); }
+
+.srow-txt { min-width: 0; margin-right: auto; }
+.srow-txt b { display: block; font-size: 15px; font-weight: 600; }
+.srow-txt small { display: block; font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.srow-val { font-size: 14px; font-weight: 600; flex: none;
+  font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.srow-assign { flex: none; height: 30px; padding: 0 13px; border: 0;
+  border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; color: var(--accent); background: var(--accent-soft); }
+
+/* Hoja de asignación: los candidatos primero y la lista entera detrás. */
+.pick-sugg { display: grid; gap: 7px; margin-bottom: 12px; }
+.pick-sugg button { display: flex; align-items: baseline; gap: 9px; width: 100%;
+  border: 1px solid var(--hair); background: var(--node); cursor: pointer;
+  border-radius: 14px; padding: 11px 13px; font: inherit; text-align: left;
+  color: var(--ink); }
+.pick-sugg b { font-size: 14.5px; font-weight: 600; }
+.pick-sugg small { font-size: 12px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
+.pick-sugg code { font-size: 11.5px; color: var(--ink-3); }
+
+/* Fondo liso: con «Fondo según la hora» apagado se retira el cielo y queda la
+   superficie de página. Los rótulos que iban sobre el cielo pasan a tinta
+   normal, que sobre un fondo claro el blanco no se lee. */
+body[data-bg="flat"] .bg > *:not(.bg-scrim) { display: none; }
+body[data-bg="flat"] .bg { background: var(--page); }
+body[data-bg="flat"] .bg-scrim { background: none; backdrop-filter: none; }
+body[data-bg="flat"] .hero-title,
+body[data-bg="flat"] .hero-sub,
+body[data-bg="flat"] .nav-title,
+body[data-bg="flat"] .group-label,
+body[data-bg="flat"] .section-title,
+body[data-bg="flat"] .nav-count { color: var(--ink); text-shadow: none; }
+body[data-bg="flat"] .hero-sub,
+body[data-bg="flat"] .group-label,
+body[data-bg="flat"] .section-title,
+body[data-bg="flat"] .nav-count { color: var(--ink-3); }
+body[data-bg="flat"] .section-title .soft { color: var(--ink-3); opacity: 1; }

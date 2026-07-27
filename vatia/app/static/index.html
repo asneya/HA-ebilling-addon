@@ -350,18 +350,11 @@
 
         <div class="group-label">Sensores</div>
         <div class="panel glass nav-list">
-          <button class="nav-row" data-settings-page="flow">
+          <button class="nav-row" data-settings-page="sensors">
             <span class="nav-ico" style="--ico:#ff9f0a">
               <svg class="i"><use href="#i-potencia"/></svg>
             </span>
-            <span class="nav-txt"><b>Flujo de energía</b><small>Potencia instantánea</small></span>
-            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
-          </button>
-          <button class="nav-row" data-settings-page="counters">
-            <span class="nav-ico" style="--ico:#30d158">
-              <svg class="i"><use href="#i-contador"/></svg>
-            </span>
-            <span class="nav-txt"><b>Contadores de energía</b><small>Totales del día</small></span>
+            <span class="nav-txt"><b>Sensores</b><small id="nav-sub-sensors">—</small></span>
             <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="forecast">
@@ -398,20 +391,44 @@
           </button>
         </div>
 
+        <div class="group-label">Apariencia</div>
+        <div class="panel glass group">
+          <div class="list">
+            <div class="li col">
+              <span class="li-label">Tema</span>
+              <div class="segmented glass-soft" id="theme-seg" role="group" aria-label="Tema de la aplicación">
+                <button class="seg" data-theme-opt="auto">Auto</button>
+                <button class="seg" data-theme-opt="light">Claro</button>
+                <button class="seg" data-theme-opt="dark">Oscuro</button>
+              </div>
+            </div>
+            <label class="li">
+              <span class="li-txt"><b>Fondo según la hora</b>
+                <small>Cielo y meteorología en la pantalla de inicio</small></span>
+              <input type="checkbox" id="s-dynamic-bg" class="ios-switch">
+            </label>
+            <div class="li">
+              <span class="li-txt"><b>Material traslúcido</b>
+                <small>Sigue el ajuste del sistema</small></span>
+              <span class="li-value" id="material-state">—</span>
+            </div>
+          </div>
+        </div>
+
         <div class="group-label">Aplicación</div>
         <div class="panel glass nav-list">
-          <button class="nav-row" data-settings-page="appearance">
-            <span class="nav-ico" style="--ico:#8e8e93">
-              <svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17" fill="none"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></svg>
-            </span>
-            <span class="nav-txt"><b>Apariencia</b><small id="nav-sub-theme">—</small></span>
-            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
-          </button>
           <button class="nav-row" data-settings-page="backup">
             <span class="nav-ico" style="--ico:#30d158">
               <svg class="i"><use href="#i-duplicar"/></svg>
             </span>
             <span class="nav-txt"><b>Copia de seguridad</b><small>Exportar e importar la configuración</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="nav-row" data-settings-page="about">
+            <span class="nav-ico" style="--ico:#8e8e93">
+              <svg class="i"><use href="#i-informacion"/></svg>
+            </span>
+            <span class="nav-txt"><b>Acerca de</b><small id="nav-sub-about">—</small></span>
             <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="diagnostics">
@@ -486,72 +503,45 @@
       </div>
       </div>
 
-      <!-- ---- nivel 2: flujo de energía ---- -->
-      <div class="settings-page" id="sp-flow">
+      <!-- ---- nivel 2: sensores, agrupados por función ---- -->
+      <div class="settings-page" id="sp-sensors">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Flujo de energía</h1>
-          <span class="nav-spacer"></span>
+          <h1 class="nav-title">Sensores</h1>
+          <span class="nav-count" id="sensors-count">—</span>
         </header>
 
-      <div class="panel glass group">
-        <div class="group-head">Potencia instantánea <span class="soft">· W o kW</span></div>
-        <div class="list" id="flow-sensor-list"></div>
-        <div class="li"><button id="load-grouped-btn" class="btn subtle">Buscar entidades</button></div>
-        <p class="li-note">
-          Alimentan el diagrama de flujo de la Home y las curvas de potencia de
-          la pantalla de Energía. El consumo de la casa y el % de batería son
-          opcionales.
-        </p>
-        <p class="li-note">
-          <b>¿Medidor bidireccional?</b> Si tu inversor o medidor da un único
-          sensor con signo, ponlo en las <b>dos</b> casillas del par: se separa
-          por el signo (<b>+</b> importación y <b>−</b> exportación en la red;
-          <b>+</b> carga y <b>−</b> descarga en la batería).
-        </p>
-      </div>
-      </div>
+        <div id="sensors-groups"></div>
 
-      <!-- ---- nivel 2: contadores de energía ---- -->
-      <div class="settings-page" id="sp-counters">
-        <header class="nav-head">
-          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Contadores de energía</h1>
-          <span class="nav-spacer"></span>
-        </header>
-
-      <div class="panel glass group">
-        <div class="group-head">Contadores <span class="soft">· kWh</span></div>
-        <div class="list" id="energy-sensor-list"></div>
-        <label class="li">
-          <span class="li-label">Qué miden</span>
-          <select id="s-energy-counters">
-            <option value="auto">Detectarlo automáticamente</option>
-            <option value="daily">Ya son del día en curso</option>
-            <option value="lifetime">Son acumulados (calcular el día)</option>
-          </select>
-        </label>
-        <p class="li-note">
-          Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
-          es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde el
-          inicio del histórico (<code>total_increasing</code>), el add-on calcula
-          el incremento desde la medianoche con las estadísticas. En
-          <i>automático</i> lo distingue comparando ambos valores.
-        </p>
-        <p class="li-note">
-          <b>¿Contador neto?</b> Si tienes un único contador que sube al importar
-          y baja al exportar, ponlo en las <b>dos</b> casillas del par: el
-          incremento de cada intervalo se separa por el signo. En ese caso los
-          totales salen siempre de las estadísticas, porque el estado del sensor
-          (el neto) no distingue las dos direcciones.
-        </p>
-        <p class="li-note">
-          El de la casa es <b>opcional</b>: si no tienes un contador de consumo,
-          el add-on integra el <b>sensor de potencia de la casa</b> que hayas
-          configurado en el flujo de energía y, si tampoco lo hay, lo deduce por
-          balance.
-        </p>
-      </div>
+        <div class="panel glass group">
+          <div class="group-head">Qué miden los contadores</div>
+          <label class="li">
+            <span class="li-label">Totales de energía</span>
+            <select id="s-energy-counters">
+              <option value="auto">Detectarlo automáticamente</option>
+              <option value="daily">Ya son del día en curso</option>
+              <option value="lifetime">Son acumulados (calcular el día)</option>
+            </select>
+          </label>
+          <p class="li-note">
+            Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
+            es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde
+            el inicio del histórico (<code>total_increasing</code>), el add-on
+            calcula el incremento desde la medianoche con las estadísticas. En
+            <i>automático</i> lo distingue comparando ambos valores.
+          </p>
+          <p class="li-note">
+            <b>¿Medidor bidireccional o contador neto?</b> Si tu inversor da un
+            único sensor con signo, ponlo en las <b>dos</b> casillas del par: se
+            separa por el signo (<b>+</b> importación y <b>−</b> exportación en la
+            red; <b>+</b> carga y <b>−</b> descarga en la batería).
+          </p>
+          <p class="li-note">
+            El punto verde indica que la entidad responde. Uno rojo no bloquea el
+            cálculo: la serie se dibuja con hueco y la factura avisa. Los sensores
+            marcados como opcionales se deducen del balance si faltan.
+          </p>
+        </div>
       </div>
 
       <!-- ---- nivel 2: previsión solar ---- -->
@@ -576,30 +566,12 @@
       </div>
 
       <!-- ---- nivel 2: apariencia ---- -->
-      <div class="settings-page" id="sp-appearance">
+      <div class="settings-page" id="sp-about">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
-          <h1 class="nav-title">Apariencia</h1>
+          <h1 class="nav-title">Acerca de</h1>
           <span class="nav-spacer"></span>
         </header>
-
-      <div class="panel glass group">
-        <div class="group-head">Tema</div>
-        <div class="list">
-          <div class="li col">
-            <div class="segmented glass-soft" id="theme-seg" role="group" aria-label="Tema de la aplicación">
-              <button class="seg" data-theme-opt="auto">Automático</button>
-              <button class="seg" data-theme-opt="light">Claro</button>
-              <button class="seg" data-theme-opt="dark">Oscuro</button>
-            </div>
-          </div>
-          <p class="li-note">
-            <b>Automático</b> sigue al sistema: cambia solo cuando tu móvil o tu
-            ordenador entran en modo oscuro. Se aplica al instante y se guarda,
-            así que es el mismo tema en todos tus dispositivos.
-          </p>
-        </div>
-      </div>
 
       <div class="panel glass group">
         <div class="group-head">Acerca de</div>
@@ -906,6 +878,18 @@
         <button class="btn subtle" id="cancel-tariff-btn">Cancelar</button>
         <button class="btn primary" id="save-tariff-btn">Guardar</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Hoja de asignación de un sensor: los candidatos primero, la lista entera
+       detrás por si el nombre no se parece a nada. -->
+  <div id="pick-modal" class="modal hidden">
+    <div class="sheet glass">
+      <div class="sheet-head">
+        <h3 id="pick-title">Asignar sensor</h3>
+        <button class="icon-btn" id="close-pick-modal" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="sheet-body" id="pick-body"></div>
     </div>
   </div>
 

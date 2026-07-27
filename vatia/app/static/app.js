@@ -80,6 +80,9 @@ function showView(name) {
   if (name === "settings") {
     fillSettings();
     showSettingsPage(null);
+    // El recuento de sensores del índice necesita el estado, y el índice tiene
+    // que informar sin que haya que entrar en la sección.
+    refreshSensorCount();
   }
 }
 
@@ -100,11 +103,15 @@ function showSettingsPage(page) {
   // El botón de guardar no tiene sentido en el índice, en la lista de tarifas,
   // en apariencia (el tema se aplica y se guarda al pulsarlo) ni en el
   // diagnóstico, que solo lee.
-  const hideSave = !page || ["tariffs", "appearance", "diagnostics", "backup"].includes(page);
+  const hideSave = !page ||
+    ["tariffs", "about", "diagnostics", "backup", "sensors"].includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   if (page === "tariffs") renderTariffsList();
   if (page === "diagnostics") loadDiagnostics();
+  // Los sensores se asignan tocando su fila, no rellenando un formulario: la
+  // barra de guardar no aplica y cada cambio se guarda solo.
+  if (page === "sensors") loadSensors();
   window.scrollTo(0, 0);
 }
 
@@ -1536,17 +1543,125 @@ function optionsFor(kind, selected) {
   return html;
 }
 
-function renderSensorLists() {
-  const s = state.config.settings;
-  $("#flow-sensor-list").innerHTML = FLOW_FIELDS.map(([key, label, kind]) => `
-    <label class="li"><span class="li-label">${label}</span>
-      <select data-flow="${key}">${optionsFor(kind, (s.flow_sensors || {})[key] || "")}</select></label>`).join("");
-  $("#energy-sensor-list").innerHTML = ENERGY_FIELDS.map(([key, label, kind]) => `
-    <label class="li"><span class="li-label">${label}</span>
-      <select data-energy="${key}">${optionsFor(kind, (s.energy_sensors || {})[key] || "")}</select></label>`).join("");
-  $("#s-condition").innerHTML = optionsFor("any", s.condition_sensor || "");
-  $("#s-temp").innerHTML = optionsFor("temperature", s.temperature_sensor || "");
-  $("#s-forecast").innerHTML = optionsFor("any", s.solar_forecast_sensor || "");
+/* ---------------- Sensores, por función ----------------
+
+   El diseño cambia catorce desplegables ciegos por catorce filas que dicen qué
+   entidad tienen, cuánto marca ahora y si responde. Una casilla vacía tiñe su
+   fila y ofrece los candidatos con el nombre a favor, así que asignar un sensor
+   son tres toques y no buscar entre trescientas entradas.
+
+   Los datos vienen de /api/sensors, que ya trae valor en vivo y sugerencias. */
+/* El recuento del índice, en segundo plano: si falla no se dice nada, que el
+   índice siga enseñando su descripción es mejor que un error por algo que solo
+   es un contador. */
+async function refreshSensorCount() {
+  try {
+    sensorState.data = await api("sensors");
+    if (state.config) renderSettingsIndex(state.config.settings);
+  } catch (_) { /* sin conexión con HA */ }
+}
+
+async function loadSensors() {
+  const box = $("#sensors-groups");
+  if (!sensorState.data) box.innerHTML = `<div class="panel glass"><p class="empty">Leyendo los sensores…</p></div>`;
+  try {
+    sensorState.data = await api("sensors");
+  } catch (err) {
+    box.innerHTML = `<div class="banner error">${esc(err.message)}</div>`;
+    return;
+  }
+  renderSensors();
+}
+
+const sensorState = { data: null, picking: null };
+
+function renderSensors() {
+  const d = sensorState.data;
+  if (!d) return;
+  $("#sensors-count").textContent = `${d.assigned} de ${d.total}`;
+
+  $("#sensors-groups").innerHTML = d.groups.map((g) => `
+    <div class="panel glass sgroup">
+      <div class="sgroup-head"><svg class="i"><use href="#i-${esc(g.icon)}"/></svg>
+        <b>${esc(g.name)}</b></div>
+      ${g.rows.map((r) => sensorRow(r)).join("")}
+    </div>`).join("");
+
+  $$("#sensors-groups .srow").forEach((el) =>
+    el.addEventListener("click", () => openSensorPicker(el.dataset.slot)));
+  $$("#sensors-groups .srow-assign").forEach((el) =>
+    el.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      openSensorPicker(el.closest(".srow").dataset.slot);
+    }));
+}
+
+function sensorRow(r) {
+  const clases = ["srow"];
+  if (!r.entity) clases.push("empty");
+  else if (!r.responds) clases.push("down");
+  if (r.optional) clases.push("optional");
+
+  // Segunda línea: la entidad y su lectura, que es lo que permite comprobar de
+  // un vistazo que la casilla tiene el sensor correcto y no otro parecido.
+  let sub;
+  if (!r.entity) {
+    const n = r.suggestions.length;
+    sub = r.optional ? "Opcional · se deduce del balance"
+      : `Sin asignar${n ? ` · ${n} sugerencia${n === 1 ? "" : "s"}` : ""}`;
+  } else {
+    const corto = r.entity.replace(/^sensor\./, "").split(",")[0];
+    sub = r.responds ? `${corto} · ${fmtNum.format(r.value ?? 0)} ${r.unit}`
+                     : `${corto} · no disponible`;
+  }
+  return `
+    <div class="${clases.join(" ")}" data-slot="${esc(r.slot)}" role="button" tabindex="0">
+      <span class="srow-dot"></span>
+      <span class="srow-txt"><b>${esc(r.label)}</b><small>${esc(sub)}</small></span>
+      ${r.entity ? `<svg class="i nav-chev"><use href="#i-chevron"/></svg>`
+                 : `<button type="button" class="srow-assign">Asignar</button>`}
+    </div>`;
+}
+
+/* Hoja de asignación: primero los candidatos y detrás la lista entera, por si
+   el nombre del sensor no se parece a nada. */
+async function openSensorPicker(slot) {
+  const d = sensorState.data;
+  const fila = d.groups.flatMap((g) => g.rows).find((r) => r.slot === slot);
+  if (!fila) return;
+  sensorState.picking = fila;
+
+  $("#pick-title").textContent = fila.label;
+  const sugerencias = fila.suggestions.length
+    ? `<div class="pick-sugg">${fila.suggestions.map((e) => `
+        <button type="button" data-pick="${esc(e.entity_id)}">
+          <b>${esc(e.name)}</b><code>${esc(e.entity_id)}</code>
+          ${e.unit ? `<small>${esc(e.unit)}</small>` : ""}
+        </button>`).join("")}</div>`
+    : "";
+  if (!state.grouped) await loadGrouped();
+  $("#pick-body").innerHTML = `
+    ${sugerencias}
+    <label class="li"><span class="li-label">Todas las entidades</span>
+      <select id="pick-select">${optionsFor(fila.kind, fila.entity)}</select></label>
+    <p class="li-note">Se puede poner el <b>mismo sensor en las dos casillas</b>
+      de un par si es bidireccional: se separa por el signo.</p>`;
+
+  $$("#pick-body [data-pick]").forEach((b) =>
+    b.addEventListener("click", () => assignSensor(slot, b.dataset.pick)));
+  $("#pick-select").addEventListener("change", (ev) => assignSensor(slot, ev.target.value));
+  $("#pick-modal").classList.remove("hidden");
+}
+
+async function assignSensor(slot, entity) {
+  const fila = sensorState.picking;
+  if (!fila) return;
+  const grupo = fila.group === "flow" ? "flow_sensors" : "energy_sensors";
+  await api("settings", { method: "PUT",
+    body: JSON.stringify({ [grupo]: { [slot]: entity } }) });
+  $("#pick-modal").classList.add("hidden");
+  await reloadConfig();
+  await loadSensors();
 }
 
 // Resumen de cada categoría en el índice de Ajustes.
@@ -1564,7 +1679,14 @@ function renderSettingsIndex(s) {
   $("#nav-sub-publish").textContent = s.export_sensors === false
     ? "Desactivado"
     : `Cada ${s.sensor_update_minutes ?? 5} min`;
-  $("#nav-sub-theme").textContent = THEMES[s.theme] || THEMES.auto;
+  $("#nav-sub-about").textContent = state.config?.version
+    ? `Versión ${state.config.version}` : "Versión del add-on";
+  // «13 de 13 asignados»: el índice tiene que decir si está bien sin entrar.
+  const sd = sensorState.data;
+  $("#nav-sub-sensors").textContent = sd
+    ? `${sd.assigned} de ${sd.total} asignados` +
+      (sd.down.length ? ` · ${sd.down.length} sin responder` : "")
+    : "Potencia y energía del día";
   $("#about-version").textContent = state.config?.version
     ? `v${state.config.version}` : "—";
 }
@@ -1601,7 +1723,13 @@ function fillSettings() {
     : `<option value="">— pulsa «Buscar sensores» —</option>`;
   $("#s-ha-entity-export").innerHTML = `<option value="">— ninguno —</option>` +
     (s.ha_entity_export ? `<option value="${esc(s.ha_entity_export)}" selected>${esc(s.ha_entity_export)}</option>` : "");
-  renderSensorLists();
+  applyBackground(s.dynamic_background !== false);
+  // El material traslúcido no es un ajuste nuestro: la guía dice que sigue al
+  // del sistema, así que aquí solo se informa de cómo está.
+  const reduce = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
+  $("#material-state").textContent = reduce ? "Reducido" : "Activo";
+  fillEntitySelects();
   renderTariffsList();
   updateSourceVisibility();
   ensureGroupedEntities();
@@ -1623,21 +1751,25 @@ async function ensureGroupedEntities() {
   if (state.grouped) return;
   try {
     state.grouped = await api("entities/grouped");
-    renderSensorLists();
+    fillEntitySelects();
   } catch (_) { /* sin conexión con HA: se mantiene el valor guardado */ }
 }
 
-async function loadGroupedEntities() {
-  const btn = $("#load-grouped-btn");
-  btn.disabled = true; btn.textContent = "Buscando…";
+/* Los selectores que siguen siendo un desplegable: previsión solar y los dos de
+   meteorología. Son de uno en uno y opcionales, así que no piden la pantalla de
+   filas con valor en vivo que sí necesitan los catorce del balance. */
+function fillEntitySelects() {
+  const s = state.config?.settings;
+  if (!s) return;
+  $("#s-condition").innerHTML = optionsFor("any", s.condition_sensor || "");
+  $("#s-temp").innerHTML = optionsFor("temperature", s.temperature_sensor || "");
+  $("#s-forecast").innerHTML = optionsFor("any", s.solar_forecast_sensor || "");
+}
+
+async function loadGrouped() {
   try {
-    await saveSettings(true);
     state.grouped = await api("entities/grouped");
-    renderSensorLists();
-    $("#settings-status").textContent = "✓ Entidades cargadas";
-  } catch (err) {
-    $("#settings-status").textContent = `Error: ${err.message}`;
-  } finally { btn.disabled = false; btn.textContent = "Buscar entidades"; }
+  } catch (_) { /* sin conexión: la hoja enseña solo lo guardado */ }
 }
 
 async function loadEntities() {
@@ -1772,6 +1904,8 @@ $("#add-tariff-btn").addEventListener("click", () => openTariffModal(null));
 $("#save-tariff-btn").addEventListener("click", saveTariff);
 $("#cancel-tariff-btn").addEventListener("click", () => $("#tariff-modal").classList.add("hidden"));
 $("#close-tariff-modal").addEventListener("click", () => $("#tariff-modal").classList.add("hidden"));
+$("#s-dynamic-bg").addEventListener("change", (ev) => setBackground(ev.target.checked));
+$("#close-pick-modal").addEventListener("click", () => $("#pick-modal").classList.add("hidden"));
 $("#close-bill-modal").addEventListener("click", () => $("#bill-modal").classList.add("hidden"));
 $$(".modal").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); }));
 $("#t-etype").addEventListener("change", updateEditorVisibility);
@@ -1798,12 +1932,14 @@ $("#import-csv-input").addEventListener("change", async (e) => {
 $("#s-source").addEventListener("change", updateSourceVisibility);
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
 $("#load-entities-btn").addEventListener("click", loadEntities);
-$("#load-grouped-btn").addEventListener("click", loadGroupedEntities);
 $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
 
 async function reloadConfig() {
   state.config = await api("config");
   applyTheme(state.config?.settings?.theme);
+  // El fondo, junto al tema y no al abrir Ajustes: si está apagado tiene que
+  // estarlo desde la primera pintada, no a partir de que se visite la sección.
+  applyBackground(state.config?.settings?.dynamic_background !== false);
 }
 
 /* ========================= tema ========================= */
@@ -1826,8 +1962,21 @@ function applyTheme(pref) {
   if (state.detail) renderDetail();
   try { localStorage.setItem("vatia-theme", choice); } catch (e) { /* modo privado */ }
   $$("#theme-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.themeOpt === choice));
-  const sub = $("#nav-sub-theme");
-  if (sub) sub.textContent = THEMES[choice];
+}
+
+/* El fondo dinámico se apaga poniendo `data-bg="flat"` en <body>: el CSS se
+   encarga, así que no hay que desmontar nada ni tocar el DOM del cielo. */
+function applyBackground(on) {
+  document.body.dataset.bg = on ? "sky" : "flat";
+  const sw = $("#s-dynamic-bg");
+  if (sw) sw.checked = !!on;
+}
+
+async function setBackground(on) {
+  applyBackground(on);
+  await api("settings", { method: "PUT",
+    body: JSON.stringify({ dynamic_background: !!on }) });
+  if (state.config) state.config.settings.dynamic_background = !!on;
 }
 
 function prefersDark() {

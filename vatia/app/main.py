@@ -384,6 +384,25 @@ async def list_entities_grouped():
     return live.list_entities(states)
 
 
+@app.get("/api/sensors")
+async def sensors_status():
+    """Estado de cada casilla de sensor, para la pantalla de Sensores.
+
+    Devuelve, por función, qué entidad tiene cada casilla, cuánto marca ahora y
+    si responde; y para las vacías, unos pocos candidatos con el nombre a favor.
+    Es lo que permite enseñar filas con valor en vivo en vez de catorce
+    desplegables con trescientas entradas cada uno.
+    """
+    settings = storage.load()["settings"]
+    try:
+        states = await live.fetch_states(settings)
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        raise HTTPException(502, f"No se pudo conectar con Home Assistant: {err}") from err
+    return live.sensor_status(settings, states)
+
+
 @app.get("/api/series")
 async def get_series(
     view: str = Query("overview"),
