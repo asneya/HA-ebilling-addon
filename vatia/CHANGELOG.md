@@ -2,6 +2,34 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.23.0
+
+### El sistema visual del prototipo (fase 1 de 3)
+
+Primera pasada del rediseño de Claude Design: los cimientos del lenguaje visual,
+aplicados a las pantallas que ya existen. Las funciones no cambian.
+
+- **Tipografía nueva**: **Geist** para todo el texto e **Instrument Serif** para
+  la marca, que es la voz editorial del sistema. Van empaquetadas en el add-on
+  como iba Inter —el prototipo las cargaba de Google Fonts, y aquí no se hacen
+  peticiones externas—. Juntas ocupan 50 kB: **15 kB menos** que la Inter que
+  sustituyen.
+- **Paleta del prototipo**, con los dos temas completos: superficies, tintas,
+  separaciones, pistas de los controles y **colores de serie que cambian con el
+  tema** (saturados sobre blanco, aclarados sobre negro). Antes los mandaba el
+  servidor, que no sabe qué tema tienes puesto; ahora salen de los tokens.
+- **Componentes al milímetro del diseño**: barra de pestañas de 58 px con la
+  píldora activa de 46, control segmentado de 32, interruptores de 48×29,
+  tarjetas sólidas.
+- **El material traslúcido se retira del contenido** y queda solo en la capa de
+  navegación —barra de pestañas y chip del tiempo—, como manda la revisión del
+  prototipo contra la guía de Apple. Respeta `prefers-reduced-transparency`.
+- **Velo de desvanecido** sobre la barra de pestañas: sin él, el texto se
+  transparentaba a través del material y no se leía.
+
+Quedan la fase 2 (Home nueva: el caudal, la ventana de energía gratis y el
+cierre del día) y la fase 3 (electrodomésticos).
+
 ## 0.22.0
 
 ### La configuración ya está en una carpeta que puedes ver

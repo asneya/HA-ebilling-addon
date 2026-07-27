@@ -2,47 +2,79 @@
    Vatia — sistema de diseño «glass» estilo app iOS
    ============================================================ */
 
-/* Tipografía: Inter (SIL OFL, subconjunto latino) servida por el propio
-   add-on, sin peticiones externas. El eje de peso va de 100 a 900 y el óptico
-   ajusta el trazo al tamaño. */
+/* Tipografía del sistema de diseño, servida por el propio add-on y sin ninguna
+   petición externa (el prototipo las cargaba de Google Fonts, que aquí no vale):
+   Geist para todo el texto —variable, de 300 a 800— e Instrument Serif para los
+   titulares de la Home, que es el gesto de marca. Ambas SIL OFL, subconjunto
+   latino; juntas pesan 50 kB, menos que la Inter que sustituyen. */
 @font-face {
-  font-family: "Inter";
-  src: url("fonts/inter-latin.woff2") format("woff2-variations"),
-       url("fonts/inter-latin.woff2") format("woff2");
-  font-weight: 100 900;
+  font-family: "Geist";
+  src: url("fonts/geist-latin.woff2") format("woff2-variations"),
+       url("fonts/geist-latin.woff2") format("woff2");
+  font-weight: 300 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("fonts/instrument-serif-latin.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
-/* Los colores están elegidos para superar 4,5:1 (AA) sobre las superficies
-   «glass» con cualquiera de los fondos dinámicos, incluido el cielo claro del
-   mediodía y el nocturno con el sistema en modo claro. */
+/* Paleta del sistema de diseño. Los nombres siguen al prototipo: `ink` de más a
+   menos contraste, `solid` para las tarjetas, `node` para las filas hundidas,
+   `hair` para las separaciones y `s-*` para las series de datos.
+
+   Los tonos de las series **cambian con el tema**: en claro van saturados y
+   oscuros para leerse sobre blanco; en oscuro se aclaran para no vibrar. Por eso
+   viven aquí y no en el servidor, que no sabe qué tema estás usando. */
 :root {
-  --ink: #141a26;
-  --ink-2: #363e50;
-  --ink-3: #566072;
-  --glass: rgba(255, 255, 255, .88);
-  --glass-2: rgba(255, 255, 255, .74);
-  --glass-brd: rgba(255, 255, 255, .72);
-  --glass-shadow: 0 10px 34px rgba(12, 20, 40, .16);
-  --sep: rgba(10, 18, 35, .12);
-  /* texto que va directamente sobre el fondo (nunca sobre una tarjeta) */
+  --solid: #ffffff;
+  --node: #f4f7fa;
+  --page: #f1f4f8;
+  --ink: #0a1017;
+  --ink-2: #47535f;
+  --ink-3: #68747f;
+  --hair: rgba(10, 16, 23, .07);
+  --hair-2: rgba(10, 16, 23, .14);
+  --seg-track: #e4e9ef;
+  --seg-on: #ffffff;
+  --seg-shadow: 0 1px 3px rgba(10, 16, 23, .15);
+  --glass: rgba(246, 248, 251, .72);
+  --glass-brd: rgba(255, 255, 255, .6);
+  --glass-shadow: 0 10px 30px rgba(10, 20, 40, .16);
+  --accent: #2e6bf5;
+  --accent-soft: rgba(46, 107, 245, .14);
+  /* series */
+  --s-solar: #d98014;
+  --s-home: #c93f63;
+  --s-grid: #3a63d8;
+  --s-batt: #0e8a5f;
+  --s-exp: #7a46d6;
+  /* semánticos */
+  --good: #0e7a52;
+  --good-chip: rgba(22, 164, 111, .14);
+  --warn: #b9700f;
+  --warn-chip: rgba(224, 138, 23, .16);
+  --bad: #c8382c;
+  --switch-on: #16a46f;
+  --switch-off: #d5dbe3;
+  /* texto directamente sobre el cielo, nunca sobre una tarjeta */
   --on-bg: #fff;
   --on-bg-2: rgba(255, 255, 255, .88);
   --on-bg-shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 2px 16px rgba(0, 0, 0, .40);
-  /* pista del interruptor apagado (equivalente al gris de iOS) */
-  --switch-off: #d6dae2;
-  --accent: #0a84ff;
-  --good: #30d158;
-  --warn: #ff9f0a;
-  --bad: #ff453a;
-  --punta: #ff6b81;
-  --llano: #ffcf5c;
-  --valle: #34d399;
-  --imp: #0a84ff;
-  --exp: #ff9f0a;
-  --r-lg: 26px;
-  --r-md: 18px;
+  /* compatibilidad con reglas que aún nombran los tokens antiguos */
+  --glass-2: var(--node);
+  --sep: var(--hair);
+  --punta: var(--s-home);
+  --llano: var(--s-solar);
+  --valle: var(--s-batt);
+  --imp: var(--s-grid);
+  --exp: var(--s-exp);
+  --r-lg: 24px;
+  --r-md: 20px;
   --r-sm: 12px;
   --blur: saturate(180%) blur(26px);
   color-scheme: light dark;
@@ -53,15 +85,33 @@
    «light»/«dark» lo fuerzan desde Ajustes. Al resolverse siempre a un valor
    concreto, la paleta oscura vive en un único sitio. */
 :root[data-theme="dark"] {
-  --ink: #f2f5fb;
-  --ink-2: #c2cade;
-  --ink-3: #98a1b6;
-  --glass: rgba(24, 27, 35, .80);
-  --glass-2: rgba(40, 44, 55, .66);
-  --glass-brd: rgba(255, 255, 255, .14);
-  --glass-shadow: 0 10px 34px rgba(0, 0, 0, .40);
-  --sep: rgba(255, 255, 255, .12);
-  --switch-off: #4a505e;
+  --solid: #141b22;
+  --node: #1c252e;
+  --page: #0c1116;
+  --ink: #f2f6fa;
+  --ink-2: #a7b4c1;
+  --ink-3: #7c8996;
+  --hair: rgba(255, 255, 255, .07);
+  --hair-2: rgba(255, 255, 255, .14);
+  --seg-track: #1a222b;
+  --seg-on: #2c353f;
+  --seg-shadow: none;
+  --glass: rgba(20, 27, 34, .68);
+  --glass-brd: rgba(255, 255, 255, .16);
+  --glass-shadow: 0 10px 30px rgba(10, 20, 40, .34);
+  --accent: #6e9bff;
+  --accent-soft: rgba(110, 155, 255, .18);
+  --s-solar: #f5a93c;
+  --s-home: #f2708f;
+  --s-grid: #7c9eff;
+  --s-batt: #35d69b;
+  --s-exp: #b08cff;
+  --good: #35d69b;
+  --good-chip: rgba(53, 214, 155, .16);
+  --warn: #f0a22e;
+  --warn-chip: rgba(240, 162, 46, .18);
+  --bad: #ff6b5e;
+  --switch-off: #2c343d;
   color-scheme: dark;
 }
 
@@ -94,7 +144,7 @@ html.busy .progress { opacity: 1; }
 
 body {
   margin: 0;
-  font-family: "Inter", system-ui, -apple-system, "SF Pro Text",
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system,
                BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-optical-sizing: auto;
   font-size: 16px;
@@ -210,18 +260,25 @@ body[data-view="energy"] .bg-scrim {
 
 /* ---------------- superficies glass ---------------- */
 .glass {
+  background: var(--solid);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  box-shadow: var(--glass-shadow);
+}
+/* El material traslúcido vive solo en la navegación: cabecera, barra de
+   pestañas y hojas. En el contenido, superficie sólida. */
+.glass-soft {
+  background: var(--seg-track);
+  border: 1px solid transparent;
+}
+.glass-nav {
   background: var(--glass);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border: 1px solid var(--glass-brd);
-  border-radius: var(--r-lg);
-  box-shadow: var(--glass-shadow);
 }
-.glass-soft {
-  background: var(--glass-2);
-  backdrop-filter: var(--blur);
-  -webkit-backdrop-filter: var(--blur);
-  border: 1px solid var(--glass-brd);
+@media (prefers-reduced-transparency: reduce) {
+  .glass-nav { background: var(--solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* ---------------- layout ---------------- */
@@ -251,7 +308,8 @@ body[data-view="energy"] .bg-scrim {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px 8px 10px; border-radius: 999px;
   color: #fff; background: rgba(8, 14, 30, .38);
-  border-color: rgba(255, 255, 255, .22);
+  border: 1px solid rgba(255, 255, 255, .22);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
   flex: 0 0 auto; box-shadow: 0 6px 20px rgba(0,0,0,.18);
   text-shadow: 0 1px 8px rgba(0, 0, 0, .4);
 }
@@ -443,8 +501,11 @@ body[data-view="energy"] .bg-scrim {
   border: 3px solid rgba(10, 132, 255, .18); border-top-color: var(--accent);
   animation: spin 1s cubic-bezier(.5, .1, .4, .9) infinite;
 }
+/* La marca es el momento editorial de la app: va en Instrument Serif, la voz
+   que el sistema de diseño reserva para los titulares. */
 .boot-name {
-  margin: 18px 0 2px; font-size: 19px; font-weight: 700; letter-spacing: -.3px;
+  margin: 18px 0 2px; font-family: "Instrument Serif", Georgia, serif;
+  font-size: 30px; font-weight: 400; letter-spacing: -.01em; line-height: 1.1;
   color: #fff; text-shadow: 0 1px 12px rgba(0, 0, 0, .35);
 }
 .boot-text {
@@ -501,36 +562,44 @@ body[data-view="energy"] .bg-scrim {
 .e-bd-row .k { font-size: 13px; color: var(--ink-3); }
 
 /* ---------------- tab bar ---------------- */
+.scroll-edge {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 96px; z-index: 39;
+  pointer-events: none;
+  background: linear-gradient(to top, var(--page) 18%, transparent);
+  opacity: .92;
+}
 .tabbar {
   position: fixed; z-index: 40;
   left: 50%; transform: translateX(-50%);
-  bottom: calc(14px + env(safe-area-inset-bottom));
-  display: flex; gap: 4px; padding: 7px;
-  border-radius: 999px; width: min(430px, calc(100% - 28px));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 0; padding: 0 5px;
+  height: 58px; border-radius: 29px; width: min(430px, calc(100% - 28px));
 }
 .tab {
   flex: 1; border: 0; background: transparent; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 8px 6px 6px; min-height: 48px; border-radius: 999px;
-  color: var(--ink-3); font: inherit; font-size: 12px; font-weight: 600;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  height: 46px; border-radius: 23px;
+  color: var(--ink-3); font: inherit; font-size: 11px; font-weight: 600;
   transition: background .2s ease, color .2s ease;
 }
-.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-.tab.active { color: var(--accent); background: var(--glass-2); }
+.tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tab.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ---------------- segmented control ---------------- */
-.segmented { display: flex; gap: 3px; padding: 3px; border-radius: 14px; margin-bottom: 14px; }
+.segmented { display: flex; gap: 3px; padding: 3px; border-radius: 12px; margin-bottom: 14px;
+  background: var(--seg-track); }
 /* La pista del control es clara, así que las etiquetas van en tinta oscura
    (blanco sobre blanco translúcido era el peor contraste de la interfaz). */
 .seg {
   flex: 1; border: 0; background: transparent; cursor: pointer; font: inherit;
-  font-size: 14px; font-weight: 600; color: var(--ink-2);
-  padding: 11px 10px; min-height: 44px; border-radius: 11px;
-  transition: background .2s ease, color .2s ease;
+  font-size: 13px; font-weight: 500; color: var(--ink-2);
+  /* 44 px de alto real por accesibilidad, con la píldora de 32 dibujada dentro */
+  min-height: 44px; padding: 6px 10px; border-radius: 9px;
+  transition: background .18s ease, color .18s ease;
 }
 .seg.active {
-  background: var(--glass); color: var(--ink); font-weight: 650;
-  box-shadow: 0 1px 6px rgba(10, 18, 35, .12);
+  background: var(--seg-on); color: var(--ink); font-weight: 600;
+  box-shadow: var(--seg-shadow);
 }
 .subview { display: none; }
 .subview.active { display: block; }
@@ -597,20 +666,20 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 /* La pista apagada usaba var(--sep) (negro al 12 %): sobre la superficie clara
    no se veía y el interruptor parecía un círculo blanco suelto, como roto. */
 .ios-switch {
-  appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 999px;
-  background: var(--switch-off); position: relative; cursor: pointer; border: 0;
-  flex: 0 0 auto; transition: background .25s ease;
-  box-shadow: inset 0 0 0 1px rgba(10, 18, 35, .07);
+  appearance: none; -webkit-appearance: none; width: 48px; height: 29px; border-radius: 999px;
+  background: var(--switch-off); position: relative; cursor: pointer;
+  border: 1px solid var(--hair-2);
+  flex: 0 0 auto; transition: background .2s ease;
 }
 .ios-switch::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
+  content: ""; position: absolute; top: 1px; left: 1px; width: 25px; height: 25px;
   border-radius: 50%; background: #fff;
-  box-shadow: 0 2px 5px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.06);
-  transition: transform .25s cubic-bezier(.32, .72, 0, 1);
+  box-shadow: 0 1px 3px rgba(10, 16, 23, .3);
+  transition: transform .2s cubic-bezier(.32, .72, 0, 1);
 }
-.ios-switch:active::after { width: 24px; }
-.ios-switch:checked { background: var(--good); }
-.ios-switch:checked::after { transform: translateX(18px); }
+.ios-switch:active::after { width: 27px; }
+.ios-switch:checked { background: var(--switch-on); border-color: transparent; }
+.ios-switch:checked::after { transform: translateX(21px); }
 
 /* ---------------- listas iOS ---------------- */
 .group { padding: 0; overflow: hidden; }
