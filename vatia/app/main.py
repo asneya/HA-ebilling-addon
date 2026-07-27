@@ -408,10 +408,11 @@ async def get_series(
 @app.get("/api/live")
 async def get_live():
     """Flujo de energía, resumen del día y meteorología para la Home."""
-    settings = storage.load()["settings"]
+    config = storage.load()
+    settings = config["settings"]
     tz = _tz(settings)
     try:
-        return await live.build(settings, datetime.now(tz))
+        return await live.build(settings, datetime.now(tz), config["tariffs"])
     except datasources.SourceError as err:
         raise HTTPException(502, str(err)) from err
     except Exception as err:  # pragma: no cover - errores de red

@@ -119,6 +119,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Apariencia: «auto» sigue al sistema (el modo oscuro del móvil o del
     # navegador), «light» y «dark» lo fuerzan.
     "theme": "auto",
+    # La tarifa contratada («la mía»): el id de una de las tarifas guardadas.
+    # La comparativa sigue tratándolas a todas igual; esta solo añade lo que
+    # ninguna comparación puede dar, el ahorro del día en euros.
+    "my_tariff_id": "",
     # Intervalo de trabajo fijado por el usuario ({start,end} en YYYY-MM-DD,
     # fin inclusivo). Si está definido, es el periodo por defecto de todos los
     # cálculos (comparativa, detalle y sensores). null = ciclo automático.

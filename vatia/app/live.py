@@ -15,7 +15,9 @@ from typing import Any
 
 import aiohttp
 
+import billing
 import datasources
+import pvpc
 import series as series_mod
 
 _LOGGER = logging.getLogger(__name__)
@@ -729,12 +731,89 @@ def _sunset(states: dict[str, Any], now: datetime) -> datetime | None:
     return moment
 
 
+def _bucket_home_kwh(values: dict[str, float]) -> float | None:
+    """Consumo de la casa en un bucket (kWh), medido o derivado del balance."""
+    home = values.get("home_energy")
+    if home is not None:
+        return max(home, 0.0)
+    keys = ("pv_energy", "grid_import_energy", "battery_discharge_energy",
+            "grid_export_energy", "battery_charge_energy")
+    if not any(key in values for key in keys):
+        return None
+    entra = (values.get("pv_energy") or 0.0) + (values.get("grid_import_energy") or 0.0) \
+        + (values.get("battery_discharge_energy") or 0.0)
+    sale = (values.get("grid_export_energy") or 0.0) \
+        + (values.get("battery_charge_energy") or 0.0)
+    return max(entra - sale, 0.0)
+
+
+async def day_savings(
+    settings: dict[str, Any],
+    tariffs: list[dict[str, Any]] | None,
+    buckets: dict[str, dict[str, float]],
+    tz,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Lo que la instalación te ha ahorrado hoy, con la tarifa contratada.
+
+    La cuenta es la diferencia entre dos días: el que has tenido y el que
+    habrías tenido sin placas ni batería, con el mismo consumo comprado entero
+    a la red. Se hace bucket a bucket porque el precio cambia con la hora, y
+    ahorrar a mediodía (valle) no vale lo mismo que ahorrar a las ocho (punta).
+
+    ``None`` si no hay tarifa marcada como «la mía», no hay buckets, o falta el
+    precio de alguna hora (un PVPC sin publicar): antes que estimar la cifra
+    que más se mira, no se da.
+    """
+    my_id = settings.get("my_tariff_id") or ""
+    tariff = next((t for t in tariffs or [] if t.get("id") == my_id), None)
+    if not tariff or not buckets:
+        return None
+    holidays = set(settings.get("holidays") or [])
+    pvpc_prices = None
+    if tariff["energy"]["type"] == "pvpc":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        try:
+            pvpc_prices = await pvpc.get_prices(start, now, tz)
+        except Exception:  # noqa: BLE001 - sin precios no hay ahorro que dar
+            _LOGGER.warning("Sin precios PVPC para el ahorro del día", exc_info=True)
+            return None
+
+    base = 0.0        # lo que habría costado el día comprándolo todo
+    imported = 0.0    # lo que ha costado lo importado
+    surplus = 0.0     # lo que compensa lo exportado
+    for iso, values in buckets.items():
+        home = _bucket_home_kwh(values)
+        if home is None:
+            continue
+        moment = datetime.fromisoformat(iso)
+        price, _name = billing.price_now(tariff, moment, holidays, pvpc_prices)
+        if price is None:
+            return None
+        base += home * price
+        imported += (values.get("grid_import_energy") or 0.0) * price
+        sp = billing.surplus_price_now(tariff, moment, holidays)
+        if sp:
+            surplus += (values.get("grid_export_energy") or 0.0) * sp
+    # La compensación de excedentes no puede dejar el término de energía en
+    # negativo (así lo liquidan las comercializadoras); el día tampoco.
+    actual = max(imported - min(surplus, imported), 0.0)
+    return {
+        "eur": round(max(base - actual, 0.0), 2),
+        "base_eur": round(base, 2),
+        "actual_eur": round(actual, 2),
+        "tariff_id": tariff.get("id"),
+        "tariff_name": tariff.get("name"),
+    }
+
+
 def day_close(
     states: dict[str, Any],
     energy: dict[str, Any],
     buckets: dict[str, dict[str, float]],
     window: dict[str, Any] | None,
     now: datetime,
+    savings: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """El cierre del día, al anochecer. ``None`` mientras haya sol.
 
@@ -793,11 +872,16 @@ def day_close(
         "consumed": round(consumed, 2),
         "self_pct": self_pct,
         "in_window": in_window,
+        "saved": savings,
         "tomorrow": (window or {}).get("tomorrow"),
     }
 
 
-async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
+async def build(
+    settings: dict[str, Any],
+    now: datetime,
+    tariffs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Payload de /api/live."""
     flow_cfg = settings.get("flow_sensors") or {}
     energy_cfg = settings.get("energy_sensors") or {}
@@ -834,6 +918,13 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
 
     energy_summary = _energy_summary(energy, daily["flows"])
     window = await free_energy(settings, states, now.tzinfo, now)
+    buckets = daily.get("buckets") or {}
+    # El ahorro solo hace falta cuando el cierre va a salir: tras la puesta de
+    # sol. Calcularlo a mediodía sería trabajo (y PVPC) tirado a la basura.
+    sunset = _sunset(states, now)
+    savings = None
+    if sunset is not None and now >= sunset:
+        savings = await day_savings(settings, tariffs, buckets, now.tzinfo, now)
 
     return {
         "configured": configured,
@@ -850,7 +941,7 @@ async def build(settings: dict[str, Any], now: datetime) -> dict[str, Any]:
         "weather": _weather(states, settings),
         "phase": _day_phase(states, now),
         "window": window,
-        "close": day_close(states, energy_summary, daily.get("buckets") or {}, window, now),
+        "close": day_close(states, energy_summary, buckets, window, now, savings),
         "generated_at": now.isoformat(),
     }
 
