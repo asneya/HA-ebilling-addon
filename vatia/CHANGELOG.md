@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.31.0
+
+### El frontal, repartido en módulos
+
+No cambia nada de lo que se ve. Cambia que `app.js` eran **2.189 líneas** con las
+cinco pantallas dentro, y a partir de aquí eso solo iba a ir a peor: cada pantalla
+nueva —el catálogo de electrodomésticos, sin ir más lejos— se sumaba al mismo
+fichero, y cualquier cambio obligaba a leerlo entero para saber a quién estabas
+pisando.
+
+Ahora son diecisiete ficheros: `core/` con lo que no es de nadie (DOM, red,
+formato, colores, navegación, tema y los gráficos que comparten dos pantallas) y
+`screens/` con una pantalla por fichero. La mayor pasa de 2.189 a 464 líneas.
+
+Lo que de verdad sostiene el reparto no es la carpeta, es **quitar el ovillo**.
+Antes la navegación llamaba a los cargadores de las cinco pantallas y las cinco
+pantallas llamaban a la navegación: un ciclo, así que no había forma de tocar una
+sin arriesgar otra. Ahora la navegación y el tema **anuncian** —cinco eventos, ni
+uno más— y cada pantalla escucha lo suyo. Ninguna pantalla importa a otra, y eso
+se comprueba con una prueba que rechaza el ciclo si algún día alguien lo mete.
+
+De regalo salieron dos cosas: **la Home ya no pide dos veces el gráfico de
+Energía** al entrar desde el resumen (llamaba al cargador y además lo disparaba la
+navegación), y se van dos formateadores que llevaban tiempo sin usarse.
+
+El documento pasa a servirse con `Cache-Control: no-store`. Es lo único que sabe
+cómo se carga la app —ahora con `type="module"`—, y un `index.html` viejo guardado
+por el navegador junto a un `app.js` nuevo dejaría la pantalla en blanco después
+de actualizar. Los estáticos se siguen cacheando con su ETag.
+
 ## 0.30.1
 
 ### La previsión aparece donde la maqueta la pone
