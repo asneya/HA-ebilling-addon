@@ -127,9 +127,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # lisa —o tenga un móvil justo— lo puede apagar sin perder nada del dato.
     "dynamic_background": True,
     # Qué componente dibuja el flujo en tiempo real, de la galería de Ajustes.
-    # No son dos estéticas del mismo dibujo: el Sankey mide caudales (px por kW)
-    # y la órbita enseña el sitio de la casa, así que la elección es de fondo.
-    #   sankey → <vatia-flow>, el diseño «Flujo de energía v2»
+    # No son tres estéticas del mismo dibujo: cada uno dice algo que los otros
+    # no dicen, así que la elección es de fondo y no de gusto.
+    #   sankey → <vatia-flow>, el diseño «Flujo de energía v2»: px por kW
+    #   cruz   → <vatia-cross>, el clásico que tenía la app: nodos y cables
     #   orbita → <vatia-orbit>, la casa en el centro y las fuentes alrededor
     "flow_style": "sankey",
     # La tarifa contratada («la mía»): el id de una de las tarifas guardadas.

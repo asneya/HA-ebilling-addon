@@ -366,6 +366,32 @@ const GAL_ART = {
         <rect x="110" y="66" width="6" height="9" fill="var(--s-exp)"/>
       </g>
     </svg>`,
+  /* La cruz clásica: el nodo arriba, los dos de los lados y la casa a la
+     derecha, los cables ortogonales y la bola que los recorre. Lo que hay que
+     reconocer aquí es que **todos los cables miden lo mismo**, al contrario que
+     en el Sankey. */
+  cruz: `
+    <svg class="gal-art" viewBox="0 0 132 84" aria-hidden="true">
+      <g fill="none" stroke-width="2.4" stroke-linecap="round">
+        <path d="M66 24V60" stroke="var(--s-solar)"/>
+        <path d="M40 42H92" stroke="var(--s-grid)"/>
+        <path d="M56 30V36Q56 38 54 38H40" stroke="var(--s-solar)"/>
+        <path d="M76 30V36Q76 38 78 38H92" stroke="var(--s-solar)"/>
+      </g>
+      <circle cx="66" cy="30" r="3.2" fill="var(--s-solar)"/>
+      <circle cx="84" cy="42" r="3.2" fill="var(--s-grid)"/>
+      <circle cx="66" cy="14" r="10" fill="var(--solid)" stroke="var(--s-solar)" stroke-width="2"/>
+      <circle cx="30" cy="42" r="10" fill="var(--solid)" stroke="var(--s-grid)" stroke-width="2"/>
+      <circle cx="102" cy="42" r="10" fill="var(--solid)" stroke="var(--s-home)" stroke-width="2"/>
+      <circle cx="66" cy="70" r="10" fill="var(--solid)" stroke="var(--s-batt)" stroke-width="2"/>
+      <!-- El anillo del reparto del día, alrededor del nodo de la casa: es lo
+           único que este diagrama dice de dentro de la casa. -->
+      <circle cx="102" cy="42" r="14" fill="none" stroke="var(--s-solar)" stroke-width="2.6"
+              pathLength="100" stroke-dasharray="56 44" transform="rotate(-90 102 42)"/>
+      <circle cx="102" cy="42" r="14" fill="none" stroke="var(--s-grid)" stroke-width="2.6"
+              pathLength="100" stroke-dasharray="38 62" stroke-dashoffset="-58"
+              transform="rotate(-90 102 42)"/>
+    </svg>`,
   /* La órbita, con la misma disposición que el componente: casa en el centro,
      sol arriba, red abajo a la izquierda y batería abajo a la derecha. Las
      cintas mueren en el anillo de mezcla y no en el círculo de la casa, igual

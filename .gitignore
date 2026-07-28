@@ -16,7 +16,9 @@ pvpc_cache.json
 data-*/
 
 # Capturas de las pruebas con navegador. Los bancos las escriben con una ruta
-# relativa, así que aterrizan en la raíz del repositorio en cuanto uno se lanza
-# desde aquí. Los iconos de la app son SVG y viven en `vatia/app/static/`, así
-# que ningún PNG de la raíz es nuestro.
-/*.png
+# relativa, así que aterrizan donde estuviera el directorio de trabajo: la raíz
+# del repositorio, o `vatia/app/` si el servidor se lanzó desde ahí. Ningún PNG
+# es nuestro —los iconos de la app son SVG—, así que se ignoran todos y se
+# reclama el único sitio donde podría haber uno de verdad.
+*.png
+!vatia/app/static/**/*.png

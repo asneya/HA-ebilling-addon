@@ -156,6 +156,14 @@ export const FLOWS = [
       + "electrodomésticos, con su nombre y su valor.",
   },
   {
+    id: "cruz",
+    tag: "vatia-cross",
+    name: "Clásico",
+    claim: "El de siempre: cables, nodos y la bola",
+    detalle: "Solar arriba, red y batería a los lados, casa a la derecha. "
+      + "Contador del día en cada nodo. Todos los cables miden igual.",
+  },
+  {
     id: "orbita",
     tag: "vatia-orbit",
     name: "Órbita",
