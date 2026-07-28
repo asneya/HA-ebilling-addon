@@ -193,7 +193,9 @@
               padding: 12px 0 0; border-top: 1px solid var(--hair);
               font-size: 12px; color: var(--ink-3); }
     .meters li { display: flex; align-items: center; gap: 6px; list-style: none; }
-    .meters i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+    /* Cuadrado, como las barras del diagrama: la muestra de color de la leyenda
+       es una barra en miniatura y tiene que reconocerse como tal. */
+    .meters i { width: 8px; height: 8px; flex: none; }
     .meters b { color: var(--ink-2); font-weight: 600;
                 font-variant-numeric: tabular-nums; }
     /* Las partículas dan el sentido de la corriente. Se definen aquí dentro: las
@@ -404,14 +406,19 @@
     }
 
     /* Las barras de una columna, entre sus dos bordes del eje del flujo. Alto
-       mínimo de 3 px: un segmento muy fino tiene que verse igual. */
+       mínimo de 3 px: un segmento muy fino tiene que verse igual.
+
+       Esquinas en ángulo, a propósito. Redondeadas parecían pastillas sueltas
+       en vez de los extremos de una cinta: la banda sale recta del borde y el
+       redondeo dejaba un hueco claro justo ahí, además de comerse la punta de
+       los segmentos finos, que son los que ya cuestan de ver. */
     _barras(list, { a0, a1, proj, colores, tintas = {} }) {
       return list.map((s) => {
         const [x, y] = proj(a0, s.b0).split(",").map(Number);
         const [x2, y2] = proj(a1, s.b1).split(",").map(Number);
         const w = Math.max(Math.abs(x2 - x), 3), h = Math.max(Math.abs(y2 - y), 3);
         return `<rect x="${r1(Math.min(x, x2))}" y="${r1(Math.min(y, y2))}"
-          width="${r1(w)}" height="${r1(h)}" rx="8" style="fill:${tono(colores, tintas, s.k)}"/>`;
+          width="${r1(w)}" height="${r1(h)}" style="fill:${tono(colores, tintas, s.k)}"/>`;
       }).join("");
     }
 

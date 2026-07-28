@@ -2,6 +2,78 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.39.0
+
+### Una sola fuente de datos, y unos solos sensores
+
+«Fuente de datos» prometía algo que no cumplía. Ofrecía tres opciones —demo,
+Home Assistant, InfluxDB— pero solo la **facturación** las miraba: la pantalla de
+inicio, Energía y el flujo leían de Home Assistant siempre, dijera lo que dijera
+ese desplegable. Y para colmo pedía **dos sensores de energía que ya estaban
+configurados** en Ajustes → Sensores: el contador de importada y el de vertida,
+los mismos dos, en dos sitios, y podían no coincidir.
+
+Ahora la pregunta es una sola: **¿datos de verdad o datos de ejemplo?** Los
+sensores se eligen una vez, en Sensores, y valen para toda la app.
+
+- Los dos desplegables «Energía consumida» / «Energía vertida» y su botón
+  «Buscar sensores» desaparecen; la facturación usa
+  `grid_import_energy` / `grid_export_energy`, los de Sensores.
+- Los dos `entity_id` «solo para facturación desde InfluxDB» también
+  desaparecen.
+- **InfluxDB deja de ser una fuente** y se queda con lo que ya hacía y solo él
+  puede hacer: el histórico largo del consumo, que es lo que permite calcular el
+  consumo típico de la casa hora a hora en vez de con una sola cifra. Las
+  estadísticas horarias de Home Assistant no se purgan nunca, así que la
+  facturación no necesita InfluxDB para mirar atrás.
+- Como respaldo, si un contador **no generó estadísticas** en Home Assistant —le
+  falta `state_class`, o se excluyó del recorder— su serie se busca en InfluxDB
+  con el mismo `entity_id`. Es el caso de quien tenía InfluxDB como fuente.
+
+Nada que reconfigurar: al arrancar, `ha_entity` y `ha_entity_export` (o los dos
+`entity_id` de InfluxDB) pasan a Sensores si esas casillas estaban vacías, y una
+fuente `influxdb` pasa a `homeassistant`. Lo que ya estuviera elegido en Sensores
+manda. Comprobado que la serie horaria de facturación es **exactamente la misma**
+antes y después del cambio, hora a hora.
+
+De paso, quien tenía sensor de vertido en Sensores pero no en la casilla de
+facturación ahora ve su compensación de excedentes sin tocar nada.
+
+### Galería de flujos en tiempo real
+
+En Ajustes → Apariencia, una rejilla para elegir **qué componente dibuja el
+caudal**, con un icono vectorial por tipo de diagrama. Dos, por ahora:
+
+- **Caudales** — el Sankey de dos columnas del diseño «Flujo de energía v2», el
+  de siempre. Cada cinta mide su potencia en píxeles por kilovatio de verdad, y
+  es el único que parte la casa en electrodomésticos con su nombre y su valor.
+- **Órbita** — la casa en el centro y las fuentes alrededor. Es la primera
+  versión del diseño, la que se descartó al elegir el Sankey: el consumo en
+  grande, un anillo de mezcla diciendo de quién es cada trozo y el arco de carga
+  en el nodo de la batería. Los electrodomésticos salen como anillo por dentro
+  del núcleo, sin nombre.
+
+No son dos estilos del mismo dibujo: uno mide caudales y el otro enseña el sitio
+de la casa. El cambio se aplica al momento en la pantalla de inicio y en la del
+día, sin recargar.
+
+De la órbita se porta la geometría del diseño sin retocar. Cambian tres cosas,
+las tres porque aquello era una maqueta en oscuro y esto es una app con dos temas:
+los colores salen de los tokens del tema; se añade la cinta **red → batería**, que
+la maqueta no dibujaba porque su física de juguete no cargaba de la red; y el
+resplandor de la casa pasa a estar **detrás** del anillo de mezcla — encima, sobre
+la tarjeta blanca del tema claro, teñía el anillo y el azul de la red se leía
+morado.
+
+### Esquinas en ángulo en el diagrama de caudales
+
+Las barras que identifican cada fuente y cada destino tenían las esquinas
+redondeadas y parecían pastillas sueltas en vez de los extremos de una cinta: la
+banda sale recta del borde y el redondeo dejaba un hueco claro justo ahí, además
+de comerse la punta de los segmentos finos, que son los que ya cuestan de ver. La
+muestra de color de la leyenda, que es una barra en miniatura, también es
+cuadrada.
+
 ## 0.38.1
 
 ### La hoja de electrodoméstico no cabía en un móvil

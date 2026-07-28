@@ -881,6 +881,10 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   padding: 11px 16px 15px; margin: 0; font-size: 13px; line-height: 1.5;
   color: var(--ink-3); border-top: 1px solid var(--sep);
 }
+/* La raya de arriba separa la nota de la lista que la precede. Cuando la nota
+   abre la tarjeta no hay nada de lo que separarse y la raya quedaba flotando
+   sobre el primer párrafo, como un encabezado vacío. */
+.li-note:first-child { border-top: 0; padding-top: 15px; }
 .li-note b { color: var(--ink-2); font-weight: 650; }
 .li-note code {
   background: var(--glass-2); padding: 1px 5px; border-radius: 5px;
@@ -1523,3 +1527,28 @@ body.scrolled .scroll-top { opacity: .95; }
 .btn.danger-soft { color: var(--bad);
   background: color-mix(in srgb, var(--bad) 10%, transparent); border: 0; }
 .btn.block { width: 100%; }
+
+/* ---------------------------------------------------------------------------
+   Galería de flujos en tiempo real (Ajustes → Apariencia)
+   --------------------------------------------------------------------------- */
+/* Rejilla de dos columnas en el móvil: con una sola no se comparan, y con tres
+   el icono se queda tan pequeño que deja de decir qué diagrama es. */
+.gal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px; margin-bottom: 14px; }
+.gal-tile { display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 12px 13px 13px; border-radius: var(--r-md); background: var(--solid);
+  border: 1px solid var(--hair-2); color: inherit;
+  font: inherit; -webkit-tap-highlight-color: transparent; }
+.gal-tile[aria-checked="true"] { border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset; }
+/* El icono es el tile: ocupa el ancho entero y manda sobre el texto, que solo
+   confirma lo que ya se ha visto. */
+.gal-art { display: block; width: 100%; height: auto; margin-bottom: 10px;
+  border-radius: var(--r-sm); background: var(--node); }
+.gal-name { display: flex; align-items: center; gap: 6px;
+  font-size: 14.5px; font-weight: 650; letter-spacing: -.2px; }
+.gal-name .i { width: 16px; height: 16px; flex: none; color: var(--accent); }
+.gal-claim { margin: 3px 0 0; font-size: 12px; line-height: 1.35; color: var(--ink-3); }
+.gal-mas { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
+.gal-estado { min-height: 1.2em; margin: 0 0 12px; font-size: 12.5px; color: var(--ink-3); }
+@media (max-width: 359px) { .gal { grid-template-columns: minmax(0, 1fr); } }

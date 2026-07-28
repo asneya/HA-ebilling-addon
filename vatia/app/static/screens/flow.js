@@ -25,7 +25,9 @@ import { nf4 } from "../core/format.js";
 import { showView } from "../core/nav.js";
 import {
   estado, titular, autoconsumo, coste, costeTexto, notaBateria, tarjetaRed, pot, MIN_W,
+  montarFlujo,
 } from "../core/flujo.js";
+import { settings } from "../core/config.js";
 
 /* El día servido por /api/flowday y dónde está puesta la lectura. */
 const st = { dia: null, i: 0, tocando: false, reloj: null, cargando: false };
@@ -78,13 +80,8 @@ function indiceDe(hora) {
 /* El componente del diagrama, creado una sola vez: vive mientras viva la
    pantalla, y arrastrando la hora se le cambia solo el reparto. */
 function diagrama() {
-  let node = $("#f-flow").querySelector("vatia-flow");
-  if (!node) {
-    node = document.createElement("vatia-flow");
-    node.meters = false;          // aquí las métricas van en tarjetas
-    $("#f-flow").appendChild(node);
-  }
-  return node;
+  // `meters: false`: aquí las métricas del día van en tarjetas aparte.
+  return montarFlujo($("#f-flow"), settings(), { meters: false });
 }
 
 function pintar() {

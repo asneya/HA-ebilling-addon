@@ -109,11 +109,12 @@ def _resolve_period(
 
 
 async def _consumption(settings: dict, start: datetime, end: datetime, tz, kind: str):
+    energia = settings.get("energy_sensors") or {}
     key = "|".join(
         [
             settings.get("source") or "",
-            settings.get("ha_entity") or "",
-            settings.get("ha_entity_export") or "",
+            energia.get("grid_import_energy") or "",
+            energia.get("grid_export_energy") or "",
             kind,
             start.isoformat(),
             end.isoformat(),
@@ -404,17 +405,6 @@ async def tariff_import(request: Request):
     except Exception as err:
         raise HTTPException(400, f"No se pudo interpretar el CSV: {err}") from err
     return storage.add_tariff(tariff)
-
-
-@app.get("/api/entities")
-async def list_entities():
-    settings = storage.load()["settings"]
-    try:
-        return await datasources.ha_list_energy_entities(settings)
-    except datasources.SourceError as err:
-        raise HTTPException(502, str(err)) from err
-    except Exception as err:  # pragma: no cover - errores de red
-        raise HTTPException(502, f"No se pudo conectar con Home Assistant: {err}") from err
 
 
 @app.get("/api/entities/grouped")

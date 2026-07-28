@@ -7,6 +7,7 @@ import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fmtNum } from "../core/format.js";
 import { config, settings, tariffs, reloadConfig } from "../core/config.js";
+import { FLOWS, estiloFlujo } from "../core/flujo.js";
 import { showSettingsPage } from "../core/nav.js";
 import { guardando } from "../core/guardando.js";
 import { asegurar, porTipo, opciones, cargadas } from "../core/entidades.js";
@@ -181,8 +182,8 @@ async function assignSensor(slot, entity) {
 
 // Resumen de cada categoría en el índice de Ajustes.
 function renderSettingsIndex(s) {
-  const SOURCES = { demo: "Demostración", homeassistant: "Home Assistant", influxdb: "InfluxDB" };
-  $("#nav-sub-source").textContent = SOURCES[s.source] || "Sin configurar";
+  $("#nav-sub-source").textContent = s.source === "homeassistant"
+    ? "Home Assistant" : "Demostración · datos de ejemplo";
   const lista = tariffs();
   const n = lista.length;
   // Se nombra la tarifa contratada: es la que decide el ahorro del cierre, y
@@ -196,11 +197,11 @@ function renderSettingsIndex(s) {
   const url = (ifx.url || "").trim();
   $("#nav-sub-influx").textContent = !url
     ? "Sin configurar · el histórico sale del recorder"
-    : `v${ifx.version ?? 2} · ${s.source === "influxdb"
-        ? "facturación e histórico" : "histórico del consumo"}`;
+    : `v${ifx.version ?? 2} · histórico del consumo`;
   $("#nav-sub-publish").textContent = s.export_sensors === false
     ? "Desactivado"
     : `Cada ${s.sensor_update_minutes ?? 5} min`;
+  $("#nav-sub-flows").textContent = estiloFlujo(s).name;
   const version = config()?.version;
   $("#nav-sub-about").textContent = version ? `Versión ${version}` : "Versión del add-on";
   // «13 de 13 asignados»: el índice tiene que decir si está bien sin entrar.
@@ -215,7 +216,6 @@ function renderSettingsIndex(s) {
 function fillSettings() {
   const s = settings();
   if (!s) return;
-  $("#s-source").value = s.source || "demo";
   $("#s-ha-url").value = s.ha_url || "";
   $("#s-ha-token").value = s.ha_token || "";
   $("#s-p1").value = s.contracted_power?.p1 ?? 4.6;
@@ -233,17 +233,10 @@ function fillSettings() {
   $("#s-ifx-url").value = ifx.url || "";
   $("#s-ifx-db").value = ifx.database || "";
   $("#s-ifx-measurement").value = ifx.measurement || "kWh";
-  $("#s-ifx-entity").value = ifx.entity_id || "";
-  $("#s-ifx-entity-export").value = ifx.entity_id_export || "";
   $("#s-ifx-org").value = ifx.org || "";
   $("#s-ifx-token").value = ifx.token || "";
   $("#s-ifx-user").value = ifx.username || "";
   $("#s-ifx-pass").value = ifx.password || "";
-  $("#s-ha-entity").innerHTML = s.ha_entity
-    ? `<option value="${esc(s.ha_entity)}">${esc(s.ha_entity)}</option>`
-    : `<option value="">— pulsa «Buscar sensores» —</option>`;
-  $("#s-ha-entity-export").innerHTML = `<option value="">— ninguno —</option>` +
-    (s.ha_entity_export ? `<option value="${esc(s.ha_entity_export)}" selected>${esc(s.ha_entity_export)}</option>` : "");
   // El material traslúcido no es un ajuste nuestro: la guía dice que sigue al
   // del sistema, así que aquí solo se informa de cómo está.
   const reduce = window.matchMedia &&
@@ -254,15 +247,24 @@ function fillSettings() {
   ensureGroupedEntities();
 }
 
+/* Una sola fuente para toda la app.
+   Antes había tres opciones y cada una arrastraba sus propios campos: dos
+   sensores de energía «de facturación» aquí y otros dos `entity_id` en InfluxDB,
+   que eran **los mismos contadores** que ya se piden en Sensores. Ahora la
+   pregunta es una: ¿datos de verdad o de ejemplo? Los sensores, en Sensores. */
 function updateSourceVisibility() {
-  const source = $("#s-source").value;
-  $("#ha-fields").classList.toggle("hidden", source !== "homeassistant");
-  // Los campos de InfluxDB ya no se esconden según la fuente: viven en su propia
-  // sección porque también dan el histórico del consumo. Escondiéndolos, quien
-  // tenía Home Assistant como fuente no podía configurarlos y el perfil horario
-  // de la ventana se quedaba sin el histórico largo, sin manera de saber por qué.
-  $("#ifx-hint").classList.toggle("hidden", source !== "influxdb");
-  $("#ha-external").classList.toggle("hidden", !!config()?.supervisor);
+  const source = settings()?.source === "homeassistant" ? "homeassistant" : "demo";
+  $$("#source-seg .seg").forEach((b) =>
+    b.classList.toggle("active", b.dataset.sourceOpt === source));
+  // Fuera del Supervisor no hay token que herede: hay que dar URL y token.
+  $("#ha-external").classList.toggle("hidden", source !== "homeassistant" || !!config()?.supervisor);
+  const asignados = sensorState.data;
+  $("#source-note").innerHTML = source === "demo"
+    ? `Datos inventados para probar la app sin tocar nada. El consumo, el flujo
+       y la facturación salen de una casa de ejemplo.`
+    : `Todo sale de tus sensores de Home Assistant: la Home, Energía, el flujo y
+       la facturación${asignados ? ` (${asignados.assigned} de ${asignados.total} asignados)` : ""}.
+       Se eligen una sola vez, abajo en <b>Sensores</b>.`;
   const v2 = $("#s-ifx-version").value === "2";
   $$(".ifx-v2").forEach((el) => el.classList.toggle("hidden", !v2));
   $$(".ifx-v1").forEach((el) => el.classList.toggle("hidden", v2));
@@ -287,32 +289,11 @@ function fillEntitySelects() {
   $("#s-forecast").innerHTML = opciones("any", s.solar_forecast_sensor || "");
 }
 
-async function loadEntities() {
-  const btn = $("#load-entities-btn");
-  btn.disabled = true; btn.textContent = "Buscando…";
-  try {
-    await saveSettings(true);
-    const entities = await api("entities");
-    const s = settings();
-    const cur = s?.ha_entity || "";
-    const curExp = s?.ha_entity_export || "";
-    const opts = (sel) => entities.map((e) =>
-      `<option value="${esc(e.entity_id)}" ${e.entity_id === sel ? "selected" : ""}>${esc(e.name)}</option>`).join("");
-    $("#s-ha-entity").innerHTML = opts(cur) || `<option value="">Sin sensores de energía</option>`;
-    $("#s-ha-entity-export").innerHTML = `<option value="">— ninguno —</option>` + opts(curExp);
-  } catch (err) { alert(err.message); } finally {
-    btn.disabled = false; btn.textContent = "Buscar sensores";
-  }
-}
-
 function settingsFromForm() {
   const flow = {}; const energy = {};
   $$("[data-flow]").forEach((el) => { flow[el.dataset.flow] = el.value; });
   $$("[data-energy]").forEach((el) => { energy[el.dataset.energy] = el.value; });
   return {
-    source: $("#s-source").value,
-    ha_entity: $("#s-ha-entity").value,
-    ha_entity_export: $("#s-ha-entity-export").value,
     ha_url: $("#s-ha-url").value.trim(),
     ha_token: $("#s-ha-token").value,
     contracted_power: { p1: parseFloat($("#s-p1").value) || 0, p2: parseFloat($("#s-p2").value) || 0 },
@@ -333,8 +314,6 @@ function settingsFromForm() {
       url: $("#s-ifx-url").value.trim(),
       database: $("#s-ifx-db").value.trim(),
       measurement: $("#s-ifx-measurement").value.trim() || "kWh",
-      entity_id: $("#s-ifx-entity").value.trim(),
-      entity_id_export: $("#s-ifx-entity-export").value.trim(),
       org: $("#s-ifx-org").value.trim(),
       token: $("#s-ifx-token").value,
       username: $("#s-ifx-user").value.trim(),
@@ -358,6 +337,89 @@ async function saveSettings(silent = false) {
     if (!silent) status.textContent = `Error: ${err.message}`; else throw err;
   } finally {
     listo();
+  }
+}
+
+/* ---------------- galería de flujos en tiempo real ----------------
+   Un icono vectorial por tipo de diagrama, dibujado a mano y no reducido del
+   componente de verdad: a 132 px de ancho el Sankey completo es una mancha, y
+   lo que hay que reconocer es la **forma** —un haz de cintas entre dos columnas,
+   o una casa con satélites—. Los colores son los de las series, así que el icono
+   y el diagrama hablan el mismo idioma.
+
+   Se dibujan con los tokens del tema por `var()`: al cambiar de tema se
+   repintan solos, sin volver a pasar por aquí. */
+const GAL_ART = {
+  sankey: `
+    <svg class="gal-art" viewBox="0 0 132 84" aria-hidden="true">
+      <g fill="none" stroke-linecap="butt">
+        <path d="M22 22C52 22 58 30 110 30" stroke="var(--s-solar)" stroke-width="15" opacity=".55"/>
+        <path d="M22 45C52 45 58 55 110 55" stroke="var(--s-batt)" stroke-width="8" opacity=".55"/>
+        <path d="M22 60C52 60 58 70 110 70" stroke="var(--s-grid)" stroke-width="5" opacity=".55"/>
+      </g>
+      <g>
+        <rect x="16" y="12" width="6" height="20" fill="var(--s-solar)"/>
+        <rect x="16" y="39" width="6" height="12" fill="var(--s-batt)"/>
+        <rect x="16" y="56" width="6" height="9" fill="var(--s-grid)"/>
+        <rect x="110" y="20" width="6" height="21" fill="var(--s-home)"/>
+        <rect x="110" y="48" width="6" height="15" fill="var(--s-batt)"/>
+        <rect x="110" y="66" width="6" height="9" fill="var(--s-exp)"/>
+      </g>
+    </svg>`,
+  /* La órbita, con la misma disposición que el componente: casa en el centro,
+     sol arriba, red abajo a la izquierda y batería abajo a la derecha. Las
+     cintas mueren en el anillo de mezcla y no en el círculo de la casa, igual
+     que en el diagrama de verdad. */
+  orbita: `
+    <svg class="gal-art" viewBox="0 0 132 84" aria-hidden="true">
+      <g fill="none" stroke-linecap="butt" opacity=".55">
+        <path d="M66 20V29" stroke="var(--s-solar)" stroke-width="9"/>
+        <path d="M28.9 65.9 53.1 51.6" stroke="var(--s-grid)" stroke-width="5"/>
+        <path d="M103.1 65.9 78.9 51.6" stroke="var(--s-batt)" stroke-width="6"/>
+      </g>
+      <circle cx="66" cy="44" r="11" fill="var(--solid)" stroke="var(--s-home)" stroke-width="2"/>
+      <circle cx="66" cy="44" r="15" fill="none" stroke="var(--s-solar)" stroke-width="3"
+              pathLength="100" stroke-dasharray="60 40" transform="rotate(-90 66 44)"/>
+      <circle cx="66" cy="44" r="15" fill="none" stroke="var(--s-grid)" stroke-width="3"
+              pathLength="100" stroke-dasharray="36 64" stroke-dashoffset="-62"
+              transform="rotate(-90 66 44)"/>
+      <circle cx="66" cy="12" r="8" fill="var(--solid)" stroke="var(--s-solar)" stroke-width="2"/>
+      <circle cx="22" cy="70" r="8" fill="var(--solid)" stroke="var(--s-grid)" stroke-width="2"/>
+      <circle cx="110" cy="70" r="8" fill="var(--solid)" stroke="var(--s-batt)" stroke-width="2"/>
+    </svg>`,
+};
+
+function pintarGaleria() {
+  const actual = estiloFlujo(settings()).id;
+  $("#flow-gallery").innerHTML = FLOWS.map((f) => `
+    <button class="gal-tile" role="radio" data-flow-style="${esc(f.id)}"
+            aria-checked="${f.id === actual}">
+      ${GAL_ART[f.id] || ""}
+      <span class="gal-name">${esc(f.name)}${f.id === actual
+        ? `<svg class="i"><use href="#i-correcto"/></svg>` : ""}</span>
+      <p class="gal-claim">${esc(f.claim)}</p>
+      <p class="gal-mas">${esc(f.detalle)}</p>
+    </button>`).join("");
+}
+
+async function elegirFlujo(id) {
+  const s = settings();
+  const antes = s ? s.flow_style : null;
+  if (s) s.flow_style = id;
+  pintarGaleria();
+  $("#gal-estado").textContent = "Guardando…";
+  try {
+    await api("settings", { method: "PUT", body: JSON.stringify({ flow_style: id }) });
+    await reloadConfig();
+    pintarGaleria();
+    $("#gal-estado").textContent = `Guardado · «${estiloFlujo(settings()).name}» en la Home y en el día.`;
+    // Las dos pantallas cambian de componente, así que hay que repintarlas: el
+    // nodo viejo se queda en el DOM y sin esto la galería no parecía hacer nada.
+    emit("datos");
+  } catch (err) {
+    if (s) s.flow_style = antes;
+    pintarGaleria();
+    $("#gal-estado").textContent = `No se ha podido guardar: ${err.message}`;
   }
 }
 
@@ -501,8 +563,48 @@ function perfilTexto(p) {
 
 /* ---------------- controles ---------------- */
 
-$("#s-source").addEventListener("change", updateSourceVisibility);
+/* La fuente se guarda sola: es un botón, no un campo de un formulario con barra
+   de guardar, y cambiarla afecta a todas las pantallas a la vez. */
+$$("#source-seg .seg").forEach((button) =>
+  button.addEventListener("click", async () => {
+    const source = button.dataset.sourceOpt;
+    const s = settings();
+    if (s) s.source = source;
+    updateSourceVisibility();
+    try {
+      await api("settings", { method: "PUT", body: JSON.stringify({ source }) });
+      await reloadConfig();
+      renderSettingsIndex(settings());
+      emit("datos");
+    } catch (err) {
+      $("#source-note").textContent = `No se ha podido guardar: ${err.message}`;
+    }
+  }));
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
+
+/* La URL y el token de Home Assistant, en la misma página sin barra de guardar.
+   Solo se ven fuera del Supervisor, que es donde hacen falta. */
+$$("#s-ha-url, #s-ha-token").forEach((campo) =>
+  campo.addEventListener("change", async () => {
+    $("#source-note").textContent = "Guardando…";
+    try {
+      await api("settings", { method: "PUT", body: JSON.stringify({
+        ha_url: $("#s-ha-url").value.trim(), ha_token: $("#s-ha-token").value }) });
+      await reloadConfig();
+      updateSourceVisibility();
+      emit("datos");
+    } catch (err) {
+      $("#source-note").textContent = `No se ha podido guardar: ${err.message}`;
+    }
+  }));
+
+/* La galería se repinta entera al elegir, así que el oyente va en la rejilla y
+   no en cada tile: puesto en el tile, el segundo clic caía en un botón que ya
+   no era el mismo elemento. */
+$("#flow-gallery").addEventListener("click", (ev) => {
+  const tile = ev.target.closest("[data-flow-style]");
+  if (tile) elegirFlujo(tile.dataset.flowStyle);
+});
 
 /* La capacidad de la batería está en la misma página sin barra de guardar, así
    que se guarda al salir del campo, como el desplegable de abajo. */
@@ -542,7 +644,6 @@ $("#s-energy-counters").addEventListener("change", async (ev) => {
     nota.textContent = `No se ha podido guardar: ${err.message}`;
   } finally { listo(); }
 });
-$("#load-entities-btn").addEventListener("click", loadEntities);
 $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
 $("#close-pick-modal").addEventListener("click", () => $("#pick-modal").classList.add("hidden"));
 
@@ -559,6 +660,7 @@ on("vista", ({ name }) => {
 on("pagina-ajustes", ({ page }) => {
   if (page === "diagnostics") loadDiagnostics();
   if (page === "influx") renderInfluxState();
+  if (page === "flows") { pintarGaleria(); $("#gal-estado").textContent = ""; }
   // Los sensores se asignan tocando su fila, no rellenando un formulario: la
   // barra de guardar no aplica y cada cambio se guarda solo.
   if (page === "sensors") loadSensors();
