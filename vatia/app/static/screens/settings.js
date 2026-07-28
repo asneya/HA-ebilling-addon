@@ -9,23 +9,9 @@ import { fmtNum } from "../core/format.js";
 import { config, settings, tariffs, reloadConfig } from "../core/config.js";
 import { showSettingsPage } from "../core/nav.js";
 import { guardando } from "../core/guardando.js";
+import { asegurar, porTipo, opciones, cargadas } from "../core/entidades.js";
 
-/* Las entidades de HA agrupadas por tipo. Se piden una vez y se guardan aquí:
-   son trescientas y no cambian mientras dura la sesión. */
-let grouped = null;
 const sensorState = { data: null, picking: null };
-
-function optionsFor(kind, selected) {
-  const list = (grouped && grouped[kind]) || [];
-  let html = `<option value="">— sin asignar —</option>`;
-  // Se conserva el valor guardado aunque no esté en la lista (entidad no
-  // disponible ahora, o varios sensores separados por comas).
-  if (selected && !list.some((e) => e.entity_id === selected))
-    html += `<option value="${esc(selected)}" selected>${esc(selected)}</option>`;
-  html += list.map((e) =>
-    `<option value="${esc(e.entity_id)}" ${e.entity_id === selected ? "selected" : ""}>${esc(e.name)}${e.unit ? ` (${esc(e.unit)})` : ""}</option>`).join("");
-  return html;
-}
 
 /* ---------------- Sensores, por función ----------------
 
@@ -121,8 +107,8 @@ async function openSensorPicker(slot) {
   sensorState.picking = fila;
 
   $("#pick-title").textContent = fila.label;
-  if (!grouped) await loadGrouped();
-  const todas = (grouped && grouped[fila.kind]) || [];
+  await asegurar();
+  const todas = porTipo(fila.kind);
 
   // Los candidatos primero; debajo, un buscador sobre la lista entera. El §04
   // lo pide así a propósito: con trescientas entidades, un desplegable no se
@@ -284,11 +270,9 @@ function updateSourceVisibility() {
 // Carga silenciosa de entidades al abrir Ajustes: evita tener que pulsar
 // «Buscar entidades» para ver los desplegables poblados.
 async function ensureGroupedEntities() {
-  if (grouped) return;
-  try {
-    grouped = await api("entities/grouped");
-    fillEntitySelects();
-  } catch (_) { /* sin conexión con HA: se mantiene el valor guardado */ }
+  if (cargadas()) return;
+  await asegurar();
+  fillEntitySelects();
 }
 
 /* Los selectores que siguen siendo un desplegable: previsión solar y los dos de
@@ -297,15 +281,9 @@ async function ensureGroupedEntities() {
 function fillEntitySelects() {
   const s = settings();
   if (!s) return;
-  $("#s-condition").innerHTML = optionsFor("any", s.condition_sensor || "");
-  $("#s-temp").innerHTML = optionsFor("temperature", s.temperature_sensor || "");
-  $("#s-forecast").innerHTML = optionsFor("any", s.solar_forecast_sensor || "");
-}
-
-async function loadGrouped() {
-  try {
-    grouped = await api("entities/grouped");
-  } catch (_) { /* sin conexión: la hoja enseña solo lo guardado */ }
+  $("#s-condition").innerHTML = opciones("any", s.condition_sensor || "");
+  $("#s-temp").innerHTML = opciones("temperature", s.temperature_sensor || "");
+  $("#s-forecast").innerHTML = opciones("any", s.solar_forecast_sensor || "");
 }
 
 async function loadEntities() {

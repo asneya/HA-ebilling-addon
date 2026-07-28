@@ -47,6 +47,23 @@
                font-variant-numeric: tabular-nums; }
     .stats span { display: block; font-size: 11px; color: rgba(255,255,255,.72);
                   margin-top: 4px; line-height: 1.35; }
+    /* Lo que se puso hoy. Sobre el cielo del atardecer, así que el material es
+       el mismo que la nota: negro traslúcido, no una tarjeta blanca. */
+    .aparatos { margin: 14px 0 0; padding: 13px 15px 11px; border-radius: 16px;
+                background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.12); }
+    .ap-head { font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+               font-weight: 600; color: rgba(255,255,255,.7); margin-bottom: 9px; }
+    .aparatos ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+    .aparatos li { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+    .ap-dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+    .ap-n { color: #fff; }
+    /* La barra dice de un vistazo cuánto de ese ciclo cayó con sol: es la
+       comparación entre aparatos, que en cifras hay que hacer a mano. */
+    .ap-bar { flex: 1; min-width: 24px; height: 4px; border-radius: 2px;
+              background: rgba(255,255,255,.18); overflow: hidden; }
+    .ap-bar i { display: block; height: 100%; background: #7be3b6; }
+    .ap-k { flex: none; font-size: 12px; color: rgba(255,255,255,.8);
+            font-variant-numeric: tabular-nums; }
     .note { margin: 14px 0 0; padding: 13px 15px; border-radius: 16px;
             background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.12);
             font-size: 13px; line-height: 1.55; color: rgba(255,255,255,.85); }
@@ -92,6 +109,33 @@
       return `<div class="stats">${cells.slice(0, 3).join("<i></i>")}</div>`;
     }
 
+    /* Qué se puso hoy y cuánto de cada cosa cayó dentro de la ventana.
+       El porcentaje de arriba dice si el día se aprovechó; esto dice **qué** lo
+       aprovechó, que es lo único que se puede hacer distinto mañana. Cada ciclo
+       se reparte por su solape con la ventana, así que una lavadora que empieza
+       dentro y acaba fuera no cuenta como todo gratis ni como todo pagado. */
+    _aparatos(lista) {
+      if (!lista || !lista.length) return "";
+      const filas = lista.slice(0, 5).map((a) => {
+        const pct = a.pct == null ? null : a.pct;
+        const barra = pct == null ? ""
+          : `<span class="ap-bar"><i style="width:${Math.min(100, pct)}%"></i></span>`;
+        const dicho = pct == null ? `${nf2.format(a.kwh)} kWh`
+          : `${nf2.format(a.kwh)} kWh · ${pct} % con sol`;
+        const veces = a.runs > 1 ? ` (${a.runs} veces)` : "";
+        return `<li>
+          <span class="ap-dot" style="background:${esc(a.color)}"></span>
+          <span class="ap-n">${esc(a.name)}${veces}</span>
+          ${barra}
+          <span class="ap-k">${esc(dicho)}</span>
+        </li>`;
+      }).join("");
+      return `<div class="aparatos">
+        <div class="ap-head">Lo que se puso hoy</div>
+        <ul>${filas}</ul>
+      </div>`;
+    }
+
     _render() {
       if (!this.shadowRoot) return;
       const d = this._data;
@@ -131,6 +175,7 @@
           <h2>${esc(animo)}</h2>
           <p class="body">${cuerpo}</p>
           ${this._stats(d, w)}
+          ${this._aparatos(d.appliances)}
           ${nota}
           <button type="button">Ver el día completo</button>
         </div>`;

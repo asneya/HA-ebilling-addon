@@ -2,6 +2,76 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.38.0
+
+### Electrodomésticos: los que se miden, no los que se describen
+
+Nueva sección **Ajustes → Electrodomésticos**: se da de alta un aparato con su
+sensor de potencia y, si lo tiene, el de energía. Y ahí acaba lo que hay que
+teclear — **no se pide ninguna duración ni ningún consumo**.
+
+Es la diferencia de fondo con la maqueta. El prototipo del diseño lleva esta
+función desde el principio, con la tarjeta «Cabe en la ventana» y sus veredictos,
+pero allí cada electrodoméstico es un número escrito a mano: «Lavadora, 2 h 10
+min, 0,9 kWh». Aquí el ciclo se **aprende del histórico** del propio enchufe:
+
+- se parte la curva de potencia de catorce días en ciclos —tramos por encima de
+  su umbral de reposo—, y de ellos salen la duración y los kWh **típicos**;
+- por **mediana** y no por media: el día que la lavadora se quedó puesta el doble
+  no puede alargar la previsión de todos los demás;
+- una pausa a media faena no parte el ciclo (un lavavajillas baja a reposo entre
+  el lavado y el secado; sin tolerarlo, un ciclo contaba como tres);
+- y con menos de dos ciclos **no se dice nada**: la fila pone «aprendiendo de su
+  histórico». Un número a ojo en la tarjeta que decide si pones la lavadora ahora
+  o después no vale más que un hueco.
+
+El umbral de reposo es el único ajuste fino: un aparato enchufado consume dos o
+tres vatios todo el día y eso no es estar funcionando.
+
+### «Cabe en la ventana», en la Home
+
+Debajo de la ventana de energía gratis, una fila por electrodoméstico con lo que
+tarda, lo que gasta y el veredicto del diseño: **Gratis**, **Cabe justo**, o lo
+que costaría la parte que se sale, al precio de tu tarifa a la hora en que se
+pagaría. Lo que entra gratis va primero, que es la respuesta que se ha venido a
+buscar. Cuando la ventana se cierra la tarjeta cambia de pregunta —«Lo que te
+costaría ahora»— y las cifras pasan a euros.
+
+### El diagrama detallado parte la casa por dentro
+
+En **Flujo de energía** —la pantalla del día, no la tarjeta de la Home— el nodo
+«Casa» deja de ser uno y pasa a ser uno por electrodoméstico medido, más «Resto
+de la casa». Cada corriente que llegaba a la casa se reparte entre ellos de forma
+**proporcional**: por el cable no viene marcado qué vatio fue a la lavadora y cuál
+a la nevera, así que atribuir el sol al aparato y la red al resto sería inventarse
+un dato. Si los enchufes sumaran más que el consumo de la casa se recortan a
+prorrata, para que el «resto» nunca salga negativo.
+
+La alternativa textual del Sankey también lo dice: «La casa por dentro: Horno,
+2,2 kW; resto de la casa, 320 W».
+
+### Y el cierre del día dice qué se puso
+
+El cierre ya decía qué parte del consumo cayó en la ventana; ahora dice **qué**
+la aprovechó, que es lo único que se puede hacer distinto mañana. Cada ciclo se
+reparte por su solape con la ventana, así que una lavadora que empieza dentro y
+acaba fuera no cuenta como todo gratis ni como todo pagado.
+
+### Debajo
+
+- `appliances.py`: detección de ciclos, medianas y los veredictos. El histórico
+  se pide en **una sola** llamada para todos los aparatos y se guarda media hora,
+  como el perfil de la casa, para que `/api/live` siga siendo rápido.
+- Los electrodomésticos son configuración, así que **entran en la copia de
+  seguridad** y vuelven con sus mismos ids: el ciclo aprendido sigue valiendo.
+- El sprite pasa a **46 glifos**: los cuatro de electrodoméstico salen dibujados
+  del prototipo del diseño, no redibujados a ojo. El generador ahora comprueba
+  que un glifo sean formas y nada más — la primera extracción se trajo un
+  `onClick` de la plantilla dentro de un `<symbol>`.
+- Las entidades de Home Assistant se piden una vez por sesión desde `core/`, que
+  es lo que permite que dos pantallas tengan desplegables de sensores sin pedir
+  la lista dos veces.
+
 ## 0.37.0
 
 ### El flujo de energía, como lo dibujó el diseño

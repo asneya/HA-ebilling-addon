@@ -10,8 +10,8 @@
  * *anuncian*, las pantallas *escuchan*. Ninguno de los dos sabe quién hay al
  * otro lado, así que se puede añadir o quitar una pantalla sin tocar nada más.
  *
- * Los cinco anuncios que existen —y no hay más a propósito, porque un tablón
- * con veinte eventos vuelve a ser un ovillo, solo que sin poder seguirlo con el
+ * Los anuncios que existen —y no hay más a propósito, porque un tablón con
+ * veinte eventos vuelve a ser un ovillo, solo que sin poder seguirlo con el
  * buscador del editor—:
  *
  *   vista          {name}   se ha entrado en una pantalla
@@ -23,6 +23,10 @@
  *                           que volver a pedir sus datos
  *   tema                    se ha aplicado un tema; hay que repintar lo que
  *                           lleve colores resueltos a mano
+ *   vivo           payload  la Home acaba de leer /api/live. Lo anuncia porque
+ *                           ese payload trae lo que está haciendo cada
+ *                           electrodoméstico *ahora*, y su sección de Ajustes lo
+ *                           enseña sin tener que volver a pedirlo
  */
 
 const oyentes = new Map();

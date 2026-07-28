@@ -43,6 +43,9 @@
   ];
   const SRC_ORDER = ["solar", "batt", "grid"];
   const DST_ORDER = ["home", "batt", "grid"];
+  // Por debajo de esto un electrodoméstico no merece su propio segmento: se
+  // queda dentro del resto de la casa en vez de dibujar una raya.
+  const MIN_AP_W = 20;
   // Los sufijos son parte del nombre: sin ellos «Batería» a la izquierda y
   // «Batería» a la derecha son la misma palabra para dos cosas contrarias.
   const SRC_NAME = { solar: "Sol", batt: "Batería · descarga", grid: "Red · compra" };
@@ -53,6 +56,64 @@
   // red que entra es «importada» y la que sale, «exportada».
   const SRC_COLOR = { solar: "--s-solar", batt: "--s-batt", grid: "--s-grid" };
   const DST_COLOR = { home: "--s-home", batt: "--s-batt", grid: "--s-exp" };
+
+  /* El lado derecho, con la casa partida por dentro.
+     Cuando hay electrodomésticos medidos, el nodo «Casa» deja de ser uno y pasa
+     a ser uno por aparato más el resto. El reparto de cada corriente entre ellos
+     es **proporcional**: por el cable no viene marcado qué vatio va a la lavadora
+     y cuál a la nevera, así que atribuir el sol al aparato y la red al resto
+     sería inventarse un dato. Proporcional es lo único que se puede afirmar.
+
+     Devuelve los mismos mapas que las constantes de arriba —más `tinta`, para los
+     colores que vienen de la configuración y no de un token— y `partes`: los
+     enlaces ya divididos. */
+  function ladoDerecho(active, split) {
+    const casa = active.filter((l) => l.to === "home").reduce((a, l) => a + l.w, 0);
+    const medidos = (split || [])
+      .map((a) => ({ ...a, w: Math.max(0, a.watts || 0) }))
+      .filter((a) => a.w >= MIN_AP_W);
+    if (!medidos.length || casa < MIN_AP_W) {
+      return { orden: DST_ORDER, nombre: DST_NAME, color: DST_COLOR,
+               corto: DST_SHORT, tinta: {}, partes: active };
+    }
+    // La suma de los enchufes no puede pasarse del consumo de la casa: si los
+    // sensores no cuadran se recortan a prorrata, que es mejor que un «resto»
+    // negativo o que un diagrama que no suma.
+    const suma = medidos.reduce((a, x) => a + x.w, 0);
+    const factor = suma > casa && suma > 0 ? casa / suma : 1;
+
+    const orden = [], nombre = {}, color = {}, corto = {}, tinta = {};
+    medidos.forEach((a, i) => {
+      const k = `ap${i}`;
+      a.k = k;
+      a.w *= factor;
+      orden.push(k);
+      nombre[k] = a.name;
+      corto[k] = [a.name, ""];
+      color[k] = null;          // su color es suyo, no un token del tema
+      tinta[k] = a.color;
+    });
+    const resto = Math.max(0, casa - medidos.reduce((a, x) => a + x.w, 0));
+    if (resto >= MIN_AP_W) {
+      orden.push("home");
+      nombre.home = "Resto de la casa";
+      corto.home = ["Resto", "de la casa"];
+      color.home = DST_COLOR.home;
+    }
+    orden.push("batt", "grid");
+    nombre.batt = DST_NAME.batt; nombre.grid = DST_NAME.grid;
+    corto.batt = DST_SHORT.batt; corto.grid = DST_SHORT.grid;
+    color.batt = DST_COLOR.batt; color.grid = DST_COLOR.grid;
+
+    // Cada corriente que iba a la casa se reparte entre los destinos de dentro.
+    const partes = [];
+    for (const l of active) {
+      if (l.to !== "home") { partes.push(l); continue; }
+      for (const a of medidos) partes.push({ ...l, to: a.k, w: l.w * (a.w / casa) });
+      if (resto >= MIN_AP_W) partes.push({ ...l, w: l.w * (resto / casa) });
+    }
+    return { orden, nombre, color, corto, tinta, partes };
+  }
 
   const MIN_W = 20;        // por debajo de 20 W no se dibuja la corriente
   const CORTE = 600;       // el corte del diseño entre columnas y filas
@@ -84,6 +145,9 @@
   // nada, cuando sí pasa: ahí se enseñan vatios.
   const power = (w) => (w < 1000 ? `${nf0.format(w)} W` : `${nf1.format(w / 1000)} kW`);
   const r1 = (v) => Math.round(v * 10) / 10;
+  /* El color de un nodo: token del tema si lo tiene, y si no el literal que trae
+     la configuración del electrodoméstico. Los dos valen en `fill` y en `stroke`. */
+  const tono = (mapa, tintas, k) => (mapa[k] ? `var(${mapa[k]})` : (tintas[k] || "currentColor"));
 
   /* Cuánto mide un texto, de verdad. Hace falta para colocar las etiquetas de la
      versión estrecha: van una al lado de otra y hay que saber si chocan **antes**
@@ -156,6 +220,10 @@
     set flows(value) { this._flows = value; this._render(); }
     set meters(value) { this._meters = value !== false; this._render(); }
 
+    /* La casa por dentro: `[{id, name, color, watts}]`. Solo la usa el diagrama
+       detallado; en la tarjeta de la Home la casa es un nodo y basta. */
+    set split(value) { this._split = value; this._render(); }
+
     connectedCallback() {
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
       // La orientación depende del ancho, y el ancho de la ventana: hay que
@@ -208,7 +276,7 @@
        Después cada cinta toma su hueco dentro del segmento con un cursor: los
        enlaces de un origen en el orden de los destinos y los de un destino en el
        de los orígenes. Es lo que evita que el haz se cruce consigo mismo. */
-    _reparto(active, scale, mid) {
+    _reparto(active, scale, mid, dstOrden) {
       const segmentos = (lado, orden) => {
         const tot = {};
         active.forEach((l) => { tot[l[lado]] = (tot[l[lado]] || 0) + l.w; });
@@ -219,15 +287,15 @@
         return list;
       };
       const src = segmentos("from", SRC_ORDER);
-      const dst = segmentos("to", DST_ORDER);
+      const dst = segmentos("to", dstOrden);
       const buscar = (list, k) => list.find((s) => s.k === k);
-      SRC_ORDER.forEach((from) => DST_ORDER.forEach((to) => {
+      SRC_ORDER.forEach((from) => dstOrden.forEach((to) => {
         const l = active.find((x) => x.from === from && x.to === to);
         if (!l) return;
         const s = buscar(src, from);
         l.sb0 = s.cur; s.cur += l.w * scale; l.sb1 = s.cur;
       }));
-      DST_ORDER.forEach((to) => SRC_ORDER.forEach((from) => {
+      dstOrden.forEach((to) => SRC_ORDER.forEach((from) => {
         const l = active.find((x) => x.from === from && x.to === to);
         if (!l) return;
         const d = buscar(dst, to);
@@ -266,19 +334,34 @@
         .filter((s) => s.w >= MIN_W);
       if (!active.length) return `<p class="empty">Ahora mismo no circula nada.</p>`;
       const total = active.reduce((a, s) => a + s.w, 0);
+      // El total no cambia al partir la casa: es lo mismo, contado más fino.
+      const d = ladoDerecho(active, this._split);
       const svg = ancho >= CORTE
-        ? this._horizontal(active, total, ancho)
-        : this._vertical(active, total, ancho);
-      return svg + this._lista(active, total);
+        ? this._horizontal(d.partes, total, ancho, d)
+        : this._vertical(d.partes, total, ancho, d);
+      return svg + this._lista(active, total, d);
     }
 
     /* El diagrama en palabras: un par origen→destino por línea, dicho como se
        diría en voz alta y no como una tabla de claves. */
-    _lista(active, total) {
+    _lista(active, total, d) {
       const DE = { solar: "Del sol", batt: "De la batería", grid: "De la red" };
       const A = { home: "a la casa", batt: "a la batería", grid: "a la red" };
       const filas = active.map((s) =>
         `<li>${DE[s.from]} ${A[s.to]}: ${esc(power(s.w))}</li>`);
+      // Y si la casa está partida por dentro, también por dentro: es información
+      // que solo estaba en la geometría, y quien no ve el diagrama la perdería.
+      const dentro = (d.orden || []).filter((k) => !["home", "batt", "grid"].includes(k));
+      if (dentro.length) {
+        const trozos = dentro.map((k) => {
+          const w = (d.partes || []).filter((l) => l.to === k).reduce((a, l) => a + l.w, 0);
+          return `${d.nombre[k]}, ${power(w)}`;
+        });
+        const resto = (d.partes || []).filter((l) => l.to === "home")
+          .reduce((a, l) => a + l.w, 0);
+        if (resto > 0) trozos.push(`resto de la casa, ${power(resto)}`);
+        filas.push(`<li>La casa por dentro: ${esc(trozos.join("; "))}</li>`);
+      }
       return `<ul class="sr">${filas.join("")}
         <li>Caudal total: ${esc(power(total))}</li></ul>`;
     }
@@ -286,7 +369,7 @@
     /* Las cintas y las barras, en coordenadas abstractas (a = a lo largo del
        flujo, b = a lo ancho). Las dos orientaciones comparten esto entero: solo
        cambia cómo se proyecta (a, b) en (x, y). */
-    _piezas(active, { A1, A2, AC, proj, dentro }) {
+    _piezas(active, { A1, A2, AC, proj, dentro, d }) {
       const P = (a, b) => proj(a, b);
       const defs = [], bands = [], dots = [], valores = [];
       active.forEach((l, i) => {
@@ -296,8 +379,8 @@
           `<linearGradient id="${id}" gradientUnits="userSpaceOnUse"
              x1="${P(A1, 0).split(",")[0]}" y1="${P(A1, 0).split(",")[1]}"
              x2="${P(A2, 0).split(",")[0]}" y2="${P(A2, 0).split(",")[1]}">
-             <stop offset="0" style="stop-color:var(${SRC_COLOR[l.from]})" stop-opacity=".72"/>
-             <stop offset="1" style="stop-color:var(${DST_COLOR[l.to]})" stop-opacity=".5"/>
+             <stop offset="0" style="stop-color:${tono(SRC_COLOR, {}, l.from)}" stop-opacity=".72"/>
+             <stop offset="1" style="stop-color:${tono(d.color, d.tinta, l.to)}" stop-opacity=".5"/>
            </linearGradient>`);
         bands.push(
           `<path fill="url(#${id})" d="M${P(A1, l.sb0)} C${P(AC, l.sb0)} ${P(AC, l.db0)} ${P(A2, l.db0)}
@@ -322,27 +405,27 @@
 
     /* Las barras de una columna, entre sus dos bordes del eje del flujo. Alto
        mínimo de 3 px: un segmento muy fino tiene que verse igual. */
-    _barras(list, { a0, a1, proj, colores }) {
+    _barras(list, { a0, a1, proj, colores, tintas = {} }) {
       return list.map((s) => {
         const [x, y] = proj(a0, s.b0).split(",").map(Number);
         const [x2, y2] = proj(a1, s.b1).split(",").map(Number);
         const w = Math.max(Math.abs(x2 - x), 3), h = Math.max(Math.abs(y2 - y), 3);
         return `<rect x="${r1(Math.min(x, x2))}" y="${r1(Math.min(y, y2))}"
-          width="${r1(w)}" height="${r1(h)}" rx="8" style="fill:var(${colores[s.k]})"/>`;
+          width="${r1(w)}" height="${r1(h)}" rx="8" style="fill:${tono(colores, tintas, s.k)}"/>`;
       }).join("");
     }
 
     /* ---- ≥ 600 px: las columnas a los lados, como la maqueta ---- */
-    _horizontal(active, total, ancho) {
+    _horizontal(active, total, ancho, d) {
       const ALTO = 352, MID = 176, BW = 54, TOPE = 322, PIE = 340;
       // El hueco para las etiquetas es lo que necesita el nombre más largo a
       // 14 px («Batería · descarga»); el resto es zona de cintas.
       const ETIQ = 150;
       const A1 = ETIQ + BW, A2 = ancho - ETIQ - BW, AC = (A1 + A2) / 2;
       const scale = Math.min(250 / KW_LLENO, 250 / Math.max(1.2, total / 1000)) / 1000;
-      const { src, dst } = this._reparto(active, scale, MID);
+      const { src, dst } = this._reparto(active, scale, MID, d.orden);
       const proj = (a, b) => `${r1(a)},${r1(b)}`;
-      const { defs, bands, dots, valores } = this._piezas(active, { A1, A2, AC, proj, dentro: true });
+      const { defs, bands, dots, valores } = this._piezas(active, { A1, A2, AC, proj, dentro: true, d });
 
       const labels = [];
       const lado = (list, izq) => {
@@ -358,12 +441,13 @@
             const ex = izq ? tx + 6 : tx - 6;
             labels.push(`<line class="guia" x1="${r1(ex)}" y1="${r1(cy - 4)}"
               x2="${r1(izq ? A1 : A2)}" y2="${r1(real)}"
-              style="stroke:var(${(izq ? SRC_COLOR : DST_COLOR)[s.k]})"/>`);
+              style="stroke:${izq ? tono(SRC_COLOR, {}, s.k) : tono(d.color, d.tinta, s.k)}"/>`);
           }
           labels.push(`<text class="n" x="${r1(tx)}" y="${r1(cy - 4)}" text-anchor="${anchor}">${
-            esc((izq ? SRC_NAME : DST_NAME)[s.k])}</text>
+            esc(izq ? SRC_NAME[s.k] : d.nombre[s.k])}</text>
             <text class="v" x="${r1(tx)}" y="${r1(cy + 14)}" text-anchor="${anchor}"
-              style="fill:var(${(izq ? SRC_COLOR : DST_COLOR)[s.k]})">${esc(power(s.w))}</text>`);
+              style="fill:${izq ? tono(SRC_COLOR, {}, s.k) : tono(d.color, d.tinta, s.k)}">${
+              esc(power(s.w))}</text>`);
         });
       };
       lado(src, true);
@@ -376,7 +460,7 @@
           <text class="rot" x="${ancho - 2}" y="20" text-anchor="end">Va a</text>
           <g>${bands.join("")}</g><g>${dots.join("")}</g>
           <g>${this._barras(src, { a0: A1 - BW, a1: A1, proj, colores: SRC_COLOR })}${
-                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: DST_COLOR })}</g>
+                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: d.color, tintas: d.tinta })}</g>
           <g>${labels.join("")}${valores.join("")}</g>
           <text class="pie" x="${r1(AC)}" y="${PIE}" text-anchor="middle">Caudal total ${
             esc(power(total))}</text>
@@ -388,7 +472,7 @@
        pasan a filas y las cintas giran 90°. Las etiquetas van fuera de la zona
        de cintas —arriba las de entrada, abajo las de salida— y en dos líneas,
        porque «Batería · descarga» a 14 px no cabe en un tercio de un teléfono. */
-    _vertical(active, total, ancho) {
+    _vertical(active, total, ancho, d) {
       const MARGEN = 4, BW = 34, TRAMO = 132, ETIQ = 38, PIE = 20;
       const A1 = ETIQ + BW;                 // borde inferior de la fila de entrada
       const A2 = A1 + TRAMO;                // borde superior de la fila de salida
@@ -400,18 +484,18 @@
       // aparecer una corriente y el diagrama parecería cambiar de unidades.
       const budget = Math.max(60, ancho - 2 * MARGEN - 2 * GAP);
       const scale = Math.min(budget / KW_LLENO, budget / Math.max(1.2, total / 1000)) / 1000;
-      const { src, dst } = this._reparto(active, scale, MID);
+      const { src, dst } = this._reparto(active, scale, MID, d.orden);
       const proj = (a, b) => `${r1(b)},${r1(a)}`;
       // Dentro de una cinta vertical de 34 px de ancho no cabe el valor con
       // holgura: el número va en la etiqueta, que aquí está al lado.
-      const { defs, bands, dots } = this._piezas(active, { A1, A2, AC, proj, dentro: false });
+      const { defs, bands, dots } = this._piezas(active, { A1, A2, AC, proj, dentro: false, d });
 
       const labels = [];
       const fila = (list, arriba) => {
         const y = arriba ? ETIQ - 20 : A2 + BW + 16;
         // Dos líneas por etiqueta: el nombre y, debajo, el sufijo con el valor.
         const textos = list.map((s) => {
-          const [nombre, sufijo] = (arriba ? SRC_SHORT : DST_SHORT)[s.k];
+          const [nombre, sufijo] = (arriba ? SRC_SHORT : d.corto)[s.k];
           return [nombre, sufijo ? `${sufijo} · ${power(s.w)}` : power(s.w)];
         });
         // Media anchura de cada bloque, medida, más 5 px de aire a cada lado.
@@ -422,16 +506,16 @@
         list.forEach((s, i) => {
           const cx = centros[i], real = (s.b0 + s.b1) / 2;
           const [nombre, valor] = textos[i];
-          const color = (arriba ? SRC_COLOR : DST_COLOR)[s.k];
+          const color = arriba ? tono(SRC_COLOR, {}, s.k) : tono(d.color, d.tinta, s.k);
           if (Math.abs(cx - real) > 6) {
             labels.push(`<line class="guia" x1="${r1(cx)}" y1="${r1(arriba ? y + 4 : y - 12)}"
               x2="${r1(real)}" y2="${r1(arriba ? A1 - BW : A2 + BW)}"
-              style="stroke:var(${color})"/>`);
+              style="stroke:${color}"/>`);
           }
           labels.push(`<text class="n" x="${r1(cx)}" y="${y}" text-anchor="middle">${
             esc(nombre)}</text>
             <text class="v" x="${r1(cx)}" y="${y + 15}" text-anchor="middle"
-              style="fill:var(${color})">${esc(valor)}</text>`);
+              style="fill:${color}">${esc(valor)}</text>`);
         });
       };
       fila(src, true);
@@ -442,7 +526,7 @@
           <defs>${defs.join("")}</defs>
           <g>${bands.join("")}</g><g>${dots.join("")}</g>
           <g>${this._barras(src, { a0: A1 - BW, a1: A1, proj, colores: SRC_COLOR })}${
-                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: DST_COLOR })}</g>
+                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: d.color, tintas: d.tinta })}</g>
           <g>${labels.join("")}</g>
           <text class="pie" x="${r1(MID)}" y="${ALTO - 4}" text-anchor="middle">Caudal total ${
             esc(power(total))}</text>
