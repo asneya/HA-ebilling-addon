@@ -139,30 +139,6 @@ def _weather(states: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _flows(power: dict[str, float]) -> dict[str, float]:
-    """Reparte la potencia instantánea entre los seis flujos posibles."""
-    pv = max(power.get("pv") or 0.0, 0.0)
-    gi = max(power.get("grid_import") or 0.0, 0.0)
-    ge = max(power.get("grid_export") or 0.0, 0.0)
-    bc = max(power.get("battery_charge") or 0.0, 0.0)
-    bd = max(power.get("battery_discharge") or 0.0, 0.0)
-    solar_grid = min(ge, pv)
-    rest = max(pv - solar_grid, 0.0)
-    solar_battery = min(bc, rest)
-    rest -= solar_battery
-    solar_home = rest
-    grid_battery = max(bc - solar_battery, 0.0)
-    grid_home = max(gi - grid_battery, 0.0)
-    return {
-        "solar_home": solar_home,
-        "solar_grid": solar_grid,
-        "solar_battery": solar_battery,
-        "grid_home": grid_home,
-        "grid_battery": grid_battery,
-        "battery_home": bd,
-    }
-
-
 def _energy_summary(
     energy: dict[str, float], flows: dict[str, float] | None = None
 ) -> dict[str, Any]:
@@ -1054,7 +1030,7 @@ async def build(
     soc_entity = flow_cfg.get("battery_soc")
     soc = _num((states.get(soc_entity) or {}).get("state")) if soc_entity else None
 
-    flows = _flows(power)
+    flows = series_mod.power_flows(power)
     home_power = power.get("home")
     if home_power is None:
         home_power = flows["solar_home"] + flows["grid_home"] + flows["battery_home"]
@@ -1085,6 +1061,110 @@ async def build(
         "phase": _day_phase(states, now),
         "window": window,
         "close": day_close(states, energy_summary, buckets, window, now, savings),
+        "generated_at": now.isoformat(),
+    }
+
+
+async def flow_day(
+    settings: dict[str, Any],
+    now: datetime,
+    tariffs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Payload de /api/flowday: el día entero listo para recorrerlo.
+
+    El diseño del flujo v2 deja arrastrar la hora y reproducir el día completo.
+    Su prototipo lo simula con fórmulas; aquí va con lo medido, que es lo que el
+    propio diseño pide para producción: «solo cambia el origen de pv, house y
+    soc». Por eso el reparto de flujos se hace con la misma función que la
+    tarjeta de «Ahora mismo» —``series.power_flows``— muestra a muestra.
+
+    Columnar y no una lista de objetos: son 288 muestras y repetir doce nombres
+    de clave en cada una multiplicaba por tres el tamaño de la respuesta.
+
+    El precio de cada hora sale de la tarifa marcada como «la mía». Sin ella no
+    hay coste que dar, y se devuelve ``null`` en vez de una cifra inventada.
+    """
+    tz = now.tzinfo
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    states = await fetch_states(settings)
+    curvas = await series_mod.flow_curves(settings, states, start, end, tz)
+
+    x = curvas["x"]
+    power = curvas["power"]
+    columna = lambda clave: power.get(clave) or [None] * len(x)  # noqa: E731
+    pv_c, home_c = columna("pv"), columna("home")
+    bc_c, bd_c = columna("battery_charge"), columna("battery_discharge")
+    gi_c, ge_c = columna("grid_import"), columna("grid_export")
+
+    claves = ("solar_home", "solar_grid", "solar_battery",
+              "grid_home", "grid_battery", "battery_home")
+    flujos: dict[str, list[float | None]] = {k: [] for k in claves}
+    pv_out: list[float | None] = []
+    casa_out: list[float | None] = []
+    # Índice de la última muestra con algo medido: es «ahora» para el diagrama, y
+    # con él el frontend abre en el presente sin tener que adivinar dónde acaba
+    # el día. Buscarlo aquí evita mandar 288 muestras vacías de la noche futura.
+    ultima = -1
+    for i in range(len(x)):
+        muestra = {
+            "pv": pv_c[i], "home": home_c[i],
+            "battery_charge": bc_c[i], "battery_discharge": bd_c[i],
+            "grid_import": gi_c[i], "grid_export": ge_c[i],
+        }
+        if all(v is None for v in muestra.values()):
+            for k in claves:
+                flujos[k].append(None)
+            pv_out.append(None)
+            casa_out.append(None)
+            continue
+        ultima = i
+        reparto = series_mod.power_flows({k: v or 0.0 for k, v in muestra.items()})
+        for k in claves:
+            flujos[k].append(round(reparto[k], 1))
+        pv_out.append(round(muestra["pv"] or 0.0, 1))
+        casa = muestra["home"]
+        if casa is None:
+            casa = reparto["solar_home"] + reparto["grid_home"] + reparto["battery_home"]
+        casa_out.append(round(casa, 1))
+
+    # Precio por muestra. Se resuelve una vez por hora —dentro de la hora no
+    # cambia en ninguna tarifa— y se reparte a las doce muestras.
+    my_id = settings.get("my_tariff_id") or ""
+    tariff = next((t for t in tariffs or [] if t.get("id") == my_id), None)
+    precio: list[float | None] = [None] * len(x)
+    excedente: list[float | None] = [None] * len(x)
+    nombre = None
+    if tariff:
+        nombre = tariff.get("name")
+        holidays = set(settings.get("holidays") or [])
+        pvpc_prices = None
+        if tariff["energy"]["type"] == "pvpc":
+            try:
+                pvpc_prices = await pvpc.get_prices(start, end, tz)
+            except Exception:  # noqa: BLE001 - sin precios se queda sin coste
+                _LOGGER.warning("Sin precios PVPC para el flujo del día", exc_info=True)
+        por_hora: dict[int, tuple[float | None, float | None]] = {}
+        for i, iso in enumerate(x):
+            moment = datetime.fromisoformat(iso)
+            if moment.hour not in por_hora:
+                p, _n = billing.price_now(tariff, moment, holidays, pvpc_prices)
+                por_hora[moment.hour] = (p, billing.surplus_price_now(tariff, moment, holidays))
+            precio[i], excedente[i] = por_hora[moment.hour]
+
+    return {
+        "date": start.date().isoformat(),
+        "step_min": 5,
+        "x": x,
+        "now": ultima,
+        "pv": pv_out,
+        "house": casa_out,
+        "soc": [None if v is None else round(v, 1) for v in curvas["soc"]]
+        if curvas["soc"] else None,
+        "flows": flujos,
+        "price": precio,
+        "surplus_price": excedente,
+        "tariff_name": nombre,
         "generated_at": now.isoformat(),
     }
 

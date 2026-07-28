@@ -7,8 +7,9 @@
  * así que se puede leer, tocar o quitar una sin abrir las otras cuatro.
  *
  *   core/     lo que no es de nadie: DOM, red, formato, colores, navegación,
- *             tema y los gráficos que comparten dos pantallas
- *   screens/  las cinco pantallas, una por fichero
+ *             tema, los gráficos que comparten dos pantallas y las cuentas del
+ *             flujo, que salen en dos sitios y no pueden contradecirse
+ *   screens/  las pantallas, una por fichero
  *
  * Rutas relativas en todo, para funcionar tras el Ingress de Home Assistant.
  */
@@ -18,6 +19,7 @@ import { currentView } from "./core/nav.js";
 import "./core/theme.js";
 
 import { loadLive } from "./screens/home.js";
+import "./screens/flow.js";
 import "./screens/energy.js";
 import { loadSimulation } from "./screens/billing.js";
 import { detailVisible, loadDetail } from "./screens/detail.js";

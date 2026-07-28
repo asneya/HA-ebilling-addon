@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#080C11; font-family:'Geist','Geist Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#7FA6FF; text-decoration:none; }
+  a:hover { color:#A8C2FF; }
+  @keyframes ebDrift { to { stroke-dashoffset:-320; } }
+  @keyframes ebBreath { 0%,100% { opacity:.34 } 50% { opacity:.66 } }
+  input[type=range] { -webkit-appearance:none; appearance:none; height:26px; background:transparent; cursor:grab; }
+  input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:2px; background:rgba(255,255,255,.14); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; margin-top:-7px; border-radius:50%; background:#F5F8FC; box-shadow:0 2px 10px rgba(0,0,0,.55); }
+</style>
+</helmet>
+
+<div style="min-height:100vh;padding:44px 48px 64px;display:flex;flex-direction:column;gap:28px;color:#F2F6FA">
+
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;flex-wrap:wrap">
+    <div style="max-width:600px">
+      <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#F0A22E;font-weight:600;margin-bottom:11px">Flujo de energía · propuesta 2</div>
+      <div style="font-size:34px;line-height:1.06;letter-spacing:-.035em;font-weight:600;margin-bottom:12px">De dónde sale y a dónde va, en una sola lectura</div>
+      <div style="font-size:14px;line-height:1.62;color:#8B98A5;text-wrap:pretty">Izquierda lo que entra, derecha lo que se usa. El grosor de cada cinta es potencia real, así que la comparación es geométrica: no hace falta leer un número para ver que hoy el sol cubre la casa entera. Dale a reproducir y el día pasa entero.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+      <div style="display:flex;gap:8px;align-items:center">
+        <div onClick="{{ setDawn }}" style="padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;{{ chipDawn }}">Amanecer</div>
+        <div onClick="{{ setNoon }}" style="padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;{{ chipNoon }}">Mediodía</div>
+        <div onClick="{{ setEve }}" style="padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;{{ chipEve }}">Tarde</div>
+        <div onClick="{{ setNight }}" style="padding:9px 15px;border-radius:999px;font-size:12.5px;font-weight:500;cursor:pointer;{{ chipNight }}">Noche</div>
+      </div>
+      <div onClick="{{ togglePlay }}" style="padding:10px 18px;border-radius:999px;font-size:12.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:9px;{{ playPill }}">
+        <span style="font-size:11px">{{ playIcon }}</span>{{ playLabel }}
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="flex:1 1 700px;min-width:600px;border-radius:32px;padding:24px 28px 20px;background:radial-gradient(130% 100% at 50% 0%,#141C26 0%,#0C1218 60%,#0A0F15 100%);border:1px solid rgba(255,255,255,.08);box-shadow:0 40px 90px rgba(0,0,0,.55)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;margin-bottom:4px">
+        <div>
+          <div style="font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#8B98A5;font-weight:600">Ahora · {{ clock }}</div>
+          <div style="font-size:15px;color:#C3D0DE;margin-top:5px;text-wrap:pretty">{{ headline }}</div>
+        </div>
+        <div style="padding:8px 14px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap;{{ statePill }}">{{ stateLabel }}</div>
+      </div>
+
+      {{ sankey }}
+
+      <div style="margin-top:6px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#8B98A5;font-weight:600">El día completo</div>
+          <div style="font-size:11.5px;color:#68747F">Sol producido · casa consumida</div>
+        </div>
+        {{ daystrip }}
+        <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
+          <div style="font-size:11px;color:#68747F;font-variant-numeric:tabular-nums;flex:none">00</div>
+          <input type="range" min="0" max="23.9" step="0.1" value="{{ hour }}" onChange="{{ onHour }}" style="flex:1">
+          <div style="font-size:11px;color:#68747F;font-variant-numeric:tabular-nums;flex:none">24</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:0 1 320px;min-width:290px;display:flex;flex-direction:column;gap:14px">
+
+      <div style="padding:20px 22px;border-radius:26px;background:linear-gradient(160deg,rgba(245,169,60,.14),rgba(245,169,60,.03));border:1px solid rgba(245,169,60,.22)">
+        <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#F0A22E;font-weight:600;margin-bottom:9px">Autoconsumo ahora</div>
+        <div style="font-size:44px;font-weight:600;letter-spacing:-.04em;font-variant-numeric:tabular-nums;line-height:1">{{ selfPct }}</div>
+        <div style="font-size:12.5px;color:#B9A177;margin-top:6px">de lo que gasta la casa lo pones tú</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="padding:16px 17px;border-radius:20px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)">
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B98A5;font-weight:600;margin-bottom:8px">Batería</div>
+          <div style="font-size:23px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:#35D69B">{{ socPct }}</div>
+          <div style="font-size:11.5px;color:#68747F;margin-top:4px;line-height:1.4">{{ socNote }}</div>
+        </div>
+        <div style="padding:16px 17px;border-radius:20px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)">
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B98A5;font-weight:600;margin-bottom:8px">{{ gridTitle }}</div>
+          <div style="font-size:23px;font-weight:600;letter-spacing:-.03em;font-variant-numeric:tabular-nums;{{ gridColor }}">{{ gridKw }}</div>
+          <div style="font-size:11.5px;color:#68747F;margin-top:4px;line-height:1.4">{{ gridNote }}</div>
+        </div>
+      </div>
+
+      <div style="padding:18px 20px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B98A5;font-weight:600">Coste de este instante</div>
+          <div style="font-size:11px;color:#68747F;font-variant-numeric:tabular-nums">{{ priceLabel }}</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div style="font-size:32px;font-weight:600;letter-spacing:-.035em;font-variant-numeric:tabular-nums;{{ costColor }}">{{ costNow }}</div>
+          <div style="font-size:13px;color:#68747F">/hora</div>
+        </div>
+        <div style="font-size:12px;color:#8B98A5;margin-top:8px;line-height:1.5;text-wrap:pretty">{{ costNote }}</div>
+      </div>
+
+      <div style="padding:18px 20px;border-radius:22px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.07);display:flex;flex-direction:column;gap:11px">
+        <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B98A5;font-weight:600">Leyenda</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:20px;height:8px;border-radius:4px;background:#F5A93C;flex:none"></div>
+          <div style="font-size:12.5px;color:#C3D0DE">Sol · lo que producen las placas</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:20px;height:8px;border-radius:4px;background:#35D69B;flex:none"></div>
+          <div style="font-size:12.5px;color:#C3D0DE">Batería · carga y descarga</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:20px;height:8px;border-radius:4px;background:#7FA6FF;flex:none"></div>
+          <div style="font-size:12.5px;color:#C3D0DE">Red · compra y excedentes</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:20px;height:8px;border-radius:4px;background:#D3DCE6;flex:none"></div>
+          <div style="font-size:12.5px;color:#C3D0DE">Casa · el consumo real</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showParticles&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Flujo&quot;},&quot;showValues&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Flujo&quot;},&quot;batteryKwh&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:7.5,&quot;min&quot;:2,&quot;max&quot;:20,&quot;step&quot;:0.5,&quot;unit&quot;:&quot; kWh&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Instalación&quot;}}">
+const COL = { sol:'#F5A93C', bat:'#35D69B', red:'#7FA6FF', casa:'#D3DCE6' };
+const NAME = { sol:'Sol', bat:'Batería', red:'Red', casa:'Casa' };
+const CAP = 7.5;
+
+class Component extends DCLogic {
+  state = { hour: 13.2, playing: false };
+
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  togglePlay = () => {
+    if (this.state.playing) { clearInterval(this.timer); this.setState({ playing: false }); return; }
+    this.timer = setInterval(() => this.setState(s => ({ hour: (s.hour + 0.14) % 24 })), 45);
+    this.setState({ playing: true });
+  };
+
+  set = h => { clearInterval(this.timer); this.setState({ hour: h, playing: false }); };
+
+  pvAt(h) {
+    const a = (h - 6.3) / 11.8;
+    return a <= 0 || a >= 1 ? 0 : 5.4 * Math.pow(Math.sin(Math.PI * a), 1.35);
+  }
+
+  houseAt(h) {
+    const bump = (c, w, p) => p * Math.exp(-Math.pow((h - c) / w, 2));
+    let v = 0.32 + bump(8.1, 1.15, 1.05) + bump(14, 1.5, 0.75) + bump(20.6, 1.9, 2.35);
+    if (h >= 1.5 && h < 5) v += 3.1;
+    return v;
+  }
+
+  socAt(h) {
+    const cap = this.props.batteryKwh ?? CAP;
+    let soc = cap * 0.34;
+    for (let t = 0; t < h; t += 0.1) {
+      const net = this.pvAt(t) - this.houseAt(t);
+      if (net > 0) soc = Math.min(cap, soc + Math.min(net, 3.0) * 0.1);
+      else soc = Math.max(0, soc - Math.min(-net, 3.5) * 0.1);
+    }
+    return soc;
+  }
+
+  priceAt(h) {
+    if (h < 8) return 0.094;
+    if ((h >= 10 && h < 14) || (h >= 18 && h < 22)) return 0.242;
+    return 0.158;
+  }
+
+  flows(h) {
+    const cap = this.props.batteryKwh ?? CAP;
+    const pv = this.pvAt(h), house = this.houseAt(h), soc = this.socAt(h);
+    const L = [];
+    if (pv >= house) {
+      if (house > 0.01) L.push({ s:'sol', d:'casa', kw: house });
+      let sp = pv - house;
+      const chg = soc >= cap - 0.05 ? 0 : Math.min(sp, 3.0);
+      if (chg > 0.01) { L.push({ s:'sol', d:'bat', kw: chg }); sp -= chg; }
+      if (sp > 0.01) L.push({ s:'sol', d:'red', kw: sp });
+    } else {
+      if (pv > 0.01) L.push({ s:'sol', d:'casa', kw: pv });
+      let need = house - pv;
+      const dis = soc <= 0.15 ? 0 : Math.min(need, 3.5);
+      if (dis > 0.01) { L.push({ s:'bat', d:'casa', kw: dis }); need -= dis; }
+      if (need > 0.01) L.push({ s:'red', d:'casa', kw: need });
+    }
+    return { pv, house, soc, cap, L };
+  }
+
+  segs(links, key, order, scale, mid) {
+    const tot = {};
+    links.forEach(l => { tot[l[key]] = (tot[l[key]] || 0) + l.kw; });
+    const list = order.filter(k => tot[k] > 0.01).map(k => ({ k, kw: tot[k] }));
+    const GAP = 14;
+    const H = list.reduce((a, s) => a + s.kw * scale, 0) + GAP * Math.max(0, list.length - 1);
+    let y = mid - H / 2;
+    list.forEach(s => { s.y0 = y; s.y1 = y + s.kw * scale; s.cur = s.y0; y = s.y1 + GAP; });
+    return list;
+  }
+
+  sankey(f) {
+    const E = React.createElement;
+    const W = 760, MID = 176, X1 = 168, X2 = 592, BW = 54, CX = (X1 + X2) / 2;
+    const total = f.L.reduce((a, l) => a + l.kw, 0);
+    const scale = Math.min(46, 250 / Math.max(1.2, total));
+    const src = this.segs(f.L, 's', ['sol','bat','red'], scale, MID);
+    const dst = this.segs(f.L, 'd', ['casa','bat','red'], scale, MID);
+    const by = (list, k) => list.find(s => s.k === k);
+    const ordered = [];
+    ['sol','bat','red'].forEach(s => ['casa','bat','red'].forEach(d => {
+      const l = f.L.find(x => x.s === s && x.d === d); if (l) ordered.push(l);
+    }));
+    const dstOrder = [];
+    ['casa','bat','red'].forEach(d => ['sol','bat','red'].forEach(s => {
+      const l = f.L.find(x => x.s === s && x.d === d); if (l) dstOrder.push(l);
+    }));
+    ordered.forEach(l => { const s = by(src, l.s); l.sy0 = s.cur; s.cur += l.kw * scale; l.sy1 = s.cur; });
+    dstOrder.forEach(l => { const d = by(dst, l.d); l.dy0 = d.cur; d.cur += l.kw * scale; l.dy1 = d.cur; });
+
+    const kw = v => v.toFixed(v < 10 ? 2 : 1).replace('.', ',') + ' kW';
+    const defs = [], bands = [], dots = [], bars = [], labels = [];
+
+    f.L.forEach((l, i) => {
+      const g = 'lg' + i, th = l.sy1 - l.sy0;
+      defs.push(E('linearGradient', { key: g, id: g, x1: '0', x2: '1' },
+        E('stop', { offset: '0%', stopColor: COL[l.s], stopOpacity: .72 }),
+        E('stop', { offset: '100%', stopColor: COL[l.d], stopOpacity: .5 })));
+      const d = 'M' + X1 + ',' + l.sy0 + 'C' + CX + ',' + l.sy0 + ' ' + CX + ',' + l.dy0 + ' ' + X2 + ',' + l.dy0 +
+        'L' + X2 + ',' + l.dy1 + 'C' + CX + ',' + l.dy1 + ' ' + CX + ',' + l.sy1 + ' ' + X1 + ',' + l.sy1 + 'Z';
+      bands.push(E('path', { key: 'b' + i, d: d, fill: 'url(#' + g + ')' }));
+      if ((this.props.showParticles ?? true) && th > 5) {
+        const my0 = (l.sy0 + l.sy1) / 2, my1 = (l.dy0 + l.dy1) / 2;
+        dots.push(E('path', { key: 'd' + i, fill: 'none', stroke: '#FFFFFF',
+          strokeWidth: Math.min(3.4, th * 0.26), strokeLinecap: 'round', strokeDasharray: '2 26',
+          d: 'M' + X1 + ',' + my0 + 'C' + CX + ',' + my0 + ' ' + CX + ',' + my1 + ' ' + X2 + ',' + my1,
+          style: { animation: 'ebDrift 3.4s linear infinite', opacity: .5 } }));
+      }
+      if ((this.props.showValues ?? true) && th >= 17) {
+        labels.push(E('text', { key: 'v' + i, x: CX, y: (l.sy0 + l.sy1 + l.dy0 + l.dy1) / 4 + 4, textAnchor: 'middle',
+          style: { fontSize: 12, fontWeight: 600, fill: '#0B1016', fontVariantNumeric: 'tabular-nums' } }, kw(l.kw)));
+      }
+    });
+
+    const qual = (k, side) => side === 'R'
+      ? (k === 'red' ? ' · excedente' : k === 'bat' ? ' · carga' : '')
+      : (k === 'bat' ? ' · descarga' : k === 'red' ? ' · compra' : '');
+
+    const side_ = (list, side) => {
+      const x = side === 'L' ? X1 - BW : X2;
+      const tx = side === 'L' ? x - 16 : x + BW + 16, anchor = side === 'L' ? 'end' : 'start';
+      list.forEach(s => bars.push(E('rect', { key: side + s.k, x: x, y: s.y0,
+        width: BW, height: Math.max(3, s.y1 - s.y0), rx: 8, fill: COL[s.k] })));
+      const PITCH = 40;
+      const cys = list.map(s => (s.y0 + s.y1) / 2);
+      for (let i = 1; i < cys.length; i++) if (cys[i] - cys[i - 1] < PITCH) cys[i] = cys[i - 1] + PITCH;
+      const over = cys.length ? cys[cys.length - 1] - 322 : 0;
+      if (over > 0) for (let i = 0; i < cys.length; i++) cys[i] -= over;
+      for (let i = cys.length - 2; i >= 0; i--) if (cys[i + 1] - cys[i] < PITCH) cys[i] = cys[i + 1] - PITCH;
+      list.forEach((s, i) => {
+        const cy = cys[i];
+        if (Math.abs(cy - (s.y0 + s.y1) / 2) > 6) {
+          const ex = side === 'L' ? tx + 6 : tx - 6;
+          labels.push(E('line', { key: side + 'l' + s.k, x1: ex, y1: cy - 4, x2: x + (side === 'L' ? BW : 0),
+            y2: (s.y0 + s.y1) / 2, stroke: COL[s.k], strokeWidth: 1, strokeOpacity: .4 }));
+        }
+        labels.push(E('text', { key: side + 'n' + s.k, x: tx, y: cy - 4, textAnchor: anchor,
+          style: { fontSize: 14, fontWeight: 600, fill: '#F2F6FA', letterSpacing: '-.01em' } },
+          NAME[s.k] + qual(s.k, side)));
+        labels.push(E('text', { key: side + 'k' + s.k, x: tx, y: cy + 14, textAnchor: anchor,
+          style: { fontSize: 12.5, fill: COL[s.k], fontVariantNumeric: 'tabular-nums', fontWeight: 500 } }, kw(s.kw)));
+      });
+    };
+    side_(src, 'L');
+    side_(dst, 'R');
+
+    return E('svg', { viewBox: '-108 0 976 352', style: { width: '100%', display: 'block' } },
+      E('defs', null, defs),
+      E('text', { x: -100, y: 20, textAnchor: 'start', style: { fontSize: 10.5, letterSpacing: '.13em', textTransform: 'uppercase', fill: '#68747F', fontWeight: 600 } }, 'Entra'),
+      E('text', { x: 860, y: 20, textAnchor: 'end', style: { fontSize: 10.5, letterSpacing: '.13em', textTransform: 'uppercase', fill: '#68747F', fontWeight: 600 } }, 'Va a'),
+      E('g', null, bands), E('g', null, dots), E('g', null, bars), E('g', null, labels),
+      E('text', { x: CX, y: 340, textAnchor: 'middle', style: { fontSize: 12, fill: '#68747F', fontVariantNumeric: 'tabular-nums' } },
+        'Caudal total ' + kw(total)));
+  }
+
+  daystrip(h) {
+    const E = React.createElement;
+    const W = 760, H = 74, MAX = 6;
+    const x = t => (t / 24) * W, y = v => H - 8 - (v / MAX) * (H - 18);
+    let a = 'M' + x(0) + ',' + y(0), l = '';
+    for (let t = 0; t <= 24; t += 0.25) { a += 'L' + x(t) + ',' + y(this.pvAt(t)); }
+    a += 'L' + x(24) + ',' + y(0) + 'Z';
+    for (let t = 0; t <= 24; t += 0.25) { l += (l ? 'L' : 'M') + x(t) + ',' + y(this.houseAt(t)); }
+    return E('svg', { viewBox: '0 0 ' + W + ' ' + H, style: { width: '100%', display: 'block' } },
+      E('defs', null, E('linearGradient', { id: 'dsg', x1: '0', y1: '0', x2: '0', y2: '1' },
+        E('stop', { offset: '0%', stopColor: '#F5A93C', stopOpacity: .5 }),
+        E('stop', { offset: '100%', stopColor: '#F5A93C', stopOpacity: .04 }))),
+      E('path', { d: a, fill: 'url(#dsg)' }),
+      E('path', { d: l, fill: 'none', stroke: '#D3DCE6', strokeWidth: 1.6, strokeOpacity: .75 }),
+      E('line', { x1: x(h), y1: 2, x2: x(h), y2: H - 6, stroke: '#F5F8FC', strokeWidth: 1.5 }),
+      E('circle', { cx: x(h), cy: y(this.pvAt(h)), r: 4.5, fill: '#F5A93C', stroke: '#0A0F15', strokeWidth: 2 }));
+  }
+
+  renderVals() {
+    const h = this.state.hour, f = this.flows(h);
+    const kw = v => v.toFixed(2).replace('.', ',') + ' kW';
+    const eur = v => (v < 0 ? '−' : '') + Math.abs(v).toFixed(2).replace('.', ',') + ' €';
+    const get = (s, d) => { const l = f.L.find(x => x.s === s && x.d === d); return l ? l.kw : 0; };
+    const solHouse = get('sol','casa'), batHouse = get('bat','casa'), redHouse = get('red','casa');
+    const solRed = get('sol','red'), solBat = get('sol','bat');
+    const price = this.priceAt(h);
+    const cost = redHouse * price - solRed * 0.06;
+    const selfP = f.house > 0.01 ? Math.round(((solHouse + batHouse) / f.house) * 100) : 100;
+    const exporting = solRed > 0.01;
+    const chip = on => on
+      ? 'background:#F5F8FC;color:#0B1016;border:1px solid #F5F8FC'
+      : 'background:rgba(255,255,255,.05);color:#C3D0DE;border:1px solid rgba(255,255,255,.1)';
+    const near = t => Math.abs(h - t) < 0.35;
+    const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+
+    let stateLabel, statePill;
+    if (exporting) { stateLabel = 'Vendiendo a la red'; statePill = 'background:rgba(127,166,255,.16);color:#9CBBFF;border:1px solid rgba(127,166,255,.3)'; }
+    else if (redHouse > 0.01) { stateLabel = 'Comprando de la red'; statePill = 'background:rgba(255,138,138,.14);color:#FF9E9E;border:1px solid rgba(255,138,138,.28)'; }
+    else { stateLabel = 'Independiente'; statePill = 'background:rgba(53,214,155,.15);color:#4FE0AC;border:1px solid rgba(53,214,155,.3)'; }
+
+    let headline;
+    if (exporting && solBat > 0.01) headline = 'El sol cubre la casa, llena la batería y aún sobra: ' + kw(solRed) + ' se van a la red.';
+    else if (exporting) headline = 'Batería llena y casa cubierta. Todo el excedente, ' + kw(solRed) + ', sale a la red.';
+    else if (solBat > 0.01) headline = 'Sobra sol y va entero a la batería: ' + kw(solBat) + ' guardados para la noche.';
+    else if (batHouse > 0.01 && redHouse < 0.01 && solHouse < 0.01) headline = 'Sin nada de sol, la batería lleva la casa sola con ' + kw(batHouse) + '.';
+    else if (batHouse > 0.01 && redHouse < 0.01) headline = 'El sol pone ' + kw(solHouse) + ' y la batería remata los ' + kw(batHouse) + ' que faltan: cero red.';
+    else if (redHouse > 0.01 && batHouse > 0.01) headline = 'La batería aporta ' + kw(batHouse) + ' y la red completa los ' + kw(redHouse) + ' que faltan.';
+    else if (redHouse > 0.01 && solHouse > 0.01) headline = 'El sol cubre ' + kw(solHouse) + ' y la red pone los ' + kw(redHouse) + ' restantes.';
+    else headline = 'Toda la casa va con red: ' + kw(redHouse) + ' comprados a ' + price.toFixed(3).replace('.', ',') + ' €/kWh.';
+
+    return {
+      hour: h.toFixed(1),
+      clock: String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0'),
+      sankey: this.sankey(f),
+      daystrip: this.daystrip(h),
+      headline, stateLabel, statePill,
+      selfPct: selfP + '%',
+      socPct: Math.round((f.soc / f.cap) * 100) + '%',
+      socNote: solBat > 0.01 ? 'cargando a ' + kw(solBat) : batHouse > 0.01 ? 'dando ' + kw(batHouse) + ' a la casa' : f.soc >= f.cap - 0.05 ? 'llena, en reposo' : 'en reposo',
+      gridTitle: exporting ? 'A la red' : 'De la red',
+      gridKw: kw(exporting ? solRed : redHouse),
+      gridColor: exporting ? 'color:#9CBBFF' : redHouse > 0.01 ? 'color:#FF9E9E' : 'color:#68747F',
+      gridNote: exporting ? 'compensa ' + eur(solRed * 0.06) + '/h' : redHouse > 0.01 ? 'cuesta ' + eur(redHouse * price) + '/h' : 'sin intercambio',
+      priceLabel: price.toFixed(3).replace('.', ',') + ' €/kWh',
+      costNow: eur(cost),
+      costColor: cost <= 0 ? 'color:#4FE0AC' : cost > 0.4 ? 'color:#FF9E9E' : 'color:#F2F6FA',
+      costNote: cost <= 0 ? 'A esta hora la casa no te cuesta nada: los excedentes te abonan.' : 'Solo pagas los ' + kw(redHouse) + ' que vienen de la red; el resto ya está en casa.',
+      onHour: e => this.set(parseFloat(e.target.value)),
+      setDawn: () => this.set(8.4), setNoon: () => this.set(13.2), setEve: () => this.set(19.6), setNight: () => this.set(23.2),
+      chipDawn: chip(near(8.4)), chipNoon: chip(near(13.2)), chipEve: chip(near(19.6)), chipNight: chip(near(23.2)),
+      togglePlay: this.togglePlay,
+      playLabel: this.state.playing ? 'Pausar el día' : 'Ver el día entero',
+      playIcon: this.state.playing ? '❚❚' : '▶',
+      playPill: this.state.playing
+        ? 'background:rgba(245,169,60,.18);color:#F5A93C;border:1px solid rgba(245,169,60,.34)'
+        : 'background:rgba(255,255,255,.06);color:#F2F6FA;border:1px solid rgba(255,255,255,.12)'
+    };
+  }
+}
+
+</script>
+</body>
+</html>

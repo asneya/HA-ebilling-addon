@@ -1,27 +1,36 @@
 /*
- * <vatia-flow> — el «caudal» en tiempo real.
+ * <vatia-flow> — el «caudal» en tiempo real, según el diseño «Flujo de energía v2».
  *
- * Sustituye al diagrama de nodos por un Sankey: el ancho de cada corriente es
- * su potencia, con los orígenes a la izquierda (sol, batería, red) y los
- * destinos a la derecha (casa, batería, red). Es la pieza central del rediseño
- * y la primera escrita como componente web: el estilo va encapsulado, no
- * depende de la página que lo aloje y sirve igual dentro del add-on que en una
- * app independiente.
+ * Sankey de dos columnas: a la izquierda lo que entra (sol, batería, red), a la
+ * derecha lo que se usa (casa, batería, red). Lo que el diseño pide portar
+ * literalmente es la geometría, y lo que la hace funcionar es una decisión que la
+ * versión anterior no tomaba: **la escala es px por kW de verdad**, no una
+ * normalización al alto de la banda. Antes 200 W y 5 kW se dibujaban con el
+ * mismo grosor —el diagrama solo decía proporciones— y ahora a las horas de poco
+ * caudal las cintas son finas de verdad, que es la mitad de la información.
+ *
+ * Se construye en píxeles CSS y no en un viewBox fijo: las medidas del diseño
+ * (14 px de nombre, 54 de barra, 40 de paso entre etiquetas) son píxeles, y con
+ * un viewBox de 976 escalado al ancho de la tarjeta la letra de 14 acababa
+ * dibujada a 10. Así cada número es el que pone el diseño.
+ *
+ * Dos orientaciones, con el corte que da el propio diseño en 600 px:
+ *   ≥ 600 px  columnas a los lados, tal cual la maqueta;
+ *   < 600 px  entradas arriba y salidas abajo, cintas giradas 90°, etiquetas
+ *             fuera de la zona de cintas. En el móvil el nombre no cabe en una
+ *             línea, así que el sufijo baja a la segunda con el valor: las
+ *             palabras del diseño se conservan, cambia dónde parte la línea.
  *
  * Uso:
- *   const flow = document.createElement('vatia-flow');
- *   flow.data = payload;            // el objeto de /api/live tal cual
+ *   flow.data = payload;              // el objeto de /api/live tal cual
+ *   flow.flows = { solar_home: … };   // o un reparto suelto (pantalla del día)
+ *   flow.meters = false;              // sin la fila de contadores del día
  *
  * Los colores salen de los tokens del tema por `var()`, que atraviesa la
  * frontera del shadow DOM: al cambiar de tema se repinta solo, sin JS.
  */
 (() => {
   "use strict";
-
-  // Geometría del prototipo (viewBox de 360 de ancho).
-  const W = 360, BAND_H = 132, TOP = 20, X0 = 86, X1 = 256, GAP = 10;
-  const MIN_W = 20;        // por debajo de 20 W no se dibuja la corriente
-  const MIN_TH = 3.5;      // grosor mínimo para que una corriente fina se vea
 
   // origen → destino, con la clave del flujo que lo alimenta en /api/live
   const STREAMS = [
@@ -34,14 +43,25 @@
   ];
   const SRC_ORDER = ["solar", "batt", "grid"];
   const DST_ORDER = ["home", "batt", "grid"];
-  // Nombres cortos: al lado del nodo solo cabe una palabra o dos. El detalle
-  // del día va en la fila de contadores, que tiene el ancho entero.
-  const SRC_NAME = { solar: "Sol", batt: "Batería", grid: "Red" };
-  const DST_NAME = { home: "Casa", batt: "Batería", grid: "A la red" };
+  // Los sufijos son parte del nombre: sin ellos «Batería» a la izquierda y
+  // «Batería» a la derecha son la misma palabra para dos cosas contrarias.
+  const SRC_NAME = { solar: "Sol", batt: "Batería · descarga", grid: "Red · compra" };
+  const DST_NAME = { home: "Casa", batt: "Batería · carga", grid: "Red · excedente" };
+  const SRC_SHORT = { solar: ["Sol", ""], batt: ["Batería", "descarga"], grid: ["Red", "compra"] };
+  const DST_SHORT = { home: ["Casa", ""], batt: ["Batería", "carga"], grid: ["Red", "excedente"] };
   // Un mismo nodo se pinta con el color de lo que representa en ese lado: la
   // red que entra es «importada» y la que sale, «exportada».
   const SRC_COLOR = { solar: "--s-solar", batt: "--s-batt", grid: "--s-grid" };
   const DST_COLOR = { home: "--s-home", batt: "--s-batt", grid: "--s-exp" };
+
+  const MIN_W = 20;        // por debajo de 20 W no se dibuja la corriente
+  const CORTE = 600;       // el corte del diseño entre columnas y filas
+  // Escala: fija mientras el caudal sea pequeño y normalizada a partir de ahí,
+  // para que el diagrama nunca desborde su presupuesto. El diseño lo da como
+  // `min(46, 250/total)`, es decir: 46 px/kW hasta 5,43 kW.
+  const KW_LLENO = 250 / 46;
+  const GAP = 14;          // separación entre segmentos de una misma columna
+  const PASO = 40;         // paso mínimo entre centros de etiqueta (antirreapilado)
 
   // Contadores del día, con el sentido en el nombre para que no haya que
   // adivinar si «Batería» es lo que ha entrado o lo que ha salido. La casa se
@@ -63,13 +83,44 @@
   // Por debajo del kilovatio los kW se quedan en «0,0» y parece que no pasa
   // nada, cuando sí pasa: ahí se enseñan vatios.
   const power = (w) => (w < 1000 ? `${nf0.format(w)} W` : `${nf1.format(w / 1000)} kW`);
+  const r1 = (v) => Math.round(v * 10) / 10;
+
+  /* Cuánto mide un texto, de verdad. Hace falta para colocar las etiquetas de la
+     versión estrecha: van una al lado de otra y hay que saber si chocan **antes**
+     de dibujarlas. Con una estimación por número de caracteres se colaban
+     solapes de unos pocos píxeles justo en los nombres largos, que son los que
+     importan. Un canvas mide con la misma fuente y sin tocar el DOM. */
+  let _ctx = null;
+  const FUENTE = `"Geist", ui-sans-serif, system-ui, sans-serif`;
+  function medir(texto, px, peso) {
+    if (!_ctx) {
+      const c = document.createElement("canvas");
+      _ctx = c.getContext("2d");
+    }
+    if (!_ctx) return texto.length * px * 0.56;
+    _ctx.font = `${peso} ${px}px ${FUENTE}`;
+    return _ctx.measureText(texto).width;
+  }
 
   const CSS = `
     :host { display: block; }
-    svg { width: 100%; display: block; }
-    .v { font-size: 16px; font-weight: 600; letter-spacing: -.02em;
-         font-variant-numeric: tabular-nums; fill: var(--ink); }
-    .n { font-size: 12px; fill: var(--ink-3); }
+    svg { width: 100%; display: block; overflow: visible; }
+    /* Nombre del nodo y su valor, con las medidas del diseño. */
+    .n { font-size: 14px; font-weight: 600; letter-spacing: -.01em; fill: var(--ink); }
+    .v { font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+    /* El valor dentro de la cinta, cuando la cinta da para leerlo. */
+    .dentro { font-size: 12px; font-weight: 600; fill: var(--sobre-cinta);
+              font-variant-numeric: tabular-nums; }
+    /* «Entra» / «Va a» y el pie con el caudal total. */
+    .rot { font-size: 10.5px; font-weight: 600; letter-spacing: .13em;
+           text-transform: uppercase; fill: var(--ink-3); }
+    .pie { font-size: 12px; fill: var(--ink-3); font-variant-numeric: tabular-nums; }
+    .guia { stroke-width: 1; stroke-opacity: .4; }
+    /* La alternativa textual del diagrama, que pide el diseño: un Sankey no se
+       puede resumir en una etiqueta, así que va la lista de pares con sus
+       vatios. Se lee con lector de pantalla y no se ve. */
+    .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+          overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
     .empty { margin: 0; padding: 22px 8px 24px; text-align: center; font-size: 14px;
              line-height: 1.5; color: var(--ink-3); }
     .empty b { color: var(--ink-2); font-weight: 600; }
@@ -81,37 +132,66 @@
     .meters i { width: 8px; height: 8px; border-radius: 3px; flex: none; }
     .meters b { color: var(--ink-2); font-weight: 600;
                 font-variant-numeric: tabular-nums; }
-    /* La línea de puntos que recorre cada corriente da el sentido del flujo.
-       Se define aquí dentro: las animaciones del documento no cruzan el shadow. */
-    @keyframes vf-dash { to { stroke-dashoffset: -28; } }
-    .stream { stroke: rgba(255,255,255,.85); stroke-linecap: round;
-              stroke-dasharray: 2 26; animation: vf-dash 2.6s linear infinite; }
+    /* Las partículas dan el sentido de la corriente. Se definen aquí dentro: las
+       animaciones del documento no cruzan la frontera del shadow DOM. */
+    @keyframes vf-dash { to { stroke-dashoffset: -320; } }
+    .stream { stroke: var(--particula); stroke-linecap: round;
+              stroke-dasharray: 2 26; opacity: .5;
+              animation: vf-dash 3.4s linear infinite; }
     @media (prefers-reduced-motion: reduce) { .stream { animation: none; } }
   `;
 
   class VatiaFlow extends HTMLElement {
-    set data(value) { this._data = value; this._render(); }
+    constructor() {
+      super();
+      this._meters = true;
+      this._ancho = 0;
+    }
+
+    set data(value) { this._data = value; this._flows = null; this._render(); }
     get data() { return this._data; }
+
+    /* Un reparto suelto, sin el resto del payload: es lo que necesita la
+       pantalla del día, que pinta un instante cualquiera del histórico. */
+    set flows(value) { this._flows = value; this._render(); }
+    set meters(value) { this._meters = value !== false; this._render(); }
 
     connectedCallback() {
       if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+      // La orientación depende del ancho, y el ancho de la ventana: hay que
+      // repintar al girar el teléfono o al pasar de móvil a tablet.
+      if (!this._ro && window.ResizeObserver) {
+        this._ro = new ResizeObserver(() => {
+          const w = Math.round(this.getBoundingClientRect().width);
+          // Solo si cambia de verdad: el observador dispara también al pintar.
+          if (w && Math.abs(w - this._ancho) >= 1) this._render();
+        });
+        this._ro.observe(this);
+      }
       this._render();
+    }
+
+    disconnectedCallback() {
+      if (this._ro) { this._ro.disconnect(); this._ro = null; }
     }
 
     _render() {
       if (!this.shadowRoot) return;
       const d = this._data;
-      if (!d) { this.shadowRoot.innerHTML = `<style>${CSS}</style>`; return; }
-      const flows = d.flows || {};
-      const meters = (d.energy && d.energy.meters) || {};
-      const soc = d.power ? d.power.battery_soc : null;
+      const flows = this._flows || (d && d.flows) || null;
+      if (!flows) { this.shadowRoot.innerHTML = `<style>${CSS}</style>`; return; }
+      const ancho = Math.round(this.getBoundingClientRect().width) || 360;
+      this._ancho = ancho;
+      const meters = (d && d.energy && d.energy.meters) || null;
+      const soc = d && d.power ? d.power.battery_soc : null;
       this.shadowRoot.innerHTML = `<style>${CSS}</style>
-        ${this._caudal(flows)}${this._meters(meters, soc)}`;
+        ${this._caudal(flows, ancho)}
+        ${this._meters && meters ? this._metersRow(meters, soc) : ""}`;
     }
 
     // Los contadores del día. Van fuera del SVG a propósito: con el ancho
     // entero se leen, y al lado de cada nodo no cabían sin recortarse.
-    _meters(meters, soc) {
+    _metersRow(meters, soc) {
       const items = METERS
         .filter((m) => m.always || (meters[m.key] || 0) > 0.005)
         .map((m) => `<li><i style="background:var(${m.color})"></i>${esc(m.name)}
@@ -123,95 +203,249 @@
       return `<ul class="meters">${items.join("")}</ul>`;
     }
 
-    _caudal(flows) {
-      // Las corrientes se recorren en el orden vertical de los nodos —origen
-      // primero, destino después— para que el haz se abra en abanico en vez de
-      // cruzarse consigo mismo.
+    /* ---- el reparto, común a las dos orientaciones ----
+       Cada columna apila sus segmentos con GAP entre ellos y se centra en el eje.
+       Después cada cinta toma su hueco dentro del segmento con un cursor: los
+       enlaces de un origen en el orden de los destinos y los de un destino en el
+       de los orígenes. Es lo que evita que el haz se cruce consigo mismo. */
+    _reparto(active, scale, mid) {
+      const segmentos = (lado, orden) => {
+        const tot = {};
+        active.forEach((l) => { tot[l[lado]] = (tot[l[lado]] || 0) + l.w; });
+        const list = orden.filter((k) => tot[k] > 0).map((k) => ({ k, w: tot[k] }));
+        const alto = list.reduce((a, s) => a + s.w * scale, 0) + GAP * Math.max(0, list.length - 1);
+        let b = mid - alto / 2;
+        list.forEach((s) => { s.b0 = b; s.b1 = b + s.w * scale; s.cur = s.b0; b = s.b1 + GAP; });
+        return list;
+      };
+      const src = segmentos("from", SRC_ORDER);
+      const dst = segmentos("to", DST_ORDER);
+      const buscar = (list, k) => list.find((s) => s.k === k);
+      SRC_ORDER.forEach((from) => DST_ORDER.forEach((to) => {
+        const l = active.find((x) => x.from === from && x.to === to);
+        if (!l) return;
+        const s = buscar(src, from);
+        l.sb0 = s.cur; s.cur += l.w * scale; l.sb1 = s.cur;
+      }));
+      DST_ORDER.forEach((to) => SRC_ORDER.forEach((from) => {
+        const l = active.find((x) => x.from === from && x.to === to);
+        if (!l) return;
+        const d = buscar(dst, to);
+        l.db0 = d.cur; d.cur += l.w * scale; l.db1 = d.cur;
+      }));
+      return { src, dst };
+    }
+
+    /* Antirreapilado del diseño: el bloque de etiqueta ocupa lo suyo, así que en
+       segmentos finos las etiquetas se solaparían. Se impone un paso mínimo
+       empujando hacia delante; si la última se sale del tope, se desplaza todo y
+       se reequilibra hacia atrás.
+       `pasos[i]` es la distancia mínima entre el centro i−1 y el i. En las
+       columnas es la constante del diseño (40 px, alto del bloque); en las filas
+       depende de lo que mide cada nombre, porque con un paso único los nombres
+       cortos se separaban de su barra sin necesidad. */
+    _centros(list, pasos, piso, tope) {
+      const c = list.map((s) => (s.b0 + s.b1) / 2);
+      for (let i = 1; i < c.length; i++) if (c[i] - c[i - 1] < pasos[i]) c[i] = c[i - 1] + pasos[i];
+      const sobra = c.length ? c[c.length - 1] - tope : 0;
+      if (sobra > 0) for (let i = 0; i < c.length; i++) c[i] -= sobra;
+      for (let i = c.length - 2; i >= 0; i--) if (c[i + 1] - c[i] < pasos[i + 1]) c[i] = c[i + 1] - pasos[i + 1];
+      // Y si tras todo eso la primera se sale por el otro lado, no cabe: se
+      // empuja el conjunto y se acepta el solape, que es mejor que salir del
+      // lienzo y desaparecer.
+      if (c.length && c[0] < piso) {
+        const falta = piso - c[0];
+        for (let i = 0; i < c.length; i++) c[i] += falta;
+      }
+      return c;
+    }
+
+    _caudal(flows, ancho) {
       const active = STREAMS
         .map((s) => ({ ...s, w: Math.max(0, flows[s.key] || 0) }))
-        .filter((s) => s.w >= MIN_W)
-        .sort((a, b) => SRC_ORDER.indexOf(a.from) - SRC_ORDER.indexOf(b.from) ||
-                        DST_ORDER.indexOf(a.to) - DST_ORDER.indexOf(b.to));
+        .filter((s) => s.w >= MIN_W);
+      if (!active.length) return `<p class="empty">Ahora mismo no circula nada.</p>`;
       const total = active.reduce((a, s) => a + s.w, 0);
-      if (!total) return `<p class="empty">Ahora mismo no circula nada.</p>`;
+      const svg = ancho >= CORTE
+        ? this._horizontal(active, total, ancho)
+        : this._vertical(active, total, ancho);
+      return svg + this._lista(active, total);
+    }
 
-      // Altura de cada nodo, proporcional a lo que pasa por él, y su posición
-      // apilada. Las dos columnas se centran entre sí para que el haz quede
-      // equilibrado aunque una tenga menos nodos.
-      const srcTot = {}, dstTot = {};
-      active.forEach((s) => {
-        srcTot[s.from] = (srcTot[s.from] || 0) + s.w;
-        dstTot[s.to] = (dstTot[s.to] || 0) + s.w;
-      });
-      const stack = (order, totals) => {
-        const top = {}; let y = TOP;
-        order.forEach((k) => {
-          if (!totals[k]) return;
-          top[k] = y;
-          y += (totals[k] / total) * BAND_H + GAP;
-        });
-        return { top, end: y - GAP };
-      };
-      const src = stack(SRC_ORDER, srcTot), dst = stack(DST_ORDER, dstTot);
-      const tallest = Math.max(src.end, dst.end);
-      const shift = (col, order, totals) => {
-        const off = (tallest - col.end) / 2;
-        order.forEach((k) => { if (totals[k]) col.top[k] += off; });
-      };
-      shift(src, SRC_ORDER, srcTot);
-      shift(dst, DST_ORDER, dstTot);
+    /* El diagrama en palabras: un par origen→destino por línea, dicho como se
+       diría en voz alta y no como una tabla de claves. */
+    _lista(active, total) {
+      const DE = { solar: "Del sol", batt: "De la batería", grid: "De la red" };
+      const A = { home: "a la casa", batt: "a la batería", grid: "a la red" };
+      const filas = active.map((s) =>
+        `<li>${DE[s.from]} ${A[s.to]}: ${esc(power(s.w))}</li>`);
+      return `<ul class="sr">${filas.join("")}
+        <li>Caudal total: ${esc(power(total))}</li></ul>`;
+    }
 
-      const cur = { src: { ...src.top }, dst: { ...dst.top } };
-      const defs = [], bands = [], lines = [], bars = [], labels = [];
-      const c1 = X0 + 76, c2 = X1 - 76;
-
-      active.forEach((s, i) => {
-        const th = Math.max(MIN_TH, (s.w / total) * BAND_H);
-        const y0 = cur.src[s.from], y1 = cur.dst[s.to];
-        cur.src[s.from] += th; cur.dst[s.to] += th;
+    /* Las cintas y las barras, en coordenadas abstractas (a = a lo largo del
+       flujo, b = a lo ancho). Las dos orientaciones comparten esto entero: solo
+       cambia cómo se proyecta (a, b) en (x, y). */
+    _piezas(active, { A1, A2, AC, proj, dentro }) {
+      const P = (a, b) => proj(a, b);
+      const defs = [], bands = [], dots = [], valores = [];
+      active.forEach((l, i) => {
         const id = `vf${i}`;
+        const th = l.sb1 - l.sb0;
         defs.push(
-          `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0">
-             <stop offset="0" style="stop-color:var(${SRC_COLOR[s.from]})" stop-opacity=".85"/>
-             <stop offset="1" style="stop-color:var(${DST_COLOR[s.to]})" stop-opacity=".85"/>
+          `<linearGradient id="${id}" gradientUnits="userSpaceOnUse"
+             x1="${P(A1, 0).split(",")[0]}" y1="${P(A1, 0).split(",")[1]}"
+             x2="${P(A2, 0).split(",")[0]}" y2="${P(A2, 0).split(",")[1]}">
+             <stop offset="0" style="stop-color:var(${SRC_COLOR[l.from]})" stop-opacity=".72"/>
+             <stop offset="1" style="stop-color:var(${DST_COLOR[l.to]})" stop-opacity=".5"/>
            </linearGradient>`);
         bands.push(
-          `<path fill="url(#${id})" d="M${X0} ${y0} C${c1} ${y0},${c2} ${y1},${X1} ${y1}
-             L${X1} ${y1 + th} C${c2} ${y1 + th},${c1} ${y0 + th},${X0} ${y0 + th} Z"/>`);
-        // Cuanto más potencia lleva la corriente, más rápido corre su línea.
-        const speed = (2.6 - Math.min(1.3, s.w / 3000)).toFixed(2);
-        lines.push(
-          `<path class="stream" fill="none" stroke-width="${Math.min(2, th * 0.22).toFixed(2)}"
-             style="animation-duration:${speed}s"
-             d="M${X0} ${y0 + th / 2} C${c1} ${y0 + th / 2},${c2} ${y1 + th / 2},${X1} ${y1 + th / 2}"/>`);
+          `<path fill="url(#${id})" d="M${P(A1, l.sb0)} C${P(AC, l.sb0)} ${P(AC, l.db0)} ${P(A2, l.db0)}
+             L${P(A2, l.db1)} C${P(AC, l.db1)} ${P(AC, l.sb1)} ${P(A1, l.sb1)} Z"/>`);
+        // Una línea central por cinta, si la cinta da para verla.
+        if (th > 5) {
+          const m0 = (l.sb0 + l.sb1) / 2, m1 = (l.db0 + l.db1) / 2;
+          dots.push(
+            `<path class="stream" fill="none" stroke-width="${Math.min(3.4, th * 0.26).toFixed(2)}"
+               d="M${P(A1, m0)} C${P(AC, m0)} ${P(AC, m1)} ${P(A2, m1)}"/>`);
+        }
+        // El valor dentro de la cinta, solo si cabe sin tocar los bordes.
+        if (dentro && th >= 17) {
+          const b = (l.sb0 + l.sb1 + l.db0 + l.db1) / 4;
+          valores.push(`<text class="dentro" text-anchor="middle"
+            x="${P(AC, b).split(",")[0]}" y="${Number(P(AC, b).split(",")[1]) + 4}">${
+            esc(power(l.w))}</text>`);
+        }
       });
+      return { defs, bands, dots, valores };
+    }
 
-      let base = 0;
-      const side = (order, totals, col, colorMap, nameMap, isSrc) => {
-        order.forEach((k) => {
-          if (!totals[k]) return;
-          const hgt = (totals[k] / total) * BAND_H;
-          const ty = col.top[k] + hgt / 2;
-          base = Math.max(base, ty + 16);
-          bars.push(`<rect x="${isSrc ? X0 - 9 : X1 + 3}" y="${col.top[k].toFixed(1)}" width="6"
-            height="${Math.max(4, hgt).toFixed(1)}" rx="3" style="fill:var(${colorMap[k]})"/>`);
-          const tx = isSrc ? 68 : 274;
-          const anchor = isSrc ? ' text-anchor="end"' : "";
-          labels.push(
-            `<text class="v" x="${tx}" y="${(ty - 1).toFixed(1)}"${anchor}>${
-              esc(power(totals[k]))}</text>
-             <text class="n" x="${tx}" y="${(ty + 14).toFixed(1)}"${anchor}>${
-              esc(nameMap[k])}</text>`);
+    /* Las barras de una columna, entre sus dos bordes del eje del flujo. Alto
+       mínimo de 3 px: un segmento muy fino tiene que verse igual. */
+    _barras(list, { a0, a1, proj, colores }) {
+      return list.map((s) => {
+        const [x, y] = proj(a0, s.b0).split(",").map(Number);
+        const [x2, y2] = proj(a1, s.b1).split(",").map(Number);
+        const w = Math.max(Math.abs(x2 - x), 3), h = Math.max(Math.abs(y2 - y), 3);
+        return `<rect x="${r1(Math.min(x, x2))}" y="${r1(Math.min(y, y2))}"
+          width="${r1(w)}" height="${r1(h)}" rx="8" style="fill:var(${colores[s.k]})"/>`;
+      }).join("");
+    }
+
+    /* ---- ≥ 600 px: las columnas a los lados, como la maqueta ---- */
+    _horizontal(active, total, ancho) {
+      const ALTO = 352, MID = 176, BW = 54, TOPE = 322, PIE = 340;
+      // El hueco para las etiquetas es lo que necesita el nombre más largo a
+      // 14 px («Batería · descarga»); el resto es zona de cintas.
+      const ETIQ = 150;
+      const A1 = ETIQ + BW, A2 = ancho - ETIQ - BW, AC = (A1 + A2) / 2;
+      const scale = Math.min(250 / KW_LLENO, 250 / Math.max(1.2, total / 1000)) / 1000;
+      const { src, dst } = this._reparto(active, scale, MID);
+      const proj = (a, b) => `${r1(a)},${r1(b)}`;
+      const { defs, bands, dots, valores } = this._piezas(active, { A1, A2, AC, proj, dentro: true });
+
+      const labels = [];
+      const lado = (list, izq) => {
+        const barra = izq ? A1 : A2 + BW;      // borde exterior de la barra
+        const tx = izq ? barra - BW - 16 : barra + 16;
+        const anchor = izq ? "end" : "start";
+        const centros = this._centros(list, list.map(() => PASO), 38, TOPE);
+        list.forEach((s, i) => {
+          const cy = centros[i], real = (s.b0 + s.b1) / 2;
+          // Si la etiqueta se ha tenido que separar de su barra, una guía dice
+          // de quién es: sin ella, el nombre parece de la barra de al lado.
+          if (Math.abs(cy - real) > 6) {
+            const ex = izq ? tx + 6 : tx - 6;
+            labels.push(`<line class="guia" x1="${r1(ex)}" y1="${r1(cy - 4)}"
+              x2="${r1(izq ? A1 : A2)}" y2="${r1(real)}"
+              style="stroke:var(${(izq ? SRC_COLOR : DST_COLOR)[s.k]})"/>`);
+          }
+          labels.push(`<text class="n" x="${r1(tx)}" y="${r1(cy - 4)}" text-anchor="${anchor}">${
+            esc((izq ? SRC_NAME : DST_NAME)[s.k])}</text>
+            <text class="v" x="${r1(tx)}" y="${r1(cy + 14)}" text-anchor="${anchor}"
+              style="fill:var(${(izq ? SRC_COLOR : DST_COLOR)[s.k]})">${esc(power(s.w))}</text>`);
         });
       };
-      side(SRC_ORDER, srcTot, src, SRC_COLOR, SRC_NAME, true);
-      side(DST_ORDER, dstTot, dst, DST_COLOR, DST_NAME, false);
+      lado(src, true);
+      lado(dst, false);
 
-      const height = Math.max(tallest, base + 6, 150);
-      return `<svg viewBox="0 0 ${W} ${height.toFixed(0)}" role="img"
+      return `<svg viewBox="0 0 ${ancho} ${ALTO}" role="img"
              aria-label="Caudal de energía en tiempo real">
           <defs>${defs.join("")}</defs>
-          ${bands.join("")}${lines.join("")}${bars.join("")}${labels.join("")}
+          <text class="rot" x="2" y="20" text-anchor="start">Entra</text>
+          <text class="rot" x="${ancho - 2}" y="20" text-anchor="end">Va a</text>
+          <g>${bands.join("")}</g><g>${dots.join("")}</g>
+          <g>${this._barras(src, { a0: A1 - BW, a1: A1, proj, colores: SRC_COLOR })}${
+                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: DST_COLOR })}</g>
+          <g>${labels.join("")}${valores.join("")}</g>
+          <text class="pie" x="${r1(AC)}" y="${PIE}" text-anchor="middle">Caudal total ${
+            esc(power(total))}</text>
+        </svg>`;
+    }
+
+    /* ---- < 600 px: entradas arriba, salidas abajo ----
+       El diseño deja el móvil a nuestro cargo y dice cómo: las dos columnas
+       pasan a filas y las cintas giran 90°. Las etiquetas van fuera de la zona
+       de cintas —arriba las de entrada, abajo las de salida— y en dos líneas,
+       porque «Batería · descarga» a 14 px no cabe en un tercio de un teléfono. */
+    _vertical(active, total, ancho) {
+      const MARGEN = 4, BW = 34, TRAMO = 132, ETIQ = 38, PIE = 20;
+      const A1 = ETIQ + BW;                 // borde inferior de la fila de entrada
+      const A2 = A1 + TRAMO;                // borde superior de la fila de salida
+      const AC = (A1 + A2) / 2;
+      const ALTO = A2 + BW + ETIQ + PIE;
+      const MID = ancho / 2;
+      // El presupuesto se calcula con **tres** segmentos siempre, aunque ahora
+      // haya uno: si dependiera de los que hay, la escala daría un salto al
+      // aparecer una corriente y el diagrama parecería cambiar de unidades.
+      const budget = Math.max(60, ancho - 2 * MARGEN - 2 * GAP);
+      const scale = Math.min(budget / KW_LLENO, budget / Math.max(1.2, total / 1000)) / 1000;
+      const { src, dst } = this._reparto(active, scale, MID);
+      const proj = (a, b) => `${r1(b)},${r1(a)}`;
+      // Dentro de una cinta vertical de 34 px de ancho no cabe el valor con
+      // holgura: el número va en la etiqueta, que aquí está al lado.
+      const { defs, bands, dots } = this._piezas(active, { A1, A2, AC, proj, dentro: false });
+
+      const labels = [];
+      const fila = (list, arriba) => {
+        const y = arriba ? ETIQ - 20 : A2 + BW + 16;
+        // Dos líneas por etiqueta: el nombre y, debajo, el sufijo con el valor.
+        const textos = list.map((s) => {
+          const [nombre, sufijo] = (arriba ? SRC_SHORT : DST_SHORT)[s.k];
+          return [nombre, sufijo ? `${sufijo} · ${power(s.w)}` : power(s.w)];
+        });
+        // Media anchura de cada bloque, medida, más 5 px de aire a cada lado.
+        const medios = textos.map(([n, v]) =>
+          Math.max(medir(n, 14, 600), medir(v, 12.5, 500)) / 2 + 5);
+        const pasos = medios.map((m, i) => (i ? medios[i - 1] + m : 0));
+        const centros = this._centros(list, pasos, medios[0], ancho - medios[medios.length - 1]);
+        list.forEach((s, i) => {
+          const cx = centros[i], real = (s.b0 + s.b1) / 2;
+          const [nombre, valor] = textos[i];
+          const color = (arriba ? SRC_COLOR : DST_COLOR)[s.k];
+          if (Math.abs(cx - real) > 6) {
+            labels.push(`<line class="guia" x1="${r1(cx)}" y1="${r1(arriba ? y + 4 : y - 12)}"
+              x2="${r1(real)}" y2="${r1(arriba ? A1 - BW : A2 + BW)}"
+              style="stroke:var(${color})"/>`);
+          }
+          labels.push(`<text class="n" x="${r1(cx)}" y="${y}" text-anchor="middle">${
+            esc(nombre)}</text>
+            <text class="v" x="${r1(cx)}" y="${y + 15}" text-anchor="middle"
+              style="fill:var(${color})">${esc(valor)}</text>`);
+        });
+      };
+      fila(src, true);
+      fila(dst, false);
+
+      return `<svg viewBox="0 0 ${ancho} ${ALTO}" role="img"
+             aria-label="Caudal de energía en tiempo real">
+          <defs>${defs.join("")}</defs>
+          <g>${bands.join("")}</g><g>${dots.join("")}</g>
+          <g>${this._barras(src, { a0: A1 - BW, a1: A1, proj, colores: SRC_COLOR })}${
+                this._barras(dst, { a0: A2, a1: A2 + BW, proj, colores: DST_COLOR })}</g>
+          <g>${labels.join("")}</g>
+          <text class="pie" x="${r1(MID)}" y="${ALTO - 4}" text-anchor="middle">Caudal total ${
+            esc(power(total))}</text>
         </svg>`;
     }
   }

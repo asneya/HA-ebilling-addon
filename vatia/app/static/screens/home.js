@@ -8,6 +8,7 @@ import { on } from "../core/bus.js";
 import { fmtNum, fmtTemp } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
+import { estado, titular } from "../core/flujo.js";
 
 /* Lo último que ha contado el servidor. Vive aquí y no en un estado global: no
    lo necesita ninguna otra pantalla. */
@@ -113,13 +114,14 @@ function renderLive() {
   $("#window").data = closing ? null : live.window || null;
   $("#window-panel").classList.toggle("hidden", closing || !live.window);
 
-  // El pie de la banda del caudal, como la maqueta: lo que está pasando con la
-  // red ahora mismo, que es la pregunta que la persona tiene en la cabeza.
+  // Los tres estados del flujo v2, con sus palabras: es la pregunta que la
+  // persona tiene en la cabeza y se contesta antes de mirar el diagrama.
   const f = live.flows || {};
-  const exportando = (f.solar_grid || 0) > 20;
-  const importando = (f.grid_home || 0) + (f.grid_battery || 0) > 20;
-  $("#flow-chip").textContent = exportando ? "Exportando a la red"
-    : importando ? "Comprando a la red" : "Sin tocar la red";
+  const est = estado(f);
+  $("#flow-chip").textContent = est.texto;
+  $("#flow-chip").dataset.estado = est.clave;
+  // Y el titular, que dice en prosa lo mismo que el Sankey dice en geometría.
+  $("#flow-headline").textContent = live.configured ? titular(f, null) : "";
 
   // Flujo
   const configured = live.configured;
@@ -228,6 +230,14 @@ function openEnergy() { showView("energy"); }
 $("#summary-panel").addEventListener("click", openEnergy);
 $("#summary-panel").addEventListener("keydown", (e) => {
   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEnergy(); }
+});
+
+/* Y el caudal, al día entero: el diagrama contesta «qué pasa ahora», y la
+   pregunta que viene detrás —«¿y antes?»— la contesta la pantalla del flujo. */
+function openFlow() { if (live && live.configured) showView("flow"); }
+$("#flow-panel").addEventListener("click", openFlow);
+$("#flow-panel").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFlow(); }
 });
 
 /* ------------- lo que la Home escucha ------------- */

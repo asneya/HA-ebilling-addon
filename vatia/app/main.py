@@ -439,6 +439,21 @@ async def get_live():
         raise HTTPException(502, f"No se pudo leer el estado de Home Assistant: {err}") from err
 
 
+@app.get("/api/flowday")
+async def get_flow_day():
+    """El día entero del flujo de energía, para recorrerlo hora a hora."""
+    config = storage.load()
+    settings = config["settings"]
+    tz = _tz(settings)
+    try:
+        return await live.flow_day(settings, datetime.now(tz), config["tariffs"])
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error construyendo el flujo del día", exc_info=True)
+        raise HTTPException(502, f"No se pudo obtener el flujo del día: {err}") from err
+
+
 @app.get("/api/diagnostics")
 async def get_diagnostics():
     """Balance de energía del día, sensor a sensor, para Ajustes."""

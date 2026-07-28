@@ -74,11 +74,16 @@
       <!-- «Ahora mismo», siempre lo primero. Es la maqueta —el caudal va pegado
            a la cabecera— y es lo que se viene a mirar: nada de lo que hay debajo
            puede empujarlo hacia abajo, ni el cierre del día ni la ventana. -->
-      <section class="panel glass">
+      <section class="panel glass tappable" id="flow-panel" role="button" tabindex="0"
+               aria-label="Ver el flujo de energía del día">
         <div class="band-head">
           <span class="band-live"><i class="pulse" aria-hidden="true"></i>Ahora mismo</span>
-          <span class="band-caption" id="flow-chip">—</span>
+          <span class="state-pill" id="flow-chip">—</span>
+          <span class="disclosure">›</span>
         </div>
+        <!-- El titular dice en prosa lo que el diagrama dice en geometría. Es
+             región `aria-live`: para quien no ve el Sankey, es *la* lectura. -->
+        <p class="flow-head" id="flow-headline" aria-live="polite"></p>
         <div id="flow" class="flow"></div>
         <p class="empty hidden" id="flow-empty">
           Asigna tus sensores de potencia en <b>Ajustes → Flujo de energía</b>
@@ -122,6 +127,99 @@
           Asigna tus sensores de energía diaria en <b>Ajustes → Energía del día</b>.
         </p>
       </section>
+    </section>
+
+    <!-- ============ FLUJO DE ENERGÍA (el día, hora a hora) ============
+         Pantalla empujada, no una pestaña: se llega tocando «Ahora mismo» y se
+         vuelve con el botón de la cabecera, así que la pestaña Inicio sigue
+         encendida mientras se está aquí. -->
+    <section class="view" id="view-flow">
+      <header class="nav-head">
+        <button class="icon-btn" id="flow-back" aria-label="Volver a Inicio">‹</button>
+        <h1 class="nav-title">Flujo de energía</h1>
+      </header>
+
+      <div class="panel glass f-controls">
+        <div class="f-chips" role="group" aria-label="Momento del día">
+          <button class="f-chip" data-hour="now">Ahora</button>
+          <button class="f-chip" data-hour="8.4">Amanecer</button>
+          <button class="f-chip" data-hour="13.2">Mediodía</button>
+          <button class="f-chip" data-hour="19.6">Tarde</button>
+          <button class="f-chip" data-hour="23.2">Noche</button>
+        </div>
+        <button class="f-play" id="f-play" aria-live="off">
+          <span class="f-play-ico" aria-hidden="true">▶</span><span id="f-play-txt">Ver el día entero</span>
+        </button>
+      </div>
+
+      <div id="f-error" class="banner error hidden"></div>
+
+      <section class="panel glass" id="f-card">
+        <div class="f-head">
+          <div>
+            <div class="f-clock" id="f-clock">Ahora · --:--</div>
+            <p class="f-headline" id="f-headline" aria-live="polite"></p>
+          </div>
+          <span class="state-pill" id="f-state">—</span>
+        </div>
+
+        <vatia-skeleton id="f-skel" class="hidden"></vatia-skeleton>
+        <div id="f-flow" class="flow"></div>
+
+        <div class="f-strip">
+          <div class="f-strip-head">
+            <span>El día completo</span>
+            <span class="f-strip-sub">Sol producido · casa consumida</span>
+          </div>
+          <div id="f-daystrip"></div>
+          <div class="f-slider">
+            <span class="f-tick">00</span>
+            <input type="range" id="f-hour" min="0" max="23.9" step="0.1" value="12"
+                   aria-label="Hora del día">
+            <span class="f-tick">24</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="f-metrics">
+        <div class="panel f-self">
+          <div class="f-label f-label-amber">Autoconsumo ahora</div>
+          <div class="f-big" id="f-self">—</div>
+          <div class="f-foot" id="f-self-note">de lo que gasta la casa lo pones tú</div>
+        </div>
+
+        <div class="f-pair">
+          <div class="panel f-small">
+            <div class="f-label">Batería</div>
+            <div class="f-mid f-mid-batt" id="f-soc">—</div>
+            <div class="f-note" id="f-soc-note">—</div>
+          </div>
+          <div class="panel f-small">
+            <div class="f-label" id="f-grid-title">De la red</div>
+            <div class="f-mid" id="f-grid">—</div>
+            <div class="f-note" id="f-grid-note">—</div>
+          </div>
+        </div>
+
+        <div class="panel f-cost">
+          <div class="f-cost-head">
+            <span class="f-label">Coste de este instante</span>
+            <span class="f-price" id="f-price">—</span>
+          </div>
+          <div class="f-cost-row">
+            <span class="f-mid f-cost-val" id="f-cost">—</span><span class="f-per">/hora</span>
+          </div>
+          <p class="f-note f-cost-note" id="f-cost-note"></p>
+        </div>
+
+        <div class="panel f-legend">
+          <div class="f-label">Leyenda</div>
+          <div class="f-leg"><i style="background:var(--s-solar)"></i>Sol · lo que producen las placas</div>
+          <div class="f-leg"><i style="background:var(--s-batt)"></i>Batería · carga y descarga</div>
+          <div class="f-leg"><i style="background:var(--s-grid)"></i>Red · compra y excedentes</div>
+          <div class="f-leg"><i style="background:var(--s-home)"></i>Casa · el consumo real</div>
+        </div>
+      </div>
     </section>
 
     <!-- ===================== ENERGÍA (detalle) ===================== -->
