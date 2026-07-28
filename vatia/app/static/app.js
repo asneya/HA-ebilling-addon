@@ -21,6 +21,7 @@ import "./core/theme.js";
 import { loadLive } from "./screens/home.js";
 import "./screens/flow.js";
 import "./screens/energy.js";
+import "./screens/appliances.js";
 import { loadSimulation } from "./screens/billing.js";
 import { detailVisible, loadDetail } from "./screens/detail.js";
 import "./screens/tariffs.js";

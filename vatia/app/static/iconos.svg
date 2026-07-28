@@ -1,6 +1,7 @@
 <!--
-  Set de iconos de Vatia: 42 glifos, trazo de 1,75, remate redondo y caja
-  de 24, extraídos del documento de sistema del diseño.
+  Set de iconos de Vatia: 46 glifos, trazo de 1,75, remate
+  redondo y caja de 24, extraídos del diseño: los 42 del documento de
+  sistema y los 4 de electrodoméstico de las filas del prototipo.
 
   Ninguno lleva relleno, degradado ni color fijo: el color entra por
   `stroke: currentColor` desde el CSS, así que el mismo glifo sirve en
@@ -51,4 +52,8 @@
   <symbol id="i-contador" viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 13l3.6-3.2"/><path d="M5.6 6.4 7.4 8M18.4 6.4 16.6 8"/></symbol>
   <symbol id="i-refrescar" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.6v4.2h-4.2"/></symbol>
   <symbol id="i-ajustar" viewBox="0 0 24 24"><path d="M6 4.6v14.8M6 4.6 3.6 8M6 4.6 8.4 8"/><path d="M15.6 19.4V4.6M15.6 19.4 13.2 16M15.6 19.4 18 16"/></symbol>
+  <symbol id="i-lavadora" viewBox="0 0 24 24"><circle cx="12" cy="13" r="6.4"></circle><circle cx="12" cy="13" r="2.4"></circle><path d="M5.6 5.4h12.8"></path></symbol>
+  <symbol id="i-coche" viewBox="0 0 24 24"><rect x="3.4" y="7.4" width="14" height="9.2" rx="2.4"></rect><path d="M20.6 11v2"></path><path d="M6.6 12h5"></path></symbol>
+  <symbol id="i-lavavajillas" viewBox="0 0 24 24"><rect x="4.4" y="4.4" width="15.2" height="15.2" rx="2.6"></rect><path d="M8 8.4h8"></path><circle cx="12" cy="14" r="3.2"></circle></symbol>
+  <symbol id="i-horno" viewBox="0 0 24 24"><path d="M4.4 18.6V9.4l7.6-5 7.6 5v9.2"></path><path d="M9.4 18.6v-5h5.2v5"></path></symbol>
 </svg>

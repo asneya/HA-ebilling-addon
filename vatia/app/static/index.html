@@ -114,6 +114,20 @@
         <vatia-window id="window"></vatia-window>
       </section>
 
+      <!-- «Cabe en la ventana»: qué de lo que hay en casa entra gratis en el
+           tramo que queda. Va justo debajo de la ventana, que es lo que la hace
+           una respuesta y no una lista: primero cuánto sobra, luego qué hacer
+           con ello. En el light DOM y no en un componente porque necesita los
+           iconos del sprite, y `<use href="#…">` no cruza el shadow DOM. -->
+      <section class="panel glass hidden" id="advice-panel">
+        <div class="ad-head">
+          <span class="ad-title" id="ad-title">Cabe en la ventana</span>
+          <span class="ad-aside" id="ad-aside"></span>
+        </div>
+        <div class="ad-rows" id="ad-rows"></div>
+        <p class="ad-note" id="ad-note"></p>
+      </section>
+
       <section class="panel glass tappable" id="summary-panel" role="button" tabindex="0"
                aria-label="Ver el detalle de energía">
         <div class="panel-head">
@@ -484,6 +498,14 @@
               <svg class="i"><use href="#i-potencia"/></svg>
             </span>
             <span class="nav-txt"><b>Sensores</b><small id="nav-sub-sensors">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
+          <button class="nav-row" data-settings-page="appliances">
+            <span class="nav-ico" style="--ico:#0f7d8a">
+              <svg class="i"><use href="#i-lavadora"/></svg>
+            </span>
+            <span class="nav-txt"><b>Electrodomésticos</b>
+              <small id="nav-sub-appliances">—</small></span>
             <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
           <button class="nav-row" data-settings-page="forecast">
@@ -909,6 +931,36 @@
       </div>
       </div>
 
+      <!-- ---- nivel 2: electrodomésticos ---- -->
+      <div class="settings-page" id="sp-appliances">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Electrodomésticos</h1>
+          <span class="nav-count" id="ap-count">—</span>
+        </header>
+
+        <div class="panel glass group">
+          <div class="group-head">Lo que se mide dentro de casa</div>
+          <div class="li">
+            <div class="spacer"></div>
+            <button id="add-appliance-btn" class="btn primary">Añadir uno</button>
+          </div>
+          <div class="li col"><div id="ap-list" class="ap-list"></div></div>
+          <p class="li-note">
+            Cada uno es un <b>enchufe con nombre</b>: su sensor de potencia dice
+            lo que está haciendo ahora y del histórico se aprende cuánto dura y
+            cuánto gasta un ciclo suyo. Con eso la Home puede decirte si te cabe
+            en la ventana de energía gratis, y el diagrama detallado parte el
+            consumo de la casa por dentro.
+          </p>
+          <p class="li-note">
+            <b>No hay que teclear ninguna duración.</b> Hacen falta unos días de
+            histórico —dos ciclos como mínimo— y hasta entonces la fila dice que
+            está aprendiendo, en vez de dar un número a ojo.
+          </p>
+        </div>
+      </div>
+
       <!-- ---- nivel 2: contrato y ciclo ---- -->
       <div class="settings-page" id="sp-contract">
         <header class="nav-head">
@@ -1125,6 +1177,51 @@
       </div>
       <div class="sheet-body">
         <vatia-schedule id="grid-editor"></vatia-schedule>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor de electrodoméstico. Cinco campos y ninguno de ellos una duración:
+       el ciclo se aprende del histórico, así que aquí solo se dice qué sensores
+       lo miden y por encima de cuántos vatios se considera que está en marcha. -->
+  <div id="appliance-modal" class="modal hidden">
+    <div class="sheet glass tall">
+      <span class="sheet-grip" aria-hidden="true"></span>
+      <div class="sheet-bar">
+        <button class="sheet-act" id="cancel-appliance-btn">Cancelar</button>
+        <h3 id="appliance-modal-title">Nuevo electrodoméstico</h3>
+        <button class="sheet-act strong" id="save-appliance-btn">Guardar</button>
+      </div>
+      <div class="sheet-body">
+        <span id="ap-error" class="error-text block"></span>
+        <div class="list">
+          <label class="li"><span class="li-label">Nombre</span>
+            <input id="ap-name" placeholder="Lavadora" maxlength="40"></label>
+          <div class="li col">
+            <span class="li-label">Icono</span>
+            <div class="ap-icons" id="ap-icons" role="group" aria-label="Icono"></div>
+          </div>
+          <div class="li col">
+            <span class="li-label">Color</span>
+            <div class="ap-colors" id="ap-colors" role="group" aria-label="Color"></div>
+          </div>
+          <label class="li col"><span class="li-label">Sensor de potencia (W)</span>
+            <select id="ap-power"></select></label>
+          <p class="li-note">Es el importante: sin él no hay ciclo que aprender
+            ni sitio en el diagrama.</p>
+          <label class="li col"><span class="li-label">Sensor de energía (kWh)</span>
+            <select id="ap-energy"></select></label>
+          <p class="li-note">Opcional · el gasto del día también se puede sacar
+            integrando la potencia.</p>
+          <label class="li"><span class="li-label">En marcha por encima de</span>
+            <span class="unit-field"><input id="ap-standby" type="number" min="0" max="5000"
+              step="1" inputmode="numeric"><span class="unit">W</span></span></label>
+          <p class="li-note">Un aparato enchufado consume dos o tres vatios todo
+            el día y eso no es estar funcionando. 15 W vale para casi todo.</p>
+        </div>
+        <div class="list">
+          <button class="btn danger-soft block" id="delete-appliance-btn">Quitar este electrodoméstico</button>
+        </div>
       </div>
     </div>
   </div>

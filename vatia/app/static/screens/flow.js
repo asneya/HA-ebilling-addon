@@ -126,6 +126,12 @@ function pintar() {
   $("#f-state").dataset.estado = est.clave;
   $("#f-headline").textContent = titular(flows, precio);
 
+  // La casa partida por dentro: es aquí y no en la Home donde tiene sitio, que
+  // es lo que se pidió — «en el flujo, aunque quizás solo en su versión
+  // detallada». En la tarjeta de la Home la casa sigue siendo un nodo.
+  diagrama().split = (d.appliances || [])
+    .map((a) => ({ id: a.id, name: a.name, color: a.color, watts: a.watts[i] }))
+    .filter((a) => a.watts != null);
   diagrama().flows = flows;
 
   metricas(flows, d.soc ? d.soc[i] : null, precio, precioExc);

@@ -15,6 +15,7 @@ from typing import Any
 
 import aiohttp
 
+import appliances as appliances_mod
 import billing
 import datasources
 import pvpc
@@ -933,6 +934,8 @@ def day_close(
     window: dict[str, Any] | None,
     now: datetime,
     savings: dict[str, Any] | None = None,
+    appliance_list: list[dict[str, Any]] | None = None,
+    aprendido: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """El cierre del día, al anochecer. ``None`` mientras haya sol.
 
@@ -992,6 +995,9 @@ def day_close(
         "self_pct": self_pct,
         "in_window": in_window,
         "saved": savings,
+        "appliances": appliances_mod.del_cierre(
+            appliance_list or [], aprendido or {}, window
+        ),
         "tomorrow": (window or {}).get("tomorrow"),
     }
 
@@ -1000,6 +1006,7 @@ async def build(
     settings: dict[str, Any],
     now: datetime,
     tariffs: list[dict[str, Any]] | None = None,
+    appliance_list: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Payload de /api/live."""
     flow_cfg = settings.get("flow_sensors") or {}
@@ -1045,6 +1052,24 @@ async def build(
     if sunset is not None and now >= sunset:
         savings = await day_savings(settings, tariffs, buckets, now.tzinfo, now)
 
+    # Electrodomésticos. Lo que hacen ahora sale del estado que ya está aquí y no
+    # cuesta nada; el ciclo típico viene del histórico y se guarda media hora,
+    # igual que el perfil de la casa, para que este endpoint siga siendo rápido.
+    aparatos = appliance_list or []
+    ahora_aparatos = appliances_mod.instantaneo(states, aparatos)
+    aprendido: dict[str, dict[str, Any]] = {}
+    consejo = None
+    if aparatos:
+        aprendido = await appliances_mod.learn(settings, states, aparatos, now.tzinfo, now)
+        consejo = appliances_mod.advice(
+            aparatos, aprendido, window, now,
+            _precio_tras_ventana(settings, tariffs, window, now),
+        )
+        for fila in ahora_aparatos:
+            datos = aprendido.get(fila["id"]) or {}
+            fila["cycle"] = datos.get("cycle")
+            fila["today_kwh"] = datos.get("today_kwh")
+
     return {
         "configured": configured,
         "power": {
@@ -1060,15 +1085,49 @@ async def build(
         "weather": _weather(states, settings),
         "phase": _day_phase(states, now),
         "window": window,
-        "close": day_close(states, energy_summary, buckets, window, now, savings),
+        "appliances": ahora_aparatos,
+        "advice": consejo,
+        "close": day_close(
+            states, energy_summary, buckets, window, now, savings, aparatos, aprendido
+        ),
         "generated_at": now.isoformat(),
     }
+
+
+def _precio_tras_ventana(
+    settings: dict[str, Any],
+    tariffs: list[dict[str, Any]] | None,
+    window: dict[str, Any] | None,
+    now: datetime,
+) -> float | None:
+    """€/kWh de la parte que **no** cabe en la ventana.
+
+    Es el precio del momento en que se empieza a pagar: al cerrarse la ventana, o
+    ahora mismo si ya está cerrada. La maqueta usaba una constante de punta; con
+    la tarifa de verdad, la hora manda. ``None`` sin tarifa «la mía»: antes que
+    estimar el euro que decide si pones la lavadora, no se da.
+    """
+    my_id = settings.get("my_tariff_id") or ""
+    tariff = next((t for t in tariffs or [] if t.get("id") == my_id), None)
+    if not tariff or tariff["energy"]["type"] == "pvpc":
+        # El PVPC de las horas que quedan puede no estar publicado, y pedirlo aquí
+        # costaría una petición de red en cada /api/live.
+        return None
+    hoy = (window or {}).get("today") or {}
+    momento = now
+    if hoy.get("end"):
+        momento = max(now, datetime.fromisoformat(hoy["end"]))
+    precio, _nombre = billing.price_now(
+        tariff, momento, set(settings.get("holidays") or []), None
+    )
+    return precio
 
 
 async def flow_day(
     settings: dict[str, Any],
     now: datetime,
     tariffs: list[dict[str, Any]] | None = None,
+    appliance_list: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Payload de /api/flowday: el día entero listo para recorrerlo.
 
@@ -1088,7 +1147,13 @@ async def flow_day(
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=1)
     states = await fetch_states(settings)
-    curvas = await series_mod.flow_curves(settings, states, start, end, tz)
+    # Los electrodomésticos van en la misma consulta que las seis potencias: su
+    # curva es la que permite partir la casa por dentro en el diagrama detallado.
+    aparatos = [a for a in (appliance_list or []) if a.get("power_entity")]
+    curvas = await series_mod.flow_curves(
+        settings, states, start, end, tz,
+        extra={f"ap:{a['id']}": a["power_entity"] for a in aparatos},
+    )
 
     x = curvas["x"]
     power = curvas["power"]
@@ -1165,6 +1230,15 @@ async def flow_day(
         "price": precio,
         "surplus_price": excedente,
         "tariff_name": nombre,
+        # La casa por dentro: una curva por electrodoméstico medido. El diagrama
+        # detallado parte con ellas el nodo de la casa, y lo que no cubre ninguno
+        # se queda como «resto de la casa».
+        "appliances": [
+            {"id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
+             "watts": [None if v is None else round(v, 1)
+                       for v in (power.get(f"ap:{a['id']}") or [None] * len(x))]}
+            for a in aparatos
+        ],
         "generated_at": now.isoformat(),
     }
 

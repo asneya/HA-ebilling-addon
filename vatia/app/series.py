@@ -480,6 +480,7 @@ async def flow_curves(
     start: datetime,
     end: datetime,
     tz,
+    extra: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Las seis potencias del día y el estado de carga, en pasos de 5 minutos.
 
@@ -488,6 +489,9 @@ async def flow_curves(
     falta las seis curvas a la vez sobre el **mismo eje**. Una sola llamada a
     ``ws_statistics``: cada llamada abre un socket y se trae la lista entera de
     metadatos, así que pedirlas por separado costaría siete veces lo mismo.
+
+    ``extra`` son curvas de potencia adicionales (clave → entidad): los
+    electrodomésticos, que van en la **misma** petición por lo mismo.
 
     Devuelve ``{"x": [iso…], "power": {clave: [W|None]}, "soc": [%|None]}``.
     """
@@ -500,6 +504,7 @@ async def flow_curves(
         ("grid_import", flow.get("grid_import", "")),
         ("grid_export", flow.get("grid_export", "")),
     ]
+    pares += [(clave, entidad) for clave, entidad in (extra or {}).items() if entidad]
     soc_entity = flow.get("battery_soc") or ""
     ids = list(dict.fromkeys([s for _k, s in pares if s] + ([soc_entity] if soc_entity else [])))
     x_keys = [moment.isoformat() for moment in _grid(start, end, 5)]

@@ -200,6 +200,7 @@ async def get_config():
     return {
         "settings": settings,
         "tariffs": config["tariffs"],
+        "appliances": config["appliances"],
         "supervisor": bool(os.environ.get("SUPERVISOR_TOKEN")),
         "version": _version(),
     }
@@ -229,6 +230,7 @@ async def export_config():
         "exported_at": datetime.now(_tz(config["settings"])).isoformat(),
         "settings": config["settings"],
         "tariffs": config["tariffs"],
+        "appliances": config["appliances"],
     }
     return Response(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -248,14 +250,15 @@ async def import_config(payload: dict = Body(...)):
     """
     settings = payload.get("settings")
     tariffs = payload.get("tariffs")
-    if not isinstance(settings, dict) and not isinstance(tariffs, list):
+    if (not isinstance(settings, dict) and not isinstance(tariffs, list)
+            and not isinstance(payload.get("appliances"), list)):
         raise HTTPException(
             400,
             "El fichero no parece una configuración de Vatia: "
             "se esperaba un objeto con «settings» o «tariffs».",
         )
 
-    resumen = {"settings": 0, "tariffs": 0}
+    resumen = {"settings": 0, "tariffs": 0, "appliances": 0}
     if isinstance(settings, dict):
         patch = dict(settings)
         _unmask(patch, storage.load()["settings"])
@@ -291,6 +294,23 @@ async def import_config(payload: dict = Body(...)):
         config["tariffs"] = normalized
         storage.save(config)
         resumen["tariffs"] = len(normalized)
+    aparatos = payload.get("appliances")
+    if isinstance(aparatos, list):
+        # Sustituyen a los que hubiera, como las tarifas. Los que no valen se
+        # descartan uno a uno: un electrodoméstico sin nombre no puede tumbar la
+        # restauración entera de una copia de seguridad.
+        buenos = []
+        for raw in aparatos:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                buenos.append(storage.normalize_appliance(raw))
+            except ValueError:
+                _LOGGER.warning("Electrodoméstico ignorado al importar: %s", raw)
+        config = storage.load()
+        config["appliances"] = buenos
+        storage.save(config)
+        resumen["appliances"] = len(buenos)
     _cache.clear()
     return {"ok": True, "imported": resumen}
 
@@ -318,6 +338,32 @@ async def put_tariff(tariff_id: str, tariff: dict = Body(...)):
 async def remove_tariff(tariff_id: str):
     if not storage.delete_tariff(tariff_id):
         raise HTTPException(404, "Tarifa no encontrada")
+    return {"ok": True}
+
+
+@app.post("/api/appliances")
+async def post_appliance(appliance: dict = Body(...)):
+    try:
+        return storage.add_appliance(appliance)
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from err
+
+
+@app.put("/api/appliances/{appliance_id}")
+async def put_appliance(appliance_id: str, appliance: dict = Body(...)):
+    try:
+        updated = storage.update_appliance(appliance_id, appliance)
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from err
+    if not updated:
+        raise HTTPException(404, "Electrodoméstico no encontrado")
+    return updated
+
+
+@app.delete("/api/appliances/{appliance_id}")
+async def remove_appliance(appliance_id: str):
+    if not storage.delete_appliance(appliance_id):
+        raise HTTPException(404, "Electrodoméstico no encontrado")
     return {"ok": True}
 
 
@@ -431,7 +477,9 @@ async def get_live():
     settings = config["settings"]
     tz = _tz(settings)
     try:
-        return await live.build(settings, datetime.now(tz), config["tariffs"])
+        return await live.build(
+            settings, datetime.now(tz), config["tariffs"], config["appliances"]
+        )
     except datasources.SourceError as err:
         raise HTTPException(502, str(err)) from err
     except Exception as err:  # pragma: no cover - errores de red
@@ -446,7 +494,9 @@ async def get_flow_day():
     settings = config["settings"]
     tz = _tz(settings)
     try:
-        return await live.flow_day(settings, datetime.now(tz), config["tariffs"])
+        return await live.flow_day(
+            settings, datetime.now(tz), config["tariffs"], config["appliances"]
+        )
     except datasources.SourceError as err:
         raise HTTPException(502, str(err)) from err
     except Exception as err:  # pragma: no cover - errores de red

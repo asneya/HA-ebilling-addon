@@ -7,13 +7,23 @@ que el catálogo se vea— y pasan a heredarse por CSS (`stroke: currentColor`),
 que es lo que pide la guía: «ninguno lleva relleno, degradado ni color fijo».
 """
 import html
+import os
 import re
 import sys
 import unicodedata
 
-ORIGEN = ("/tmp/claude-0/-home-user-HA-ebilling-addon/"
-          "43499390-7e69-5486-8c69-2538eb462ae7/scratchpad/handoff/"
-          "briefing-adjunto/project/eBilling - Sistema y maquetas.dc.html")
+# Carpeta del paquete de handoff de Claude Design. No está en el repositorio
+# —son maquetas, no código— así que se indica con VATIA_HANDOFF al regenerar.
+BASE = os.environ.get("VATIA_HANDOFF") or (
+    "/tmp/claude-0/-home-user-HA-ebilling-addon/"
+    "43499390-7e69-5486-8c69-2538eb462ae7/scratchpad/handoff2/"
+    "briefing-adjunto/project/")
+ORIGEN = BASE + "eBilling - Sistema y maquetas.dc.html"
+# Los glifos de electrodoméstico no están en el documento de sistema: viven
+# dibujados en las filas de «Cabe en la ventana» del prototipo. Se extraen de
+# ahí por lo mismo que los otros 42 —el diseño manda hasta la última curva— en
+# vez de redibujarlos a ojo.
+PROTOTIPO = BASE + "eBilling - Prototipo.dc.html"
 DESTINO = sys.argv[1] if len(sys.argv) > 1 else "iconos.svg"
 
 
@@ -54,10 +64,45 @@ for svg, nombre in celdas:
         f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>'
     )
 
+# --- los cuatro del prototipo -------------------------------------------------
+proto = open(PROTOTIPO, encoding="utf-8").read()
+# Solo dentro de la tarjeta de electrodomésticos: en el prototipo hay más
+# `<svg width="19">` (importar, exportar…) y buscando en todo el documento el
+# primero que casaba era otro glifo con media plantilla detrás.
+ini = proto.find("{{ applianceTitle }}")
+fin = proto.find("{{ noteCard }}", ini)
+if ini < 0 or fin < 0:
+    raise SystemExit("no encuentro la tarjeta de electrodomésticos en el prototipo")
+tarjeta = proto[ini:fin]
+filas = re.findall(
+    r'<svg width="19"[^>]*>(.*?)</svg>.*?<div style="font-size:15px[^"]*">([^<]+)</div>',
+    tarjeta, re.S)
+ALIAS = {"cargar el coche": "coche"}
+if len(filas) != 4:
+    raise SystemExit(f"esperaba 4 electrodomésticos en el prototipo, encontré {len(filas)}")
+# Un glifo son formas y nada más. Sin esta comprobación se colaron un `</div>` y
+# un `onClick` de la plantilla dentro de un `<symbol>`, y el navegador se
+# encontraba un manejador que no existe cada vez que pintaba el icono.
+PERMITIDAS = {"path", "circle", "rect", "line", "polyline", "polygon", "ellipse", "g"}
+for svg, nombre in filas:
+    nombre = html.unescape(nombre).strip()
+    ident = ALIAS.get(nombre.lower(), slug(nombre))
+    if ident in vistos:
+        raise SystemExit(f"nombre repetido: {ident}")
+    vistos.add(ident)
+    cuerpo = re.sub(r'\s(?:stroke|fill)="(?!none)[^"]*"', "", svg.strip())
+    cuerpo = re.sub(r'\sstroke-width="[^"]*"', "", cuerpo)
+    cuerpo = re.sub(r"\s+", " ", cuerpo).strip()
+    etiquetas = set(re.findall(r"</?([a-zA-Z-]+)", cuerpo))
+    if not etiquetas or not etiquetas <= PERMITIDAS:
+        raise SystemExit(f"«{ident}» trae algo que no es una forma: {sorted(etiquetas - PERMITIDAS)}")
+    simbolos.append(f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>')
+
 cabecera = (
     "<!--\n"
-    "  Set de iconos de Vatia: 42 glifos, trazo de 1,75, remate redondo y caja\n"
-    "  de 24, extraídos del documento de sistema del diseño.\n\n"
+    f"  Set de iconos de Vatia: {len(simbolos)} glifos, trazo de 1,75, remate\n"
+    "  redondo y caja de 24, extraídos del diseño: los 42 del documento de\n"
+    "  sistema y los 4 de electrodoméstico de las filas del prototipo.\n\n"
     "  Ninguno lleva relleno, degradado ni color fijo: el color entra por\n"
     "  `stroke: currentColor` desde el CSS, así que el mismo glifo sirve en\n"
     "  tinta de nivel 1, 2 o 3 y en color de estado.\n\n"

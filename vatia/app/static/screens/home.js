@@ -4,8 +4,8 @@
  */
 import { $, esc } from "../core/dom.js";
 import { api } from "../core/api.js";
-import { on } from "../core/bus.js";
-import { fmtNum, fmtTemp } from "../core/format.js";
+import { on, emit } from "../core/bus.js";
+import { fmtNum, fmtTemp, fmtEUR } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
 import { estado, titular } from "../core/flujo.js";
@@ -114,6 +114,12 @@ function renderLive() {
   $("#window").data = closing ? null : live.window || null;
   $("#window-panel").classList.toggle("hidden", closing || !live.window);
 
+  // «Cabe en la ventana»: acompaña a la ventana, así que desaparece con ella.
+  renderAdvice(closing ? null : live.advice);
+  // Lo que está haciendo cada electrodoméstico va en este payload, y su sección
+  // de Ajustes lo enseña: se anuncia para no tener que pedirlo dos veces.
+  emit("vivo", live);
+
   // Los tres estados del flujo v2, con sus palabras: es la pregunta que la
   // persona tiene en la cabeza y se contesta antes de mirar el diagrama.
   const f = live.flows || {};
@@ -203,6 +209,68 @@ function renderFlow(data) {
     host.appendChild(node);
   }
   node.data = data;
+}
+
+/* ------------- «Cabe en la ventana» ------------- */
+
+/* «2 h 10 min», «50 min», «2 h». Los minutos se redondean a cinco: el ciclo sale
+   de una mediana de muestras de cinco minutos, y dar «2 h 07 min» sería fingir
+   una precisión que no existe. */
+function dur(horas) {
+  const total = Math.max(5, Math.round((horas || 0) * 12) * 5);
+  const h = Math.floor(total / 60), m = total % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
+/* La tarjeta del prototipo, con una diferencia de fondo: allí la duración y los
+   kWh de cada electrodoméstico se teclean, y aquí se han medido. Del histórico
+   del propio enchufe, así que el consejo habla de *tu* lavadora. */
+function renderAdvice(advice) {
+  const rows = (advice && advice.rows) || [];
+  $("#advice-panel").classList.toggle("hidden", !rows.length);
+  if (!rows.length) return;
+
+  $("#ad-title").textContent = advice.title;
+  const cabe = rows.filter((r) => r.verdict.kind === "gratis").length;
+  $("#ad-aside").textContent = advice.closed ? "precio de ahora"
+    : cabe ? `${cabe} de ${rows.length} entran gratis` : "";
+
+  $("#ad-rows").innerHTML = rows.map((r) => {
+    const meta = r.cycle
+      ? `${dur(r.cycle.hours)} · ${fmtNum.format(r.cycle.kwh)} kWh`
+      : "aprendiendo de su histórico";
+    const v = r.verdict;
+    // Un veredicto en euros llega como número; los otros dos, como su palabra.
+    const valor = typeof v.value === "number" ? fmtEUR.format(v.value) : (v.value || "—");
+    return `
+      <div class="ad-row">
+        <span class="ad-chip" style="--ap:${esc(r.color)}">
+          <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
+        </span>
+        <span class="ad-txt">
+          <b>${esc(r.name)}</b>
+          <small>${esc(meta)}</small>
+        </span>
+        <span class="ad-verdict">
+          <b class="v-${esc(v.kind)}">${esc(valor)}</b>
+          <small>${esc(v.sub)}</small>
+        </span>
+      </div>`;
+  }).join("");
+
+  // La letra pequeña solo aparece cuando explica algo que se está viendo.
+  const aprendiendo = rows.filter((r) => r.verdict.kind === "aprendiendo");
+  const sinPrecio = rows.some((r) => r.verdict.kind === "cerrada" && r.verdict.value == null);
+  let nota = "";
+  if (aprendiendo.length) {
+    nota = `De ${aprendiendo.map((r) => r.name).join(", ")} aún no hay dos ciclos en
+      el histórico, así que no se dice lo que tarda: en cuanto los haya, aparece
+      aquí sin tocar nada.`;
+  } else if (sinPrecio) {
+    nota = "Para poner el precio hace falta una tarifa marcada como la tuya en Ajustes → Tarifas.";
+  }
+  $("#ad-note").textContent = nota;
 }
 
 /* ------------- el cierre del día ------------- */

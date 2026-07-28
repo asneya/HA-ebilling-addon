@@ -132,6 +132,17 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "working_period": None,
 }
 
+# Electrodomésticos medidos. Cada uno es un enchufe con nombre: su potencia dice
+# lo que está haciendo ahora y su energía, lo que ha gastado hoy. Del histórico
+# de la potencia se aprende cuánto dura y cuánto gasta un ciclo suyo, que es lo
+# que permite contestar «¿me cabe en la ventana?» sin que nadie teclee un dato.
+DEFAULT_APPLIANCES: list[dict[str, Any]] = []
+
+# Glifos disponibles para un electrodoméstico (los del sprite) y color por
+# defecto. Los cuatro primeros vienen dibujados del prototipo del diseño.
+APPLIANCE_ICONS = ("lavadora", "lavavajillas", "horno", "coche", "potencia")
+APPLIANCE_COLOR = "#0f7d8a"
+
 # Tarifas de arranque: la de referencia extraída de una factura real de
 # Iberdrola (2.0TD, marzo 2026), una plana con excedentes y una PVPC.
 DEFAULT_TARIFFS: list[dict[str, Any]] = [
@@ -206,7 +217,47 @@ def _default_config() -> dict[str, Any]:
     return {
         "settings": json.loads(json.dumps(DEFAULT_SETTINGS)),
         "tariffs": json.loads(json.dumps(DEFAULT_TARIFFS)),
+        "appliances": json.loads(json.dumps(DEFAULT_APPLIANCES)),
     }
+
+
+def normalize_appliance(raw: dict[str, Any]) -> dict[str, Any]:
+    """Un electrodoméstico con lo que hace falta y nada más.
+
+    Tolerante a propósito con lo que falta —el fichero se puede editar a mano—
+    pero no con el nombre: sin nombre no hay fila que enseñar. El umbral de
+    reposo separa «en marcha» de «enchufado»: un lavavajillas apagado marca dos
+    o tres vatios y sin umbral cada minuto del día contaría como ciclo.
+    """
+    nombre = str(raw.get("name") or "").strip()
+    if not nombre:
+        raise ValueError("Un electrodoméstico necesita un nombre.")
+    icono = str(raw.get("icon") or "").strip()
+    try:
+        umbral = float(raw.get("standby_w", 15))
+    except (TypeError, ValueError):
+        umbral = 15.0
+    return {
+        "id": str(raw.get("id") or "").strip() or uuid.uuid4().hex[:12],
+        "name": nombre[:40],
+        "color": str(raw.get("color") or APPLIANCE_COLOR).strip() or APPLIANCE_COLOR,
+        "icon": icono if icono in APPLIANCE_ICONS else APPLIANCE_ICONS[-1],
+        "power_entity": str(raw.get("power_entity") or "").strip(),
+        "energy_entity": str(raw.get("energy_entity") or "").strip(),
+        "standby_w": max(0.0, min(umbral, 5000.0)),
+    }
+
+
+def _normalize_appliances(raw_list: Any) -> list[dict[str, Any]]:
+    out = []
+    for raw in raw_list if isinstance(raw_list, list) else []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            out.append(normalize_appliance(raw))
+        except ValueError:
+            _LOGGER.warning("Electrodoméstico sin nombre ignorado: %s", raw)
+    return out
 
 
 def _normalize_tariffs(raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -276,6 +327,7 @@ def load() -> dict[str, Any]:
         merged_config = {
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
+            "appliances": _normalize_appliances(config.get("appliances", [])),
         }
         if path != CONFIG_PATH:
             # Se ha adoptado de otro sitio: se guarda ya en el suyo para no
@@ -344,6 +396,36 @@ def delete_tariff(tariff_id: str) -> bool:
     before = len(config["tariffs"])
     config["tariffs"] = [t for t in config["tariffs"] if t.get("id") != tariff_id]
     if len(config["tariffs"]) != before:
+        save(config)
+        return True
+    return False
+
+
+def add_appliance(raw: dict[str, Any]) -> dict[str, Any]:
+    aparato = normalize_appliance(raw)
+    config = load()
+    config["appliances"].append(aparato)
+    save(config)
+    return aparato
+
+
+def update_appliance(appliance_id: str, raw: dict[str, Any]) -> dict[str, Any] | None:
+    aparato = normalize_appliance(raw)
+    config = load()
+    for idx, existing in enumerate(config["appliances"]):
+        if existing.get("id") == appliance_id:
+            aparato["id"] = appliance_id
+            config["appliances"][idx] = aparato
+            save(config)
+            return aparato
+    return None
+
+
+def delete_appliance(appliance_id: str) -> bool:
+    config = load()
+    before = len(config["appliances"])
+    config["appliances"] = [a for a in config["appliances"] if a.get("id") != appliance_id]
+    if len(config["appliances"]) != before:
         save(config)
         return True
     return False
