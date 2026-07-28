@@ -71,6 +71,21 @@
         </div>
       </header>
 
+      <!-- «Ahora mismo», siempre lo primero. Es la maqueta —el caudal va pegado
+           a la cabecera— y es lo que se viene a mirar: nada de lo que hay debajo
+           puede empujarlo hacia abajo, ni el cierre del día ni la ventana. -->
+      <section class="panel glass">
+        <div class="band-head">
+          <span class="band-live"><i class="pulse" aria-hidden="true"></i>Ahora mismo</span>
+          <span class="band-caption" id="flow-chip">—</span>
+        </div>
+        <div id="flow" class="flow"></div>
+        <p class="empty hidden" id="flow-empty">
+          Asigna tus sensores de potencia en <b>Ajustes → Flujo de energía</b>
+          para ver el diagrama en vivo.
+        </p>
+      </section>
+
       <!-- El cierre del día. Aparece solo al ponerse el sol y sustituye a la
            ventana hasta que se descarta («Ver el día completo»). -->
       <section class="hidden" id="close-panel">
@@ -88,23 +103,10 @@
         <svg class="i nav-chev"><use href="#i-chevron"/></svg>
       </button>
 
-      <!-- La ventana de energía gratis. Va antes del caudal: contesta «¿ahora
-           o luego?», que es lo que se viene a mirar. Se queda vacía —y la
-           tarjeta se esconde— si no hay sensor de previsión solar. -->
+      <!-- La ventana de energía gratis: contesta «¿ahora o luego?». Se queda
+           vacía —y la tarjeta se esconde— si no hay sensor de previsión solar. -->
       <section class="panel glass hidden" id="window-panel">
         <vatia-window id="window"></vatia-window>
-      </section>
-
-      <section class="panel glass">
-        <div class="band-head">
-          <span class="band-live"><i class="pulse" aria-hidden="true"></i>Ahora mismo</span>
-          <span class="band-caption" id="flow-chip">—</span>
-        </div>
-        <div id="flow" class="flow"></div>
-        <p class="empty hidden" id="flow-empty">
-          Asigna tus sensores de potencia en <b>Ajustes → Flujo de energía</b>
-          para ver el diagrama en vivo.
-        </p>
       </section>
 
       <section class="panel glass tappable" id="summary-panel" role="button" tabindex="0"
@@ -471,6 +473,13 @@
 
         <div class="group-label">Integración</div>
         <div class="panel glass nav-list">
+          <button class="nav-row" data-settings-page="influx">
+            <span class="nav-ico" style="--ico:#22a0d8">
+              <svg class="i"><use href="#i-balance"/></svg>
+            </span>
+            <span class="nav-txt"><b>InfluxDB</b><small id="nav-sub-influx">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
           <button class="nav-row" data-settings-page="publish">
             <span class="nav-ico" style="--ico:#5e5ce6">
               <svg class="i"><use href="#i-exportar"/></svg>
@@ -515,21 +524,64 @@
               <label class="li"><span class="li-label">Token</span><input id="s-ha-token" type="password"></label>
             </div>
           </div>
-          <div id="influx-fields" class="hidden">
+          <p class="li-note" id="ifx-hint">Los datos de InfluxDB se configuran en
+            <b>Ajustes → InfluxDB</b>, que también sirve para el histórico del
+            consumo aunque la fuente sea Home Assistant.</p>
+        </div>
+      </div>
+      </div>
+
+      <!-- ---- nivel 2: InfluxDB ----
+         Sección propia y siempre accesible. Estaba dentro de «Fuente de datos»
+         y escondida salvo que la fuente fuese InfluxDB, así que quien tiene
+         Home Assistant como fuente **no podía configurarla** — y con ella se
+         calcula el histórico del consumo, que es lo que da el perfil horario de
+         la ventana de energía gratis. -->
+      <div class="settings-page" id="sp-influx">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">InfluxDB</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+        <div class="panel glass">
+          <p class="li-note">InfluxDB se usa para <b>dos cosas independientes</b>:</p>
+          <p class="li-note">· <b>El histórico del consumo</b>, siempre que esté
+            configurado. El recorder de Home Assistant guarda diez días por
+            defecto y aquí se piden seis semanas: con eso el consumo típico de la
+            casa se calcula <b>hora a hora</b> en vez de con una sola cifra, y la
+            ventana de energía gratis deja de prometer excedente en las horas en
+            las que la casa gasta de verdad.</p>
+          <p class="li-note">· <b>Los datos de facturación</b>, solo si en
+            <b>Fuente de datos</b> eliges InfluxDB. Para eso hacen falta además
+            los dos <code>entity_id</code> de abajo.</p>
+          <p class="li-note" id="ifx-estado">—</p>
+        </div>
+
+        <div class="panel glass group">
+          <div class="group-head">Conexión</div>
+          <div class="list">
             <label class="li"><span class="li-label">Versión</span>
               <select id="s-ifx-version"><option value="1">InfluxDB 1.x</option><option value="2">InfluxDB 2.x</option></select></label>
-            <label class="li"><span class="li-label">URL</span><input id="s-ifx-url"></label>
-            <label class="li"><span class="li-label">BD / bucket</span><input id="s-ifx-db"></label>
-            <label class="li"><span class="li-label">Measurement</span><input id="s-ifx-measurement"></label>
-            <label class="li"><span class="li-label">entity_id consumo</span><input id="s-ifx-entity"></label>
-            <label class="li"><span class="li-label">entity_id vertido</span><input id="s-ifx-entity-export"></label>
+            <label class="li"><span class="li-label">URL</span><input id="s-ifx-url" placeholder="http://a0d7b954-influxdb:8086"></label>
+            <label class="li"><span class="li-label">BD / bucket</span><input id="s-ifx-db" placeholder="homeassistant"></label>
+            <label class="li"><span class="li-label">Measurement</span><input id="s-ifx-measurement" placeholder="kWh"></label>
             <label class="li ifx-v2"><span class="li-label">Organización</span><input id="s-ifx-org"></label>
             <label class="li ifx-v2"><span class="li-label">Token</span><input id="s-ifx-token" type="password"></label>
             <label class="li ifx-v1"><span class="li-label">Usuario</span><input id="s-ifx-user"></label>
             <label class="li ifx-v1"><span class="li-label">Contraseña</span><input id="s-ifx-pass" type="password"></label>
           </div>
         </div>
-      </div>
+
+        <div class="panel glass group">
+          <div class="group-head">Solo para facturación desde InfluxDB</div>
+          <div class="list">
+            <label class="li"><span class="li-label">entity_id consumo</span><input id="s-ifx-entity"></label>
+            <label class="li"><span class="li-label">entity_id vertido</span><input id="s-ifx-entity-export"></label>
+          </div>
+          <p class="li-note">El histórico del consumo no los necesita: usa el
+            sensor de <b>consumo de la casa</b> de Sensores.</p>
+        </div>
       </div>
 
       <!-- ---- nivel 2: sensores, agrupados por función ---- -->
@@ -552,6 +604,7 @@
               <option value="lifetime">Son acumulados (calcular el día)</option>
             </select>
           </label>
+          <p class="li-note" id="counters-state" aria-live="polite"></p>
           <p class="li-note">
             Si tus sensores <b>ya miden el día en curso</b> se leen tal cual, que
             es lo más rápido y exacto. Si son <b>contadores acumulados</b> desde
