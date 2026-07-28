@@ -52,32 +52,6 @@ def _ha_endpoints(settings: dict[str, Any]) -> tuple[str, str, str]:
     return f"{ha_url}/api", f"{ws_url}/api/websocket", token
 
 
-async def ha_list_energy_entities(settings: dict[str, Any]) -> list[dict[str, Any]]:
-    """Lista sensores de energía (kWh / device_class energy) vía REST."""
-    base, _, token = _ha_endpoints(settings)
-    headers = {"Authorization": f"Bearer {token}"}
-    async with aiohttp.ClientSession(headers=headers) as session:
-        async with session.get(f"{base}/states", timeout=aiohttp.ClientTimeout(total=15)) as resp:
-            if resp.status != 200:
-                raise SourceError(f"Home Assistant respondió {resp.status} al listar entidades.")
-            states = await resp.json()
-    entities = []
-    for state in states:
-        attrs = state.get("attributes") or {}
-        unit = (attrs.get("unit_of_measurement") or "").lower()
-        if attrs.get("device_class") == "energy" or unit in ("kwh", "wh", "mwh"):
-            entities.append(
-                {
-                    "entity_id": state["entity_id"],
-                    "name": attrs.get("friendly_name") or state["entity_id"],
-                    "unit": attrs.get("unit_of_measurement") or "",
-                    "state_class": attrs.get("state_class") or "",
-                }
-            )
-    entities.sort(key=lambda e: e["name"].lower())
-    return entities
-
-
 async def ha_hourly_consumption(
     settings: dict[str, Any], start: datetime, end: datetime, tz, entity: str
 ) -> list[dict[str, Any]]:
@@ -87,7 +61,10 @@ async def ha_hourly_consumption(
     periodo horario y el campo ``change`` (delta de energía por hora).
     """
     if not entity:
-        raise SourceError("Selecciona un sensor de energía en Ajustes.")
+        raise SourceError(
+            "Falta el contador de energía importada de la red: "
+            "elígelo en Ajustes → Sensores."
+        )
     base, ws_url, token = _ha_endpoints(settings)
 
     payload = {
@@ -494,19 +471,30 @@ async def get_hourly_consumption(
 ) -> list[dict[str, Any]]:
     """Serie horaria de energía importada (kind="import") o vertida ("export").
 
+    Los dos contadores son los mismos que usa el resto de la app: los de
+    Ajustes → Sensores. No hay sensores «de facturación» aparte.
+
     Para "export", si no hay sensor configurado se devuelve una lista vacía
     (no es un error: simplemente no hay excedentes que compensar).
     """
-    source = settings.get("source") or "demo"
-    if source == "homeassistant":
-        entity = settings.get("ha_entity_export" if kind == "export" else "ha_entity") or ""
-        if kind == "export" and not entity:
-            return []
-        return await ha_hourly_consumption(settings, start, end, tz, entity)
-    if source == "influxdb":
-        influx = settings.get("influx") or {}
-        entity = influx.get("entity_id_export" if kind == "export" else "entity_id") or ""
-        if kind == "export" and not entity:
-            return []
+    if (settings.get("source") or "demo") != "homeassistant":
+        return demo_hourly_consumption(start, end, tz, kind)
+
+    energia = settings.get("energy_sensors") or {}
+    clave = "grid_export_energy" if kind == "export" else "grid_import_energy"
+    entity = (energia.get(clave) or "").strip()
+    if kind == "export" and not entity:
+        return []
+
+    serie = await ha_hourly_consumption(settings, start, end, tz, entity)
+    if serie or not (settings.get("influx") or {}).get("url"):
+        return serie
+    # Las estadísticas horarias de Home Assistant no se purgan, así que lo
+    # normal es que respondan. Vacío significa que el contador nunca las generó
+    # —le falta `state_class`, o se excluyó del recorder—, y entonces el mismo
+    # `entity_id` en InfluxDB sí tiene la serie: es de donde venían los datos de
+    # quien tenía InfluxDB como fuente antes de unificarla.
+    try:
         return await influx_hourly_consumption(settings, start, end, tz, entity)
-    return demo_hourly_consumption(start, end, tz, kind)
+    except SourceError:
+        return serie

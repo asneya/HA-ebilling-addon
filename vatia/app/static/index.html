@@ -565,6 +565,16 @@
             </div>
           </div>
         </div>
+        <div class="panel glass nav-list">
+          <button class="nav-row" data-settings-page="flows">
+            <span class="nav-ico" style="--ico:#5e5ce6">
+              <svg class="i"><use href="#i-balance"/></svg>
+            </span>
+            <span class="nav-txt"><b>Galería de flujos en tiempo real</b>
+              <small id="nav-sub-flows">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
 
         <div class="group-label">Aplicación</div>
         <div class="panel glass nav-list">
@@ -619,44 +629,70 @@
         </header>
 
       <div class="panel glass group">
-        <div class="group-head">Fuente de datos de consumo</div>
+        <div class="group-head">De dónde salen los datos</div>
         <div class="list">
-          <label class="li">
+          <div class="li col">
             <span class="li-label">Fuente</span>
-            <select id="s-source">
-              <option value="demo">Demostración</option>
-              <option value="homeassistant">Home Assistant</option>
-              <option value="influxdb">InfluxDB</option>
-            </select>
-          </label>
-          <div id="ha-fields" class="hidden">
-            <label class="li">
-              <span class="li-label">Energía consumida</span>
-              <select id="s-ha-entity"></select>
-            </label>
-            <label class="li">
-              <span class="li-label">Energía vertida</span>
-              <select id="s-ha-entity-export"></select>
-            </label>
-            <div class="li"><button id="load-entities-btn" class="btn subtle">Buscar sensores</button></div>
-            <div id="ha-external" class="hidden">
-              <label class="li"><span class="li-label">URL de HA</span><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></label>
-              <label class="li"><span class="li-label">Token</span><input id="s-ha-token" type="password"></label>
+            <div class="segmented glass-soft" id="source-seg" role="group" aria-label="Fuente de datos">
+              <button class="seg" data-source-opt="homeassistant">Home Assistant</button>
+              <button class="seg" data-source-opt="demo">Demostración</button>
             </div>
           </div>
-          <p class="li-note" id="ifx-hint">Los datos de InfluxDB se configuran en
-            <b>Ajustes → InfluxDB</b>, que también sirve para el histórico del
-            consumo aunque la fuente sea Home Assistant.</p>
+          <div id="ha-external" class="hidden">
+            <label class="li"><span class="li-label">URL de HA</span><input id="s-ha-url" placeholder="http://homeassistant.local:8123"></label>
+            <label class="li"><span class="li-label">Token</span><input id="s-ha-token" type="password"></label>
+          </div>
         </div>
+        <p class="li-note" id="source-note">—</p>
+      </div>
+
+      <div class="panel glass nav-list">
+        <button class="nav-row" data-settings-page="sensors">
+          <span class="nav-ico" style="--ico:#ff9f0a">
+            <svg class="i"><use href="#i-potencia"/></svg>
+          </span>
+          <span class="nav-txt"><b>Sensores</b>
+            <small>Qué sensor mide cada cosa</small></span>
+          <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+        </button>
+        <button class="nav-row" data-settings-page="influx">
+          <span class="nav-ico" style="--ico:#22a0d8">
+            <svg class="i"><use href="#i-balance"/></svg>
+          </span>
+          <span class="nav-txt"><b>InfluxDB</b>
+            <small>Histórico largo del consumo, opcional</small></span>
+          <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+        </button>
       </div>
       </div>
 
       <!-- ---- nivel 2: InfluxDB ----
-         Sección propia y siempre accesible. Estaba dentro de «Fuente de datos»
-         y escondida salvo que la fuente fuese InfluxDB, así que quien tiene
-         Home Assistant como fuente **no podía configurarla** — y con ella se
-         calcula el histórico del consumo, que es lo que da el perfil horario de
-         la ventana de energía gratis. -->
+         No es una «fuente de datos» alternativa: es el histórico largo. Los
+         sensores son siempre los de Ajustes → Sensores, y de aquí solo sale la
+         parte del pasado que Home Assistant ya no guarda. -->
+      <!-- ---- nivel 2: galería de flujos en tiempo real ----
+         Cada tile es un icono vectorial del **tipo** de diagrama, no una captura:
+         una miniatura de 300 px del Sankey no se lee, y el icono sí dice de un
+         vistazo si es un haz de cintas o una casa con satélites. Los rellena
+         `pintarGaleria()` a partir del catálogo de `core/flujo.js`. -->
+      <div class="settings-page" id="sp-flows">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Galería de flujos</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+        <div class="panel glass">
+          <p class="li-note">Qué componente dibuja el caudal en tiempo real, en la
+            tarjeta de la pantalla de inicio y en la del día. No son dos estilos
+            del mismo dibujo: cada uno contesta una pregunta distinta.</p>
+        </div>
+
+        <p class="gal-estado" id="gal-estado"></p>
+        <div class="gal" id="flow-gallery" role="radiogroup"
+             aria-label="Componente del flujo en tiempo real"></div>
+      </div>
+
       <div class="settings-page" id="sp-influx">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
@@ -665,16 +701,19 @@
         </header>
 
         <div class="panel glass">
-          <p class="li-note">InfluxDB se usa para <b>dos cosas independientes</b>:</p>
-          <p class="li-note">· <b>El histórico del consumo</b>, siempre que esté
-            configurado. El recorder de Home Assistant guarda diez días por
-            defecto y aquí se piden seis semanas: con eso el consumo típico de la
-            casa se calcula <b>hora a hora</b> en vez de con una sola cifra, y la
-            ventana de energía gratis deja de prometer excedente en las horas en
-            las que la casa gasta de verdad.</p>
-          <p class="li-note">· <b>Los datos de facturación</b>, solo si en
-            <b>Fuente de datos</b> eliges InfluxDB. Para eso hacen falta además
-            los dos <code>entity_id</code> de abajo.</p>
+          <p class="li-note">Opcional, y solo para <b>mirar más atrás</b>. Los
+            sensores no se eligen aquí: son los de <b>Ajustes → Sensores</b>,
+            los mismos para toda la app.</p>
+          <p class="li-note">· <b>El histórico del consumo.</b> El recorder de
+            Home Assistant guarda diez días de detalle y aquí se piden seis
+            semanas: con eso el consumo típico de la casa se calcula <b>hora a
+            hora</b> en vez de con una sola cifra, y la ventana de energía
+            gratis deja de prometer excedente en las horas en las que la casa
+            gasta de verdad.</p>
+          <p class="li-note">· <b>Respaldo de la facturación.</b> Si un contador
+            no generó estadísticas en Home Assistant (le falta
+            <code>state_class</code>, o se excluyó del recorder), su serie se
+            busca aquí con el mismo <code>entity_id</code>.</p>
           <p class="li-note" id="ifx-estado">—</p>
         </div>
 
@@ -693,15 +732,6 @@
           </div>
         </div>
 
-        <div class="panel glass group">
-          <div class="group-head">Solo para facturación desde InfluxDB</div>
-          <div class="list">
-            <label class="li"><span class="li-label">entity_id consumo</span><input id="s-ifx-entity"></label>
-            <label class="li"><span class="li-label">entity_id vertido</span><input id="s-ifx-entity-export"></label>
-          </div>
-          <p class="li-note">El histórico del consumo no los necesita: usa el
-            sensor de <b>consumo de la casa</b> de Sensores.</p>
-        </div>
       </div>
 
       <!-- ---- nivel 2: sensores, agrupados por función ---- -->
@@ -1293,6 +1323,7 @@
   <!-- Componentes web del rediseño. Se cargan antes de app.js, que solo
      los instancia y les pasa los datos. -->
   <script src="static/components/vatia-flow.js"></script>
+  <script src="static/components/vatia-orbit.js"></script>
   <script src="static/components/vatia-window.js"></script>
   <script src="static/components/vatia-close.js"></script>
   <script src="static/vendor/uplot.js"></script>

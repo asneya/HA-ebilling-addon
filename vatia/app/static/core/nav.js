@@ -46,9 +46,12 @@ export function showSettingsPage(page) {
   });
   // El botón de guardar no tiene sentido en el índice, en la lista de tarifas,
   // en apariencia (el tema se aplica y se guarda al pulsarlo) ni en el
-  // diagnóstico, que solo lee.
+  // diagnóstico, que solo lee. Ni en «Fuente de datos» y la galería de flujos,
+  // donde cada control se guarda al tocarlo: dejar ahí una barra que no hace
+  // nada invita a pulsarla y a dudar de si el cambio se guardó.
   const hideSave = !page ||
-    ["tariffs", "about", "diagnostics", "backup", "sensors"].includes(page);
+    ["tariffs", "about", "diagnostics", "backup", "sensors", "source", "flows"]
+      .includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   window.scrollTo(0, 0);

@@ -44,9 +44,13 @@ barra lateral (**Vatia**) — funciona vía Ingress, sin abrir puertos.
 
 ## Características
 
-- **Fuentes de datos**: estadísticas de energía de Home Assistant (websocket,
-  el mismo dato del panel de Energía), InfluxDB 1.x/2.x, o modo demo con datos
-  sintéticos para probar la interfaz.
+- **Una sola fuente de datos** para todo: las estadísticas de energía de Home
+  Assistant (websocket, el mismo dato del panel de Energía), o modo demo con
+  datos sintéticos para probar la interfaz. Los sensores se eligen una vez en
+  Ajustes → Sensores y valen para la Home, Energía, el flujo y la facturación.
+  **InfluxDB 1.x/2.x** es opcional y añade el histórico largo del consumo, con el
+  que la ventana de energía gratis calcula el consumo típico de la casa hora a
+  hora en vez de con una sola cifra.
 - **Tarifas con cualquier estructura**: 1 a 6 tramos con horario libre por día
   y hora, precio único, tarifa indexada **PVPC** (precios horarios de ESIOS) y
   **compensación de excedentes** (plana o por tramos) para autoconsumo solar.

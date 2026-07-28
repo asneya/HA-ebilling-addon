@@ -14,3 +14,9 @@ fakeha.py
 vatia.json
 pvpc_cache.json
 data-*/
+
+# Capturas de las pruebas con navegador. Los bancos las escriben con una ruta
+# relativa, así que aterrizan en la raíz del repositorio en cuanto uno se lanza
+# desde aquí. Los iconos de la app son SVG y viven en `vatia/app/static/`, así
+# que ningún PNG de la raíz es nuestro.
+/*.png

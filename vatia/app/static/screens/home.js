@@ -8,7 +8,8 @@ import { on, emit } from "../core/bus.js";
 import { fmtNum, fmtTemp, fmtEUR } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
-import { estado, titular } from "../core/flujo.js";
+import { estado, titular, montarFlujo } from "../core/flujo.js";
+import { settings } from "../core/config.js";
 
 /* Lo último que ha contado el servidor. Vive aquí y no en un estado global: no
    lo necesita ninguna otra pantalla. */
@@ -200,18 +201,11 @@ function renderSummaryMeters(home, meters) {
 
 /* ------------- caudal en tiempo real ------------- */
 
-/* El diagrama de nodos lo dibuja <vatia-flow>, un Sankey: el ancho de cada
-   corriente es su potencia. La composición del consumo la expresa el propio
-   haz, así que el anillo que llevaba el nodo de la casa ya no hace falta. */
+/* El diagrama lo dibuja el componente que el usuario haya elegido en la galería
+   de Ajustes: el Sankey de caudales o la órbita con la casa en el centro. Los
+   dos reciben el mismo payload, así que aquí no hay nada que distinguir. */
 function renderFlow(data) {
-  const host = $("#flow");
-  let node = host.querySelector("vatia-flow");
-  if (!node) {
-    host.textContent = "";
-    node = document.createElement("vatia-flow");
-    host.appendChild(node);
-  }
-  node.data = data;
+  montarFlujo($("#flow"), settings()).data = data;
 }
 
 /* ------------- «Cabe en la ventana» ------------- */

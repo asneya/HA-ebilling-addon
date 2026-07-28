@@ -140,3 +140,48 @@ export function tarjetaRed(flows, precio, precioExcedente) {
   }
   return { titulo: "De la red", w: 0, clase: "nada", nota: "sin intercambio" };
 }
+
+/* ---------------- qué componente dibuja el flujo ----------------
+   Dos de la galería de Ajustes, y las dos con la misma interfaz (`data`,
+   `flows`, `meters`, `split`), así que las pantallas piden el nodo y no se
+   enteran de cuál les ha tocado. El catálogo vive aquí porque lo leen la
+   galería, la tarjeta de la Home y la pantalla del día. */
+export const FLOWS = [
+  {
+    id: "sankey",
+    tag: "vatia-flow",
+    name: "Caudales",
+    claim: "Cada cinta mide su potencia",
+    detalle: "Sankey de dos columnas. El único que parte la casa en "
+      + "electrodomésticos, con su nombre y su valor.",
+  },
+  {
+    id: "orbita",
+    tag: "vatia-orbit",
+    name: "Órbita",
+    claim: "La casa en el centro",
+    detalle: "El consumo en grande y un anillo diciendo de quién es. Los "
+      + "electrodomésticos, como anillo dentro y sin nombre.",
+  },
+];
+
+export function estiloFlujo(settings) {
+  const id = settings && settings.flow_style;
+  return FLOWS.find((f) => f.id === id) || FLOWS[0];
+}
+
+/* El nodo del diagrama dentro de `host`, creado si falta y **sustituido** si el
+   usuario ha cambiado de estilo. Sustituido y no reconfigurado: son dos
+   elementos personalizados distintos, y dejar el viejo puesto era el error que
+   hacía que la galería no cambiara nada hasta recargar la página. */
+export function montarFlujo(host, settings, { meters = true } = {}) {
+  const estilo = estiloFlujo(settings);
+  let node = host.querySelector(estilo.tag);
+  if (!node) {
+    host.textContent = "";
+    node = document.createElement(estilo.tag);
+    node.meters = meters;
+    host.appendChild(node);
+  }
+  return node;
+}

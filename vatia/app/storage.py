@@ -49,9 +49,10 @@ _lock = threading.Lock()
 NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power")
 
 DEFAULT_SETTINGS: dict[str, Any] = {
-    "source": "demo",  # demo | homeassistant | influxdb
-    "ha_entity": "",
-    "ha_entity_export": "",  # sensor de energía vertida (excedentes), opcional
+    # De dónde salen los datos de **toda** la app: la Home, Energía, el flujo y
+    # la facturación. Los sensores concretos se eligen en Ajustes → Sensores,
+    # una sola vez y para todo (antes la facturación pedía los suyos aparte).
+    "source": "demo",  # demo | homeassistant
     "ha_url": "",  # solo para uso fuera del supervisor
     "ha_token": "",
     "influx": {
@@ -63,8 +64,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "username": "",
         "password": "",
         "measurement": "kWh",
-        "entity_id": "",
-        "entity_id_export": "",
     },
     "contracted_power": {"p1": 4.6, "p2": 4.6},
     "billing_day": 1,
@@ -127,6 +126,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Fondo de la Home según la hora y el tiempo. Quien prefiera una superficie
     # lisa —o tenga un móvil justo— lo puede apagar sin perder nada del dato.
     "dynamic_background": True,
+    # Qué componente dibuja el flujo en tiempo real, de la galería de Ajustes.
+    # No son dos estéticas del mismo dibujo: el Sankey mide caudales (px por kW)
+    # y la órbita enseña el sitio de la casa, así que la elección es de fondo.
+    #   sankey → <vatia-flow>, el diseño «Flujo de energía v2»
+    #   orbita → <vatia-orbit>, la casa en el centro y las fuentes alrededor
+    "flow_style": "sankey",
     # La tarifa contratada («la mía»): el id de una de las tarifas guardadas.
     # La comparativa sigue tratándolas a todas igual; esta solo añade lo que
     # ninguna comparación puede dar, el ahorro del día en euros.
@@ -329,6 +334,7 @@ def load() -> dict[str, Any]:
             merged = dict(defaults["settings"][key])
             merged.update(stored_nested[key])
             settings[key] = merged
+        _migrar_fuente(settings)
         merged_config = {
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
@@ -339,6 +345,40 @@ def load() -> dict[str, Any]:
             # volver a leerla de ahí.
             _write(merged_config)
         return merged_config
+
+
+def _migrar_fuente(settings: dict[str, Any]) -> None:
+    """Una sola fuente y unos solos sensores, para toda la app.
+
+    Hasta la 0.38 la facturación se configuraba por su cuenta: `ha_entity` y
+    `ha_entity_export` si la fuente era Home Assistant, `influx.entity_id` y
+    `entity_id_export` si era InfluxDB. Eran **los mismos dos contadores** que
+    ya se piden en Ajustes → Sensores, así que ahora se leen de allí y estas
+    cuatro claves solo sirven para heredar lo que el usuario ya tenía puesto.
+
+    InfluxDB deja de ser una «fuente»: es el histórico largo del consumo, que
+    es lo único para lo que hace falta (las estadísticas horarias de Home
+    Assistant no se purgan nunca, así que la facturación no lo necesita).
+    """
+    energia = settings.get("energy_sensors") or {}
+    influx = settings.get("influx") or {}
+    heredables = (
+        ("grid_import_energy", settings.get("ha_entity"), influx.get("entity_id")),
+        ("grid_export_energy", settings.get("ha_entity_export"), influx.get("entity_id_export")),
+    )
+    for destino, de_ha, de_influx in heredables:
+        if not (energia.get(destino) or "").strip():
+            viejo = (de_ha or de_influx or "").strip()
+            if viejo:
+                energia[destino] = viejo
+                _LOGGER.info("Sensor de facturación adoptado en Sensores: %s", viejo)
+    settings["energy_sensors"] = energia
+    if settings.get("source") == "influxdb":
+        settings["source"] = "homeassistant"
+    for clave in ("ha_entity", "ha_entity_export"):
+        settings.pop(clave, None)
+    for clave in ("entity_id", "entity_id_export"):
+        influx.pop(clave, None)
 
 
 def _write(config: dict[str, Any]) -> None:
