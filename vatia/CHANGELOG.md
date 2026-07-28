@@ -2,6 +2,51 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.40.0
+
+### El flujo clásico, el que tenía la app
+
+La galería que estrenó la 0.39.0 traía dos opciones, y una de las dos no era la
+que se pidió: «uno más clásico de flujos **como el que existía previamente**».
+Puse la órbita del diseño descartado, que es otra cosa. El que existía era la
+**cruz** —Solar arriba, Red a la izquierda, Casa a la derecha, Batería abajo,
+cables ortogonales y una bola corriendo por cada uno—, y ahora está en la
+galería, recuperado de su propio código.
+
+Se conserva la geometría entera: radio 46, centro en (200, 212), carriles a 18 px
+y esquinas de 16, con los seis caminos y sus posiciones de etiqueta. Y se conserva
+lo que decía y los otros dos no dicen:
+
+- el **contador del día en cada nodo**: lo generado, lo comprado y lo vendido por
+  separado en la red, lo que entró y lo que salió de la batería;
+- el **anillo del reparto** alrededor del nodo de la casa: de qué fuente vino cada
+  kWh que ha gastado hoy;
+- el **nivel de carga dentro del icono** de la batería.
+
+Lo que no dice, y conviene saberlo antes de elegirlo: todos los cables miden lo
+mismo, así que 200 W se ven igual que 5 kW. La velocidad de la bola es la única
+pista de intensidad. Para comparar caudales está «Caudales».
+
+Cuatro cambios sobre el original, los cuatro porque era código de una pantalla y
+ahora es un componente que comparten dos:
+
+- los colores salen de los tokens del tema, no de los literales del prototipo;
+- vale con solo un reparto de corrientes, sin el resto del payload, que es lo que
+  necesita la pantalla del día. Sin él, las potencias de los nodos se deducen de
+  las propias corrientes y **los contadores del día no se enseñan**, porque ahí no
+  se saben;
+- los electrodomésticos medidos, como anillo por dentro del nodo de la casa;
+- la bola es SMIL (`animateMotion`), que no obedece a `prefers-reduced-motion` por
+  CSS: con el ajuste puesto, no se dibuja.
+
+### Un fallo del original, arreglado al recuperarlo
+
+El anillo del reparto del día dibujaba un **arco de un punto a sí mismo** cuando
+toda la energía venía de una sola fuente, y un arco así no pinta nada: en vez de
+la vuelta entera se veía un puntito de color. Y ese es el caso más común —una
+noche entera tirando de la batería, un mediodía entero de sol—. Ahora un tramo de
+360° se dibuja como el círculo que es.
+
 ## 0.39.0
 
 ### Una sola fuente de datos, y unos solos sensores
