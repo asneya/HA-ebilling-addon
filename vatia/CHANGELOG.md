@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.32.0
+
+### El dedo recorre el gráfico
+
+- **La selección sigue al dedo.** Antes solo cambiaba al tocar, y no era un
+  descuido: uPlot solo escucha el ratón, y arrastrar un dedo **no genera
+  `mousemove`**, así que el cursor no se movía por más que deslizases. Ahora el
+  componente coloca el punto él mismo desde los eventos de puntero: un arrastre
+  de un dedo publica un punto por muestra, en orden, y al levantar se queda
+  donde lo dejes.
+- **La raya vertical se pega al punto.** uPlot ponía la raya donde estaba el
+  dedo y los círculos donde estaba el dato, así que se separaban. No se veía en
+  el rango de día —288 muestras en 294 px, medio píxel—, pero en **mes** las
+  muestras están a 9,7 px y la raya caía hasta **4,5 px** del punto; con zoom 4×,
+  a 1,9 px. Ahora la raya va al píxel exacto de la muestra: **0 px** medidos en
+  los tres casos.
+- **Hay salida a los totales.** El chip «Totales» solo aparecía con un punto
+  *fijado*, y en el móvil eso dejaba sin salida: al levantar el dedo no hay
+  `mouseleave` que devuelva el cursor, así que la leyenda se quedaba con los
+  valores del instante para siempre. Ahora sale con cualquier punto a la vista y
+  suelta también el del gráfico.
+- **Las barras de Facturación** tenían el mismo defecto por la misma razón, y se
+  arreglan igual: deslizar el dedo recorre los días y las horas.
+
+El reparto de gestos cambia, y conviene saberlo: **un dedo recorre** y **dos
+dedos pellizcan y desplazan el eje**. El recorrido de un dedo con zoom no se
+pierde: al llegar al borde, el eje sigue al dedo, así que con un solo dedo se
+alcanza todo el periodo sin soltar. El desplazamiento vertical de la página
+sigue siendo del navegador: si el gesto arranca claramente vertical, se suelta.
+
 ## 0.31.0
 
 ### El frontal, repartido en módulos

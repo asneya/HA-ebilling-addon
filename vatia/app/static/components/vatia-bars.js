@@ -213,6 +213,36 @@
         }
       });
       this._plot.over.style.touchAction = "pan-y";
+      this._recorrer();
+    }
+
+    /* Deslizar el dedo recorre las barras.
+       uPlot solo escucha el ratón, y arrastrar un dedo no genera `mousemove`:
+       sin esto, en el móvil la lectura solo cambiaba al tocar una barra. Se
+       coloca el cursor a mano y del resto —índice, banda, aviso— ya se encarga
+       el `setCursor` de arriba. Si el gesto arranca vertical se suelta, para no
+       quedarse el desplazamiento de la página. */
+    _recorrer() {
+      const over = this._plot.over;
+      let desde = null;
+      over.addEventListener("pointerdown", (ev) => {
+        desde = { x: ev.clientX, y: ev.clientY, movido: false };
+      }, { passive: true });
+      over.addEventListener("pointermove", (ev) => {
+        if (!desde || !this._plot) return;
+        const dx = ev.clientX - desde.x, dy = ev.clientY - desde.y;
+        if (!desde.movido) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          if (Math.abs(dy) > Math.abs(dx)) { desde = null; return; }
+          desde.movido = true;
+        }
+        const r = over.getBoundingClientRect();
+        const x = Math.max(0, Math.min(over.clientWidth, ev.clientX - r.left));
+        this._plot.setCursor({ left: x, top: over.clientHeight / 2 });
+      }, { passive: true });
+      const soltar = () => { desde = null; };
+      over.addEventListener("pointerup", soltar, { passive: true });
+      over.addEventListener("pointercancel", soltar, { passive: true });
     }
   }
 
