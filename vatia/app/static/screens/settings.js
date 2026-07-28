@@ -206,6 +206,12 @@ function renderSettingsIndex(s) {
     (mine ? ` · la tuya es ${mine.name}` : "");
   $("#nav-sub-contract").textContent =
     `${fmtNum.format(s.contracted_power?.p1 ?? 0)} / ${fmtNum.format(s.contracted_power?.p2 ?? 0)} kW · ciclo el día ${s.billing_day ?? 1}`;
+  const ifx = s.influx || {};
+  const url = (ifx.url || "").trim();
+  $("#nav-sub-influx").textContent = !url
+    ? "Sin configurar · el histórico sale del recorder"
+    : `v${ifx.version ?? 2} · ${s.source === "influxdb"
+        ? "facturación e histórico" : "histórico del consumo"}`;
   $("#nav-sub-publish").textContent = s.export_sensors === false
     ? "Desactivado"
     : `Cada ${s.sensor_update_minutes ?? 5} min`;
@@ -264,7 +270,11 @@ function fillSettings() {
 function updateSourceVisibility() {
   const source = $("#s-source").value;
   $("#ha-fields").classList.toggle("hidden", source !== "homeassistant");
-  $("#influx-fields").classList.toggle("hidden", source !== "influxdb");
+  // Los campos de InfluxDB ya no se esconden según la fuente: viven en su propia
+  // sección porque también dan el histórico del consumo. Escondiéndolos, quien
+  // tenía Home Assistant como fuente no podía configurarlos y el perfil horario
+  // de la ventana se quedaba sin el histórico largo, sin manera de saber por qué.
+  $("#ifx-hint").classList.toggle("hidden", source !== "influxdb");
   $("#ha-external").classList.toggle("hidden", !!config()?.supervisor);
   const v2 = $("#s-ifx-version").value === "2";
   $$(".ifx-v2").forEach((el) => el.classList.toggle("hidden", !v2));
@@ -368,6 +378,41 @@ async function saveSettings(silent = false) {
     if (!silent) status.textContent = `Error: ${err.message}`; else throw err;
   } finally {
     listo();
+  }
+}
+
+/* ---------------- InfluxDB ----------------
+   La sección dice si de verdad se está usando, y no solo si hay una URL puesta:
+   la pregunta que uno tiene aquí es «¿está saliendo mi histórico de aquí?», y
+   antes no había forma de contestarla. El dato sale de /api/live, que es la
+   misma llamada que la Home ya hace cada veinte segundos. */
+async function renderInfluxState() {
+  const caja = $("#ifx-estado");
+  const url = ((settings() || {}).influx || {}).url || "";
+  if (!url.trim()) {
+    caja.innerHTML = `Ahora mismo <b>no está configurado</b>: el histórico del
+      consumo sale de las estadísticas de Home Assistant, con lo que el recorder
+      tenga guardado.`;
+    return;
+  }
+  caja.textContent = "Comprobando…";
+  try {
+    const live = await api("live");
+    const perfil = live.window && live.window.profile;
+    if (!perfil) {
+      caja.innerHTML = `Configurado, pero <b>no se puede comprobar</b>: falta el
+        sensor de previsión solar o el de consumo de la casa, así que no se está
+        calculando el perfil. Míralo en <b>Sensores</b>.`;
+      return;
+    }
+    caja.innerHTML = perfil.source === "influxdb"
+      ? `✓ <b>El histórico sale de InfluxDB</b>: ${perfil.days} días, y el consumo
+         típico se calcula ${perfil.hourly ? "hora a hora" : "con una sola cifra"}.`
+      : `Configurado, pero el histórico está saliendo de <b>Home Assistant</b>
+         (${perfil.days} días): InfluxDB no respondió o no devolvió datos para el
+         sensor de consumo de la casa. Comprueba la URL, el bucket y el token.`;
+  } catch (err) {
+    caja.textContent = `No se pudo comprobar: ${err.message}`;
   }
 }
 
@@ -478,6 +523,27 @@ function perfilTexto(p) {
 
 $("#s-source").addEventListener("change", updateSourceVisibility);
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
+
+/* «Qué miden los contadores» vive en la página de Sensores, que no tiene barra
+   de guardar porque todo lo suyo se guarda al tocarlo. Este desplegable, en
+   cambio, solo se leía al pulsar «Guardar ajustes»: se elegía la opción, no
+   pasaba nada y al volver a entrar seguía la de antes. Ahora se guarda él, como
+   las asignaciones de arriba, y los totales se recalculan en el sitio. */
+$("#s-energy-counters").addEventListener("change", async (ev) => {
+  const listo = guardando(ev.target);
+  const nota = $("#counters-state");
+  nota.textContent = "Guardando…";
+  try {
+    await api("settings", { method: "PUT",
+      body: JSON.stringify({ energy_counters: ev.target.value }) });
+    await reloadConfig();
+    await loadSensors();
+    nota.textContent = "Guardado.";
+    emit("datos");   // los totales del día cambian de cálculo
+  } catch (err) {
+    nota.textContent = `No se ha podido guardar: ${err.message}`;
+  } finally { listo(); }
+});
 $("#load-entities-btn").addEventListener("click", loadEntities);
 $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
 $("#close-pick-modal").addEventListener("click", () => $("#pick-modal").classList.add("hidden"));
@@ -494,6 +560,7 @@ on("vista", ({ name }) => {
 });
 on("pagina-ajustes", ({ page }) => {
   if (page === "diagnostics") loadDiagnostics();
+  if (page === "influx") renderInfluxState();
   // Los sensores se asignan tocando su fila, no rellenando un formulario: la
   // barra de guardar no aplica y cada cambio se guarda solo.
   if (page === "sensors") loadSensors();

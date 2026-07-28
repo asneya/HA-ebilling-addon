@@ -2,6 +2,49 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.36.0
+
+### «Ahora mismo», siempre lo primero
+
+El caudal de energía va **pegado a la cabecera**, como en la maqueta. Antes lo
+empujaban hacia abajo el cierre del día, la fila de recuperarlo y la ventana de
+energía gratis, así que la tarjeta que se viene a mirar aparecía a media pantalla
+o fuera de ella según el momento del día. Ahora nada de lo que hay debajo la
+mueve, y se ha comprobado en los cuatro casos: sola, con la ventana, con el
+cierre y con la fila de recuperar.
+
+### InfluxDB se puede configurar, por fin
+
+El histórico del consumo de la 0.34.0 —el que da el **perfil hora a hora** de la
+ventana— era **inalcanzable**. Los campos de InfluxDB vivían dentro de «Fuente de
+datos» y se escondían salvo que la fuente fuese InfluxDB, así que quien lee de
+Home Assistant (lo normal) no tenía dónde escribir la URL, y el perfil se quedaba
+con los 14 días del recorder sin manera de saber por qué.
+
+Ahora InfluxDB es **su propia sección** en Ajustes, siempre visible, y dice para
+qué sirve cada cosa:
+
+- se usa para **dos cosas independientes** —la facturación y el histórico del
+  consumo— y la sección lo explica: los dos `entity_id` van en su grupo, marcados
+  como «solo para facturación desde InfluxDB»;
+- el índice resume el estado sin entrar: «Sin configurar · el histórico sale del
+  recorder», o «v2 · histórico del consumo»;
+- y dentro se dice **de dónde sale de verdad** el perfil, leyendo lo que reporta
+  la app: «El histórico sale de InfluxDB: 42 días, y el consumo típico se calcula
+  hora a hora», o que sale de las estadísticas de Home Assistant si Influx no
+  responde.
+
+La página de «Fuente de datos» conserva un aviso que apunta allí.
+
+### Un ajuste que no se podía guardar
+
+«Qué miden los contadores» está en Ajustes → Sensores, una página **sin barra de
+guardar** porque todo lo suyo se guarda al tocarlo. El desplegable, en cambio,
+solo se leía al pulsar «Guardar ajustes» —que ahí no existe—: se elegía la opción,
+no pasaba nada y al volver a entrar seguía la de antes. Ahora se guarda él, como
+las asignaciones de sensores de arriba, lo dice, y los totales del día se
+recalculan en el sitio.
+
 ## 0.35.1
 
 ### La pastilla del tiempo, a la maqueta
