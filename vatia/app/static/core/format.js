@@ -5,6 +5,11 @@ export const fmtNum = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 
 // Precios unitarios: cuatro decimales y sin símbolo, que la unidad va aparte.
 export const nf4 = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 
+/* Temperatura: un decimal, como la pastilla de la maqueta. */
+export const fmtTemp = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 1, maximumFractionDigits: 1,
+});
+
 export function num6(v) {
   return v == null ? "—" : Number(v).toLocaleString("es-ES", { maximumFractionDigits: 6 });
 }

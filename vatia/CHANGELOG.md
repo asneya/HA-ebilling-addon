@@ -2,6 +2,33 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.35.1
+
+### La pastilla del tiempo, a la maqueta
+
+Estaba a **46 px de alto con cristal oscuro** y la maqueta la dibuja a 34 px con
+cristal blanco. Casi el doble de alta, y se comía la cabecera. Ahora coincide
+medida a medida: alto 34, relleno 0/12, hueco de 7, desenfoque de 14 px, sin
+sombra de caja, icono de 17 px con trazo 1,9 y la temperatura a 14 px con peso
+600 y cifras tabulares. El suelo tiene sus dos variantes, blanco al 22 % sobre el
+cielo claro y al 10 % sobre el oscuro.
+
+Y la temperatura **recupera su decimal**: la maqueta pone «28,6°» y nosotros
+redondeábamos a «29°», que además dejaba sin sentido las cifras tabulares.
+
+### Un detalle que la maqueta no podía prever
+
+La maqueta le pone tinta blanca, pero dibuja **un solo cielo**: uno azul y
+saturado. El del tema claro es casi blanco en las cuatro fases, y medido daba
+**1,16:1** — la temperatura era invisible. Se conserva el material de la maqueta y
+se adapta la tinta al tema: en claro la del tema (**12,2:1**), en oscuro blanca
+(**8,6:1**). Comprobado en las ocho combinaciones de tema y fase leyendo el píxel
+compuesto de verdad, no una cuenta teórica.
+
+De paso, en `prefers-contrast: more` el suelo se vuelve opaco y la pastilla
+quedaba **blanco sobre blanco**, es decir ilegible justo para quien pide más
+contraste. Ahora lleva la tinta del tema (19,1:1).
+
 ## 0.35.0
 
 ### El catálogo de componentes, cerrado
