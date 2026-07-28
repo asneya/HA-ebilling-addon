@@ -226,6 +226,7 @@ function fillSettings() {
   $("#s-export-sensors").checked = s.export_sensors !== false;
   $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
   $("#s-energy-counters").value = s.energy_counters || "auto";
+  $("#s-battery-kwh").value = s.battery_kwh || "";
   renderSettingsIndex(s);
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
@@ -323,6 +324,7 @@ function settingsFromForm() {
     flow_sensors: flow,
     energy_sensors: energy,
     energy_counters: $("#s-energy-counters").value,
+    battery_kwh: Number($("#s-battery-kwh").value) || 0,
     condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
     solar_forecast_sensor: $("#s-forecast").value,
@@ -501,6 +503,24 @@ function perfilTexto(p) {
 
 $("#s-source").addEventListener("change", updateSourceVisibility);
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
+
+/* La capacidad de la batería está en la misma página sin barra de guardar, así
+   que se guarda al salir del campo, como el desplegable de abajo. */
+$("#s-battery-kwh").addEventListener("change", async (ev) => {
+  const nota = $("#bat-kwh-state");
+  const kwh = Number(ev.target.value) || 0;
+  nota.textContent = "Guardando…";
+  try {
+    await api("settings", { method: "PUT", body: JSON.stringify({ battery_kwh: kwh }) });
+    await reloadConfig();
+    nota.textContent = kwh > 0
+      ? `Guardado · con ${fmtNum.format(kwh)} kWh ya se puede decir cuánta batería se lleva cada ciclo.`
+      : "Sin capacidad: la estimación no podrá separar la batería de la red.";
+    emit("datos");
+  } catch (err) {
+    nota.textContent = `No se ha podido guardar: ${err.message}`;
+  }
+});
 
 /* «Qué miden los contadores» vive en la página de Sensores, que no tiene barra
    de guardar porque todo lo suyo se guarda al tocarlo. Este desplegable, en

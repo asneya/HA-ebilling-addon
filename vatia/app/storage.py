@@ -108,6 +108,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     #   daily    → ya son del día en curso: se lee su estado tal cual
     #   lifetime → acumulados: se calcula el incremento desde la medianoche
     "energy_counters": "auto",
+    # Capacidad de la batería en kWh. Sirve para poner en kilovatios el estado de
+    # carga —que llega en porcentaje— y así poder decir cuánta batería se llevaría
+    # un electrodoméstico. 0 = sin configurar: entonces no se puede separar lo que
+    # saldría de la batería de lo que saldría de la red, y se dice así.
+    "battery_kwh": 0.0,
     # Meteorología del fondo de la Home: dos sensores independientes, uno con
     # la condición (texto) y otro con la temperatura exterior.
     "condition_sensor": "",

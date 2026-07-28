@@ -300,6 +300,30 @@ def forecast_daily(states_list: list[dict[str, Any]], tz) -> dict[datetime, floa
     return out
 
 
+def forecast_at(points: list[tuple[datetime, float]], moment: datetime) -> float:
+    """W previstos en un instante, interpolando entre los dos puntos vecinos.
+
+    Cero fuera del rango de la previsión: de noche no hay sol que prometer, y
+    extrapolar por los bordes daría producción a las tres de la mañana.
+    """
+    if not points or moment < points[0][0] or moment > points[-1][0]:
+        return 0.0
+    lo, hi = 0, len(points) - 1
+    while lo + 1 < hi:
+        mid = (lo + hi) // 2
+        if points[mid][0] <= moment:
+            lo = mid
+        else:
+            hi = mid
+    t0, v0 = points[lo]
+    t1, v1 = points[min(lo + 1, len(points) - 1)]
+    span = (t1 - t0).total_seconds()
+    if span <= 0:
+        return max(v0, 0.0)
+    ratio = max(0.0, min((moment - t0).total_seconds() / span, 1.0))
+    return max(v0 + (v1 - v0) * ratio, 0.0)
+
+
 def _midnight(moment: datetime) -> datetime:
     return moment.replace(hour=0, minute=0, second=0, microsecond=0)
 

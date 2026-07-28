@@ -114,8 +114,11 @@ function renderLive() {
   $("#window").data = closing ? null : live.window || null;
   $("#window-panel").classList.toggle("hidden", closing || !live.window);
 
-  // «Cabe en la ventana»: acompaña a la ventana, así que desaparece con ella.
-  renderAdvice(closing ? null : live.advice);
+  // «Cabe en la ventana» **no** desaparece con la ventana. Al anochecer cambia de
+  // pregunta —«Lo que te costaría ahora»—, que es el estado `post` del propio
+  // diseño, y es justo cuando más sirve: de noche lo que pongas sale de la
+  // batería o de la red, y eso es lo que dice su renglón de estimación.
+  renderAdvice(live.advice);
   // Lo que está haciendo cada electrodoméstico va en este payload, y su sección
   // de Ajustes lo enseña: se anuncia para no tener que pedirlo dos veces.
   emit("vivo", live);
@@ -223,6 +226,41 @@ function dur(horas) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
+/* De dónde saldría la energía si se pusiera ahora. Lo que el veredicto no dice:
+   «cabe en la ventana» habla de horas de sol, y esto habla de **de qué depósito
+   sale** lo que el sol no cubra. En una casa con batería no es lo mismo que
+   comprarlo — sale de lo que tenías guardado para la noche—, así que se pone en
+   kWh de batería y en euros al precio de importar, que es lo que ese kilovatio
+   vale: el que gastes ahora lo tendrás que comprar luego. */
+function estimacion(e, kind) {
+  if (!e) return "";
+  const sol = e.sun_kwh || 0, bat = e.battery_kwh || 0, red = e.grid_kwh || 0;
+  if (bat < 0.01 && red < 0.01) {
+    return `<small class="ad-est sol">lo pone el sol entero</small>`;
+  }
+  const trozos = [];
+  if (sol >= 0.01) trozos.push(`${fmtNum.format(sol)} de sol`);
+  if (!e.split) {
+    // Sin capacidad de batería configurada no se puede separar una de otra, y
+    // decir «batería» a secas sería afirmar más de lo que se sabe.
+    trozos.push(`${fmtNum.format(bat + red)} kWh de batería o red`);
+  } else {
+    if (bat >= 0.01) {
+      const pct = e.battery_pct != null ? ` (${e.battery_pct} % de carga)` : "";
+      trozos.push(`${fmtNum.format(bat)} kWh de batería${pct}`);
+    }
+    if (red >= 0.01) trozos.push(`${fmtNum.format(red)} kWh de red`);
+  }
+  // Los euros solo cuando el veredicto no es ya una cifra en euros: con la
+  // ventana cerrada el veredicto **es** ese mismo importe, y repetirlo en la
+  // misma fila no informa de nada, solo la llena.
+  const conNumero = kind === "cerrada" || kind === "parcial";
+  const eur = (e.battery_eur || 0) + (e.grid_eur || 0);
+  const coste = conNumero || (e.battery_eur == null && e.grid_eur == null)
+    ? "" : ` ≈ ${fmtEUR.format(eur)} si lo compraras`;
+  return `<small class="ad-est">${esc(trozos.join(" · ") + coste)}</small>`;
+}
+
 /* La tarjeta del prototipo, con una diferencia de fondo: allí la duración y los
    kWh de cada electrodoméstico se teclean, y aquí se han medido. Del histórico
    del propio enchufe, así que el consejo habla de *tu* lavadora. */
@@ -251,6 +289,7 @@ function renderAdvice(advice) {
         <span class="ad-txt">
           <b>${esc(r.name)}</b>
           <small>${esc(meta)}</small>
+          ${estimacion(r.estimate, v.kind)}
         </span>
         <span class="ad-verdict">
           <b class="v-${esc(v.kind)}">${esc(valor)}</b>

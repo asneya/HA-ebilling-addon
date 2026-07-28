@@ -2,6 +2,58 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.38.1
+
+### La hoja de electrodoméstico no cabía en un móvil
+
+Había que **girar el teléfono** para llegar al botón de Guardar. En una pantalla
+de 320 px la hoja salía de 393 y el botón quedaba 58 px fuera, literalmente
+inalcanzable.
+
+La causa no era de esa hoja sino de **todas**: `.modal` es una rejilla, y su
+única columna implícita se dimensionaba por el *max-content* de la hoja —lo que
+mide su cabecera con el título sin partir—, así que el `100 %` de la hoja se
+resolvía contra esa columna desbordada en vez de contra la pantalla. Atada la
+columna al ancho de la ventana, el título vuelve a partirse con sus puntos
+suspensivos y el botón entra. El editor de tarifa tenía el mismo defecto
+esperando un título lo bastante largo.
+
+Comprobado en las cuatro hojas de la app a 320 px: ninguna se sale, ninguna pide
+scroll horizontal y todos sus botones se pueden pulsar.
+
+### Cuánta batería se llevaría cada electrodoméstico
+
+La tarjeta de la Home ya decía si un ciclo cabe en la ventana. Ahora dice también
+**de qué depósito saldría** si lo pusieras ahora, que es la otra mitad de la
+pregunta: en una casa con batería, lo que el sol no cubre no es lo mismo que
+comprarlo — sale de lo que tenías guardado para la noche.
+
+Cada fila añade un renglón: *«2,1 kWh de batería (28 % de carga)»*, y el
+equivalente en euros al precio de importar, porque el kilovatio de batería que
+gastes ahora lo tendrás que comprar luego. La estimación va minuto a minuto del
+ciclo con:
+
+- **la previsión solar corregida con la producción real de este momento** — un
+  día de nubes que la previsión no vio prometería un sol que no está;
+- el consumo típico de la casa a esa hora, el mismo perfil que usa la ventana;
+- lo que el sol no cubra lo pone la batería mientras le quede, y lo que no, la
+  red. Si sobra sol por encima del aparato, la batería **se carga**, que es lo que
+  pasaría de verdad y mejora la cuenta de una tarde soleada.
+
+Para poder decirlo en kilovatios hace falta la **capacidad de la batería** —el
+estado de carga llega en porcentaje—, que se pone en Ajustes → Sensores. Sin ella
+la estimación no se calla ni se inventa el reparto: dice «batería o red» con el
+total, que es lo que se sabe.
+
+El importe no se repite: cuando el veredicto ya es una cifra en euros —con la
+ventana cerrada— el renglón se queda solo con los kilovatios.
+
+### Y la tarjeta ya no desaparece al anochecer
+
+Se escondía junto con la ventana, y el diseño tiene un estado propio para esa
+hora —«Lo que te costaría ahora»— que no se llegaba a ver nunca. Es justo cuando
+más sirve: de noche lo que pongas sale de la batería o de la red.
+
 ## 0.38.0
 
 ### Electrodomésticos: los que se miden, no los que se describen
