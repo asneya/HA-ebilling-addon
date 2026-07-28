@@ -715,6 +715,23 @@
         <div id="sensors-groups"></div>
 
         <div class="panel glass group">
+          <div class="group-head">La batería</div>
+          <label class="li">
+            <span class="li-label">Capacidad</span>
+            <span class="unit-field"><input id="s-battery-kwh" type="number" min="0"
+              max="200" step="0.5" inputmode="decimal"><span class="unit">kWh</span></span>
+          </label>
+          <p class="li-note" id="bat-kwh-state" aria-live="polite"></p>
+          <p class="li-note">
+            El estado de carga llega en <b>porcentaje</b>, y con la capacidad se
+            puede pasar a kilovatios: es lo que permite decirte, en la tarjeta de
+            la Home, <b>cuánta batería se llevaría</b> cada electrodoméstico y
+            cuánto valdría eso comprado a la red. Sin ella la estimación no puede
+            separar la batería de la red y lo dice.
+          </p>
+        </div>
+
+        <div class="panel glass group">
           <div class="group-head">Qué miden los contadores</div>
           <label class="li">
             <span class="li-label">Totales de energía</span>

@@ -1064,6 +1064,7 @@ async def build(
         consejo = appliances_mod.advice(
             aparatos, aprendido, window, now,
             _precio_tras_ventana(settings, tariffs, window, now),
+            await _fuentes(settings, states, power, soc, now.tzinfo, now),
         )
         for fila in ahora_aparatos:
             datos = aprendido.get(fila["id"]) or {}
@@ -1091,6 +1092,51 @@ async def build(
             states, energy_summary, buckets, window, now, savings, aparatos, aprendido
         ),
         "generated_at": now.isoformat(),
+    }
+
+
+async def _fuentes(
+    settings: dict[str, Any],
+    states: dict[str, Any],
+    power: dict[str, float],
+    soc: float | None,
+    tz,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Con qué se estima de dónde saldría la energía de un ciclo puesto ahora.
+
+    Las dos curvas son las mismas que usa la ventana —la previsión solar y el
+    perfil horario de la casa—, así que no cuesta ninguna petición más: el perfil
+    está en caché y la previsión sale de los atributos del sensor que ya está en
+    `states`.
+
+    La previsión se **corrige con la producción real de este momento**. Es lo que
+    la hace utilizable: un día de nubes que la previsión no vio prometería un sol
+    que no está, y la estimación diría «lo pone el sol» mientras la casa tira de
+    la batería. El factor se recorta entre 0,2 y 1,5 para que un desajuste puntual
+    —una nube justo encima del panel a mediodía— no lleve la corrección al absurdo.
+    """
+    puntos = series_mod.forecast_power(
+        series_mod._forecast_states(settings, states), tz
+    )
+    if not puntos:
+        return None
+    perfil = await _house_profile(settings, states, tz, now)
+    if perfil is None:
+        return None
+
+    previsto_ahora = series_mod.forecast_at(puntos, now)
+    real_ahora = max(power.get("pv") or 0.0, 0.0)
+    factor = 1.0
+    if previsto_ahora and previsto_ahora > 50:
+        factor = max(0.2, min(real_ahora / previsto_ahora, 1.5))
+
+    return {
+        "sol_at": lambda momento: series_mod.forecast_at(puntos, momento) * factor,
+        "casa_at": perfil.at,
+        "soc": soc,
+        "capacity_kwh": float(settings.get("battery_kwh") or 0.0),
+        "factor": round(factor, 2),
     }
 
 

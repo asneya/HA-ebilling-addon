@@ -291,8 +291,13 @@ def advice(
     window: dict[str, Any] | None,
     now: datetime,
     price: float | None,
+    fuentes: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """La tarjeta «Cabe en la ventana»: una fila por electrodoméstico.
+
+    ``fuentes`` es lo que hace falta para estimar de dónde saldría la energía si
+    se pusiera **ahora** —previsión de sol, consumo típico de la casa, carga de la
+    batería y su capacidad—; sin ella las filas salen igual, solo sin ese renglón.
 
     ``None`` si no hay ningún electrodoméstico dado de alta: la tarjeta entera se
     esconde antes que enseñar una lista vacía.
@@ -312,6 +317,7 @@ def advice(
             "today_kwh": datos.get("today_kwh"),
             "runs_today": len(datos.get("today") or []),
             "verdict": verdict(ciclo, window, now, price),
+            "estimate": estimate(ciclo, now, price, fuentes),
         })
     # Primero lo que cabe gratis: es la respuesta que se ha venido a buscar.
     orden = {"gratis": 0, "justo": 1, "parcial": 2, "cerrada": 3, "sin-ventana": 4,
@@ -321,6 +327,105 @@ def advice(
         "title": "Lo que te costaría ahora" if cerrada else "Cabe en la ventana",
         "closed": cerrada,
         "rows": filas,
+    }
+
+
+# Paso de la simulación de un ciclo. Cinco minutos es el paso de todo lo demás
+# —las estadísticas, las curvas del flujo— y da de sobra para un ciclo de horas.
+_PASO_SIM_H = 5 / 60
+
+
+def estimate(
+    cycle: dict[str, Any] | None,
+    now: datetime,
+    price: float | None,
+    fuentes: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """De dónde saldría la energía de un ciclo puesto **ahora**: sol, batería o red.
+
+    Contesta la pregunta que la ventana no contesta. «Cabe en la ventana» dice si
+    hay hueco de sol; esto dice qué pasa con lo que el sol no cubra, que en una
+    casa con batería no es lo mismo que comprarlo: sale de lo que tenías guardado
+    para la noche. Y lo pone en euros al precio de importar, que es lo que ese
+    kilovatio de batería vale — porque el que gastes ahora lo tendrás que comprar
+    luego.
+
+    Cómo se estima, minuto a minuto del ciclo:
+
+      · el sol que se espera sale de la **previsión corregida con la producción
+        real de ahora**: un día de nubes que la previsión no vio se lleva su
+        factor de corrección, así que no promete un sol que no está;
+      · el consumo de la casa, del perfil horario (la mediana de esa hora), que ya
+        es lo que usa la ventana;
+      · el aparato tira de su media (kWh del ciclo entre sus horas): no se finge
+        conocer la forma de su programa;
+      · lo que el sol no cubra lo pone la batería mientras le quede, y lo que no,
+        la red. Si sobra sol por encima del aparato, la batería se **carga**, que
+        es lo que pasaría de verdad y mejora la cuenta de una tarde soleada.
+
+    ``None`` si no hay ciclo aprendido o no hay con qué estimar.
+    """
+    if not cycle or not fuentes:
+        return None
+    sol_at = fuentes.get("sol_at")
+    casa_at = fuentes.get("casa_at")
+    if not sol_at or not casa_at:
+        return None
+
+    horas = float(cycle["hours"])
+    kwh = float(cycle["kwh"])
+    if horas <= 0 or kwh <= 0:
+        return None
+    aparato_w = kwh * 1000.0 / horas
+
+    capacidad = float(fuentes.get("capacity_kwh") or 0.0)
+    soc = fuentes.get("soc")
+    # Energía guardada ahora, en kWh. Sin capacidad configurada no se puede saber,
+    # y entonces la batería y la red van juntas en el resultado.
+    guardado = None
+    if capacidad > 0 and soc is not None:
+        guardado = capacidad * max(0.0, min(float(soc), 100.0)) / 100.0
+
+    del_sol = de_bat = de_red = 0.0
+    restante = guardado
+    pasos = max(1, int(round(horas / _PASO_SIM_H)))
+    for i in range(pasos):
+        momento = now + timedelta(hours=i * _PASO_SIM_H)
+        sol = max(0.0, sol_at(momento))
+        casa = max(0.0, casa_at(momento))
+        sobra = max(0.0, sol - casa)
+        sol_ap = min(aparato_w, sobra)
+        falta = aparato_w - sol_ap
+        del_sol += sol_ap * _PASO_SIM_H / 1000.0
+        if falta <= 0:
+            # Lo que sobre por encima del aparato carga la batería.
+            if restante is not None and capacidad > 0:
+                restante = min(capacidad, restante + (sobra - sol_ap) * _PASO_SIM_H / 1000.0)
+            continue
+        pide = falta * _PASO_SIM_H / 1000.0
+        if restante is None:
+            de_bat += pide            # sin capacidad: no se puede separar
+        else:
+            usa = min(pide, restante)
+            de_bat += usa
+            restante -= usa
+            de_red += pide - usa
+
+    total = del_sol + de_bat + de_red
+    return {
+        "sun_kwh": round(del_sol, 2),
+        "battery_kwh": round(de_bat, 2),
+        "grid_kwh": round(de_red, 2),
+        # Qué parte de la batería es eso, para que el número signifique algo.
+        "battery_pct": round(de_bat / capacidad * 100) if capacidad > 0 else None,
+        # El equivalente en euros de lo que **no** pone el sol, al precio de
+        # importar: es lo que costaría comprar eso mismo a la red.
+        "battery_eur": None if price is None else round(de_bat * price, 2),
+        "grid_eur": None if price is None else round(de_red * price, 2),
+        # `False` cuando no hay capacidad configurada: entonces «batería» es en
+        # realidad «batería o red» y la interfaz no puede decir cuál.
+        "split": restante is not None,
+        "total_kwh": round(total, 2),
     }
 
 
