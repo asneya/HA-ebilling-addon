@@ -119,21 +119,37 @@
     _words(d, t, m) {
       const abre = m ? `Mañana abre a las ${hhmm(m.start)}` : null;
       if (d.state === "open") {
+        // Con el perfil horario la ventana puede tener huecos: si viene uno, lo
+        // que hay que decir no es cuándo cierra sino cuándo se corta.
+        const corte = (t.gaps || []).find((g) => new Date(g.start) > Date.now());
         return {
           pill: "ENERGÍA GRATIS AHORA",
           head: `Te sobran ${kw(t.surplus_w)} durante ${dur(d.hours_left)}.`,
-          sub: `Es el mejor momento del día para gastar. A partir de las ${
-            hhmm(t.end)} cada kWh lo pagas.`,
+          sub: corte
+            ? `Es el mejor momento del día para gastar. A las ${hhmm(corte.start)} se corta
+               —la casa gasta más de lo que da el sol— y vuelve a las ${hhmm(corte.end)}.`
+            : `Es el mejor momento del día para gastar. A partir de las ${
+              hhmm(t.end)} cada kWh lo pagas.`,
           note: this._note(t, m),
         };
       }
       if (d.state === "pre") {
-        const falta = (new Date(t.start) - Date.now()) / 3600000;
+        // `reopens_at` solo viene si estamos en un hueco de la ventana: entonces
+        // la hora que importa es la de la reapertura, no la del primer corte.
+        const cuando = d.reopens_at || t.start;
+        const falta = (new Date(cuando) - Date.now()) / 3600000;
+        const vuelve = !!d.reopens_at;
         return {
-          pill: `ABRE EN ${dur(falta).toUpperCase()}`,
-          head: `Tu ventana abre a las ${hhmm(t.start)}.`,
-          sub: `Faltan ${dur(falta)}. Te sobrarán ${kw(t.surplus_w)} durante ${
-            dur(t.hours)}.`,
+          pill: vuelve ? `VUELVE EN ${dur(falta).toUpperCase()}`
+                       : `ABRE EN ${dur(falta).toUpperCase()}`,
+          head: vuelve
+            ? `Ahora mismo no sobra: vuelve a las ${hhmm(cuando)}.`
+            : `Tu ventana abre a las ${hhmm(cuando)}.`,
+          sub: vuelve
+            ? `La casa gasta ahora más de lo que da el sol. Después quedan ${
+              dur(d.hours_left)} con excedente.`
+            : `Faltan ${dur(falta)}. Te sobrarán ${kw(t.surplus_w)} durante ${
+              dur(t.net_hours ?? t.hours)}.`,
           note: this._note(t, m),
         };
       }
@@ -190,17 +206,26 @@
       // riel si la ventana asoma por fuera del día de luz.
       const at = (ms) => Math.max(0, Math.min(1, (ms - from) / (to - from)));
       const pct = (ms) => `${(at(ms) * 100).toFixed(1)}%`;
-      const winFrom = at(new Date(t.start).getTime());
-      const winTo = at(new Date(t.end).getTime());
       const now = Date.now();
       const inside = now >= from && now <= to;
       const mid = new Date((from + to) / 2);
+      // Una barra por tramo: si la ventana tiene un hueco —la hora en la que la
+      // casa gasta más de lo que da el sol— el riel tiene que enseñarlo, que es
+      // el sitio donde se ve de un vistazo.
+      const tramos = (t.spans && t.spans.length ? t.spans : [t]).map((s) => {
+        const a = at(new Date(s.start).getTime());
+        const b = at(new Date(s.end).getTime());
+        return `<div class="fill" style="left:${(a * 100).toFixed(1)}%;
+          width:${(Math.max(0, b - a) * 100).toFixed(1)}%"></div>`;
+      }).join("");
+      const cabecera = (t.gaps && t.gaps.length)
+        ? `${hhmm(t.start)} – ${hhmm(t.end)} · ${dur(t.net_hours ?? t.hours)} netas`
+        : `${hhmm(t.start)} – ${hhmm(t.end)}`;
       return `<div class="track-card">
         <div class="track-head"><span>La ventana de hoy</span>
-          <span>${esc(hhmm(t.start))} – ${esc(hhmm(t.end))}</span></div>
+          <span>${esc(cabecera)}</span></div>
         <div class="track">
-          <div class="rail"><div class="fill" style="left:${(winFrom * 100).toFixed(1)}%;
-            width:${(Math.max(0, winTo - winFrom) * 100).toFixed(1)}%"></div></div>
+          <div class="rail">${tramos}</div>
           ${inside ? `<div class="now" style="left:${pct(now)}"></div>
             <div class="now-label" style="left:${pct(now)}">${
               esc(hhmm(nowAt(light.from)))}</div>` : ""}

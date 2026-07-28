@@ -612,59 +612,176 @@ async def diagnostics(
     # Un 5 % de margen absorbe el desfase normal entre contadores y el retraso
     # de las estadísticas; por encima de eso hay un sensor que no cuadra.
     cuadra = mayor <= 0 or abs(diff) <= max(mayor * 0.05, 0.1)
+    # De dónde sale el consumo típico con el que se calcula la ventana. Aquí y
+    # no en la tarjeta: la pregunta «¿está usando mi InfluxDB?» es de esta
+    # pantalla, y la tarjeta tiene que decir horas, no procedencias.
+    perfil = await _house_profile(settings, states, tz, now)
     return {
         "rows": rows,
         "entra": round(entra, 2),
         "sale": round(sale, 2),
         "diferencia": round(diff, 2),
         "cuadra": cuadra,
+        "profile": perfil.payload() if perfil else None,
         "generated_at": now.isoformat(),
     }
 
 
-# Consumo típico de la casa y ventana de energía gratis. El consumo típico sale
-# de una consulta de siete días, que es caro para un endpoint que se pide cada
-# pocos segundos, así que se guarda un rato.
+# Consumo típico de la casa y ventana de energía gratis. El histórico es caro
+# para un endpoint que se pide cada pocos segundos, así que se guarda un rato.
 _baseline_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": None}
 _BASELINE_TTL = 1800.0
 
+# Días de histórico que se piden. Al recorder se le piden pocos porque por
+# defecto solo guarda diez; a InfluxDB, muchos más, que es justo lo que aporta:
+# con seis semanas el perfil ya distingue el laborable del fin de semana sin que
+# un día raro lo desvíe.
+_DIAS_RECORDER = 14
+_DIAS_INFLUX = 42
+# Muestras mínimas para creerse una casilla del perfil. Con menos se cae al
+# escalón de al lado, y en último término a una sola cifra para todo el día.
+_MIN_MUESTRAS_HORA = 3
+_MIN_MUESTRAS_TOTAL = 24
 
-async def _house_baseline(
+
+class HouseProfile:
+    """Consumo habitual de la casa, hora a hora.
+
+    El umbral de la ventana era una sola cifra —la mediana de la semana— y eso
+    la hacía mentir justo cuando importa: con 320 W de mediana y el horno puesto
+    a la una, la app decía «ahora es gratis» mientras la casa pedía 2.500 W. El
+    perfil guarda una cifra por hora y por tipo de día, así que a la una el
+    umbral es el de la una.
+
+    Se usa la **mediana** y no la media: un día con el horno tres horas subiría
+    la media y acortaría la ventana de todos los demás días. Lo que interesa es
+    lo que la casa gasta de normal a esa hora.
+    """
+
+    def __init__(self, por_hora: dict[tuple[bool, int], float], plano: float,
+                 origen: str, dias: int):
+        self._por_hora = por_hora
+        self.plano = plano
+        self.origen = origen          # «influxdb» o «recorder»
+        self.dias = dias
+        # ¿Hay bastantes casillas para que el perfil aporte algo? Con cuatro
+        # horas medidas no se puede hablar de perfil, y es más honesto decir que
+        # se está usando una sola cifra.
+        self.por_horas = len(por_hora) >= 12
+
+    def at(self, moment: datetime) -> float:
+        """Umbral a esa hora. Cae al escalón vecino y luego a la cifra plana."""
+        if not self.por_horas:
+            return self.plano
+        laborable = moment.weekday() < 5
+        hora = moment.hour
+        for clave in ((laborable, hora), (not laborable, hora)):
+            if clave in self._por_hora:
+                return self._por_hora[clave]
+        # Sin dato ni para esa hora ni para el otro tipo de día: la hora de al
+        # lado antes que la cifra de todo el día.
+        for salto in (1, -1, 2, -2):
+            clave = (laborable, (hora + salto) % 24)
+            if clave in self._por_hora:
+                return self._por_hora[clave]
+        return self.plano
+
+    def payload(self) -> dict[str, Any]:
+        """Lo que se enseña de él: de dónde sale y cómo es el día medio."""
+        laborable = [
+            round(self._por_hora.get((True, h), self._por_hora.get((False, h), self.plano)), 1)
+            for h in range(24)
+        ]
+        return {
+            "source": self.origen,
+            "days": self.dias,
+            "hourly": self.por_horas,
+            "flat_w": round(self.plano, 1),
+            "weekday_w": laborable,
+            "min_w": round(min(laborable), 1),
+            "max_w": round(max(laborable), 1),
+        }
+
+
+def _perfil_de(muestras: list[tuple[datetime, float]], origen: str, dias: int
+               ) -> HouseProfile | None:
+    """Agrupa las muestras horarias en un perfil por (tipo de día, hora)."""
+    if len(muestras) < _MIN_MUESTRAS_TOTAL:
+        return None
+    cubos: dict[tuple[bool, int], list[float]] = {}
+    todas: list[float] = []
+    for moment, watts in muestras:
+        w = max(watts, 0.0)
+        cubos.setdefault((moment.weekday() < 5, moment.hour), []).append(w)
+        todas.append(w)
+    por_hora = {
+        clave: sorted(v)[len(v) // 2]
+        for clave, v in cubos.items()
+        if len(v) >= _MIN_MUESTRAS_HORA
+    }
+    todas.sort()
+    return HouseProfile(por_hora, todas[len(todas) // 2], origen, dias)
+
+
+async def _house_profile(
     settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
-) -> float | None:
-    """Potencia habitual de la casa (W): la mediana de la última semana.
+) -> HouseProfile | None:
+    """Perfil de consumo de la casa, de InfluxDB si está o del recorder si no.
 
-    La mediana y no la media: un día con el horno puesto tres horas sube la
-    media y dejaría la ventana más corta de lo que es. Lo que interesa es el
-    suelo de consumo, lo que la casa gasta sin que nadie haga nada.
+    InfluxDB primero porque guarda meses donde el recorder guarda diez días, y
+    el perfil mejora con el histórico: con dos semanas cada casilla tiene dos
+    muestras, con seis tiene seis y un día raro deja de desviarla. Si InfluxDB
+    no está configurado o no responde, se sigue con el recorder — que es lo que
+    había — sin que se note más que en la letra pequeña de la tarjeta.
     """
     entity = (settings.get("flow_sensors") or {}).get("home") or ""
     if not entity:
         return None
-    key = f"{entity}|{now.strftime('%Y-%m-%d-%H')}"
+    influx_url = ((settings.get("influx") or {}).get("url") or "").strip()
+    key = f"{entity}|{influx_url}|{now.strftime('%Y-%m-%d-%H')}"
     if (
         _baseline_cache["key"] == key
         and time.monotonic() - _baseline_cache["at"] < _BASELINE_TTL
     ):
         return _baseline_cache["value"]
 
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)
-    value: float | None = None
-    try:
-        results, units = await series_mod.ws_statistics(
-            settings,
-            [{"ids": [entity], "start": start, "end": now,
-              "period": "hour", "types": ["mean"]}],
-        )
-        factor = series_mod._unit_factor(entity, states, "power", units)
-        rows = series_mod._extract(results[0], entity, "mean", tz, factor)
-        samples = sorted(max(w, 0.0) for w in rows.values())
-        if len(samples) >= 12:
-            value = samples[len(samples) // 2]
-    except Exception:  # noqa: BLE001 - sin histórico no hay ventana, y ya está
-        _LOGGER.warning("No se pudo calcular el consumo típico", exc_info=True)
-    _baseline_cache.update({"key": key, "at": time.monotonic(), "value": value})
-    return value
+    medianoche = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    perfil: HouseProfile | None = None
+
+    if influx_url:
+        try:
+            unidad = ((states.get(entity, {}).get("attributes") or {})
+                      .get("unit_of_measurement") or "")
+            factor = 1000.0 if unidad.lower() == "kw" else 1.0
+            crudo = await datasources.influx_hourly_mean(
+                settings, entity, unidad,
+                medianoche - timedelta(days=_DIAS_INFLUX), now, tz,
+            )
+            perfil = _perfil_de(
+                [(t, w * factor) for t, w in crudo], "influxdb", _DIAS_INFLUX
+            )
+        except Exception:  # noqa: BLE001 - se sigue con el recorder
+            _LOGGER.info("InfluxDB no pudo dar el histórico del consumo", exc_info=True)
+
+    if perfil is None:
+        try:
+            results, units = await series_mod.ws_statistics(
+                settings,
+                [{"ids": [entity],
+                  "start": medianoche - timedelta(days=_DIAS_RECORDER),
+                  "end": now, "period": "hour", "types": ["mean"]}],
+            )
+            factor = series_mod._unit_factor(entity, states, "power", units)
+            rows = series_mod._extract(results[0], entity, "mean", tz, factor)
+            perfil = _perfil_de(
+                [(datetime.fromisoformat(k), v) for k, v in rows.items()],
+                "recorder", _DIAS_RECORDER,
+            )
+        except Exception:  # noqa: BLE001 - sin histórico no hay ventana, y ya está
+            _LOGGER.warning("No se pudo calcular el consumo típico", exc_info=True)
+
+    _baseline_cache.update({"key": key, "at": time.monotonic(), "value": perfil})
+    return perfil
 
 
 async def free_energy(
@@ -680,13 +797,13 @@ async def free_energy(
     )
     if not points:
         return None
-    baseline = await _house_baseline(settings, states, tz, now)
-    if baseline is None:
+    perfil = await _house_profile(settings, states, tz, now)
+    if perfil is None:
         return None
 
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today = series_mod.free_window(points, baseline, midnight)
-    tomorrow = series_mod.free_window(points, baseline, midnight + timedelta(days=1))
+    today = series_mod.free_window(points, perfil.at, midnight)
+    tomorrow = series_mod.free_window(points, perfil.at, midnight + timedelta(days=1))
 
     # Eje de la línea de tiempo: las horas de luz de hoy, sacadas de la propia
     # previsión, así no hace falta el sensor del sol. Es la misma cuenta que la
@@ -697,23 +814,49 @@ async def free_energy(
 
     # pre: aún no ha abierto · open: está abierta · post: ya cerró · none: hoy
     # no sobra nada (un día de nubes) y solo queda mirar a mañana.
+    #
+    # Con el perfil horario la ventana puede tener huecos —la hora del horno—, y
+    # entonces «abierta» no puede salir de estar entre el primer y el último
+    # corte: tiene que ser dentro de un tramo. Estando en un hueco el estado
+    # vuelve a «pre», con la hora del tramo siguiente, que es exactamente lo que
+    # hay que decir: «ahora no, a partir de las 14:00 sí».
     state = "none"
     left_h = 0.0
+    reopens: str | None = None
     if today:
-        start = datetime.fromisoformat(today["start"])
-        end = datetime.fromisoformat(today["end"])
-        state = "pre" if now < start else "open" if now < end else "post"
-        if state == "open":
-            left_h = (end - now).total_seconds() / 3600.0
-        elif state == "pre":
-            left_h = today["hours"]
+        tramos = [
+            (datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
+            for s in today["spans"]
+        ]
+        fin = tramos[-1][1]
+        dentro = next(((a, b) for a, b in tramos if a <= now < b), None)
+        if dentro:
+            state = "open"
+            # Lo que queda de excedente hoy: este tramo y los que vengan detrás.
+            left_h = (dentro[1] - now).total_seconds() / 3600.0 + sum(
+                (b - a).total_seconds() / 3600.0 for a, b in tramos if a > now
+            )
+        elif now >= fin:
+            state = "post"
+        else:
+            state = "pre"
+            siguiente = next((a for a, _b in tramos if a > now), tramos[0][0])
+            reopens = siguiente.isoformat()
+            left_h = sum(
+                (b - a).total_seconds() / 3600.0 for a, b in tramos if a >= siguiente
+            )
     return {
-        "baseline_w": round(baseline, 1),
+        # Se conserva `baseline_w` —la cifra plana— porque es lo que se enseña
+        # como «consumo típico»; el perfil va aparte, con su procedencia.
+        "baseline_w": round(perfil.plano, 1),
+        "profile": perfil.payload(),
         "today": today,
         "tomorrow": tomorrow,
         "daylight": daylight,
         "state": state,
         "hours_left": round(left_h, 3),
+        # Cuándo vuelve a haber excedente, si estamos en un hueco de la ventana.
+        "reopens_at": reopens,
     }
 
 
@@ -1020,9 +1163,18 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
         ("energy", "home_energy", "Consumo del día", "energy", ("casa", "home", "load", "consum")),
     ]},
 ]
-# Casillas que la app puede deducir del balance si faltan: no cuentan como
-# pendientes ni tiñen su fila.
+# Casillas sin las que la app funciona: no cuentan como pendientes ni tiñen su
+# fila. Cada una dice por qué es opcional, y no todas lo son por lo mismo —el
+# consumo de la casa se deduce del balance, el estado de carga **no se deduce de
+# nada**—. Decirlo importa: con el texto genérico «se deduce del balance» en
+# todas, la casilla del estado de carga parecía resuelta y no había motivo para
+# tocarla, cuando en realidad sin ella falta su gráfico.
 OPTIONAL_SLOTS = {"home", "home_energy", "battery_soc"}
+OPTIONAL_NOTES = {
+    "home": "Opcional · se deduce del balance",
+    "home_energy": "Opcional · se deduce del balance",
+    "battery_soc": "Opcional · sin él no hay gráfico de carga",
+}
 
 
 def _slot_state(
@@ -1077,6 +1229,7 @@ def sensor_status(
             filas.append({
                 "slot": slot, "group": donde, "label": label, "kind": kind,
                 "entity": entity, "optional": opcional,
+                "note": OPTIONAL_NOTES.get(slot, ""),
                 "responds": responde, "value": valor, "unit": unidad,
                 "suggestions": [] if entity else sugerencias(kind, pistas, usados),
             })

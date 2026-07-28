@@ -12,7 +12,7 @@ import json
 import logging
 import math
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiohttp
@@ -306,6 +306,130 @@ from(bucket: "{bucket}")
             continue
         values.append((ts, val))
     values.sort(key=lambda item: item[0])
+    return values
+
+
+# ---------------------------------------------------------------------------
+# Media horaria de un sensor instantáneo
+# ---------------------------------------------------------------------------
+# Lo de arriba lee un **contador** y lo diferencia. Esto lee la **media por
+# hora** de un sensor de potencia, que es otra agregación: sirve para el perfil
+# de consumo de la casa, y se pide a InfluxDB porque guarda meses donde el
+# recorder de Home Assistant guarda diez días por defecto.
+
+
+async def influx_hourly_mean(
+    settings: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime, tz
+) -> list[tuple[datetime, float]]:
+    """[(hora local, media)] de un sensor instantáneo, hora a hora.
+
+    ``unit`` es la unidad del sensor: la integración de InfluxDB de Home
+    Assistant usa la unidad como nombre de la medida («W» para una potencia),
+    así que es lo que hay que buscar. En Flux se filtra además por `entity_id`,
+    que es lo que de verdad identifica la serie.
+    """
+    influx = dict(settings.get("influx") or {})
+    if not (influx.get("url") or "").strip():
+        return []
+    version = int(influx.get("version") or 2)
+    if version == 1:
+        crudo = await _influx_v1_mean(influx, entity, unit, start, end)
+    else:
+        crudo = await _influx_v2_mean(influx, entity, unit, start, end)
+    out: list[tuple[datetime, float]] = []
+    for ts, value in crudo:
+        try:
+            moment = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        out.append((moment.astimezone(tz), value))
+    out.sort(key=lambda item: item[0])
+    return out
+
+
+async def _influx_v1_mean(
+    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime
+) -> list[tuple[str, float]]:
+    url = (influx.get("url") or "").rstrip("/")
+    # La medida es la unidad del sensor. Si no se conoce se prueba con «W», que
+    # es la de cualquier sensor de potencia.
+    measurement = (unit or "W").replace('"', "")
+    query = (
+        f'SELECT mean("value") FROM "{measurement}" '
+        f"WHERE time >= '{start.isoformat()}' AND time < '{end.isoformat()}'"
+        f" AND \"entity_id\" = '{entity.replace('sensor.', '')}'"
+        " GROUP BY time(1h)"
+    )
+    params = {"db": influx.get("database") or "homeassistant", "q": query}
+    auth = None
+    if influx.get("username"):
+        auth = aiohttp.BasicAuth(influx["username"], influx.get("password") or "")
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(
+            f"{url}/query", params=params, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            if resp.status != 200:
+                raise SourceError(f"InfluxDB respondió {resp.status}: {await resp.text()}")
+            data = await resp.json()
+    try:
+        values = data["results"][0]["series"][0]["values"]
+    except (KeyError, IndexError):
+        return []
+    return [(ts, float(val)) for ts, val in values if val is not None]
+
+
+async def _influx_v2_mean(
+    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime
+) -> list[tuple[str, float]]:
+    url = (influx.get("url") or "").rstrip("/")
+    bucket = influx.get("database") or "homeassistant"
+    # Aquí no hace falta acertar con la medida: basta con `entity_id`, que es lo
+    # que identifica la serie. Se filtra por medida solo si se conoce la unidad,
+    # para no barrer el bucket entero.
+    medida = f' r["_measurement"] == "{unit}" and' if unit else ""
+    corto = entity.replace("sensor.", "")
+    flux = f"""
+from(bucket: "{bucket}")
+  |> range(start: {start.isoformat()}, stop: {end.isoformat()})
+  |> filter(fn: (r) =>{medida} r["_field"] == "value"
+       and (r["entity_id"] == "{corto}" or r["entity_id"] == "{entity}"))
+  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+"""
+    headers = {
+        "Authorization": f"Token {influx.get('token') or ''}",
+        "Content-Type": "application/vnd.flux",
+        "Accept": "application/csv",
+    }
+    params = {"org": influx.get("org") or ""}
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{url}/api/v2/query", params=params, data=flux, headers=headers,
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status != 200:
+                raise SourceError(f"InfluxDB respondió {resp.status}: {await resp.text()}")
+            text = await resp.text()
+    return _parse_flux_csv(text)
+
+
+def _parse_flux_csv(text: str) -> list[tuple[str, float]]:
+    values: list[tuple[str, float]] = []
+    columns: dict[str, int] = {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cells = line.split(",")
+        if "_time" in cells and "_value" in cells:
+            columns = {name: idx for idx, name in enumerate(cells)}
+            continue
+        if not columns:
+            continue
+        try:
+            values.append((cells[columns["_time"]], float(cells[columns["_value"]])))
+        except (KeyError, IndexError, ValueError):
+            continue
     return values
 
 

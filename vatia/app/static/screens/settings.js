@@ -90,8 +90,13 @@ function sensorRow(r) {
   let sub;
   if (!r.entity) {
     const n = r.suggestions.length;
-    sub = r.optional ? "Opcional · se deduce del balance"
-      : `Sin asignar${n ? ` · ${n} sugerencia${n === 1 ? "" : "s"}` : ""}`;
+    const sug = n ? ` · ${n} sugerencia${n === 1 ? "" : "s"}` : "";
+    // El texto de una casilla opcional lo pone el servidor, porque no todas lo
+    // son por lo mismo: el consumo de la casa se deduce del balance y el estado
+    // de carga no se deduce de nada. Decir «se deduce del balance» en las dos
+    // hacía que la del estado de carga pareciese resuelta.
+    sub = r.optional ? (r.note || "Opcional") + sug
+      : `Sin asignar${sug}`;
   } else {
     const corto = r.entity.replace(/^sensor\./, "").split(",")[0];
     sub = r.responds ? `${corto} · ${fmtNum.format(r.value ?? 0)} ${r.unit}`
@@ -150,7 +155,8 @@ async function openSensorPicker(slot) {
       ? todas.filter((e) => `${e.entity_id} ${e.name} ${e.unit}`.toLowerCase().includes(t))
       : todas;
     $("#pick-count").textContent = t
-      ? `${vistos.length} de ${todas.length}` : `${todas.length} entidades`;
+      ? `${vistos.length} de ${todas.length}`
+      : `${todas.length} entidad${todas.length === 1 ? "" : "es"}`;
     $("#pick-list").innerHTML = vistos.length
       ? vistos.slice(0, 60).map((e) => `
           <button type="button" data-pick="${esc(e.entity_id)}"
@@ -435,7 +441,28 @@ async function loadDiagnostics() {
   body.innerHTML = `
     ${lado("entra", "Entra", d.entra)}
     ${lado("sale", "Sale", d.sale)}
-    <p class="li-note diag-verdict ${d.cuadra ? "ok" : "warn"}">${veredicto}</p>`;
+    <p class="li-note diag-verdict ${d.cuadra ? "ok" : "warn"}">${veredicto}</p>
+    ${perfilTexto(d.profile)}`;
+}
+
+/* De dónde sale el consumo típico con el que se calcula la ventana de energía
+   gratis. Se dice aquí porque «¿está usando mi InfluxDB?» es una pregunta de
+   diagnóstico, y porque sin esto no había forma de saberlo. */
+function perfilTexto(p) {
+  if (!p) {
+    return `<p class="li-note">Sin <b>consumo típico</b>: falta el sensor de
+      consumo de la casa o no hay histórico suficiente, así que no se puede
+      calcular la ventana de energía gratis.</p>`;
+  }
+  const fuente = p.source === "influxdb"
+    ? `<b>InfluxDB</b>, ${p.days} días`
+    : `las estadísticas de Home Assistant, ${p.days} días`;
+  const forma = p.hourly
+    ? `hora a hora, de ${fmtNum.format(p.min_w)} a ${fmtNum.format(p.max_w)} W`
+    : `una sola cifra para todo el día, ${fmtNum.format(p.flat_w)} W (aún no hay
+       histórico para separar las horas)`;
+  return `<p class="li-note">El <b>consumo típico</b> de la ventana sale de
+    ${fuente}: ${forma}.</p>`;
 }
 
 /* ---------------- controles ---------------- */

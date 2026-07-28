@@ -2,6 +2,53 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.34.0
+
+### La ventana deja de mentir a la hora del horno
+
+El umbral con el que se calcula la ventana de energía gratis era **una sola
+cifra**: la mediana de la última semana. Con 320 W de mediana y el horno puesto a
+la una, la app decía «ahora es gratis» mientras la casa pedía 2.500 W. Ahora hay
+**una cifra por hora y por tipo de día**, así que a la una el umbral es el de la
+una.
+
+Consecuencias, medidas con una casa de suelo 320 W, horno de 13 a 14 y cena a las
+nueve:
+
+- El excedente que se promete baja entre un **7 y un 18 %** según la instalación:
+  con paneles grandes casi no cambia, con una instalación modesta o un día de
+  nubes es donde estaba el error.
+- Y la ventana **puede partirse**. Con 1.800 W de sol, la de antes decía
+  «09:14–19:09, 9,4 kWh» de un tirón; ahora dice lo mismo pero con **un hueco de
+  12:48 a 13:40** y 7,8 kWh. En ese hueco la app decía «sí» y la respuesta era
+  «no».
+
+La tarjeta lo cuenta sin cambiar de forma: el riel pinta **una barra por tramo**,
+la cabecera añade las horas netas, y dentro de un tramo avisa de a qué hora se
+corta. Si estás **dentro** del hueco, la píldora pasa a «VUELVE EN…» y el titular
+dice a qué hora vuelve a sobrar, que es exactamente lo que hay que decir.
+
+### El histórico, de InfluxDB si lo tienes
+
+El perfil mejora con el histórico, y el recorder de Home Assistant guarda **diez
+días** por defecto. Si tienes InfluxDB configurado se le piden **seis semanas** en
+vez de dos: con seis muestras por casilla, un día raro deja de desviarla, y hay
+para distinguir el laborable del fin de semana. Funciona con v1 (InfluxQL) y v2
+(Flux).
+
+Si InfluxDB no está, no responde o viene vacío, se sigue con las estadísticas de
+Home Assistant como hasta ahora. **Ajustes → Diagnóstico** dice de cuál de las dos
+sale y con qué forma, porque «¿está usando mi InfluxDB?» no se podía saber de
+ninguna manera.
+
+### Y el sensor de estado de carga se puede configurar
+
+Toda casilla opcional vacía decía «Opcional · **se deduce del balance**». Para el
+consumo de la casa es verdad; para el **estado de carga** es falso —no se deduce
+de nada— y ese texto te decía que no hacía falta tocarla, cuando sin ella falta
+su gráfico. Ahora cada casilla dice lo que se pierde sin ella. De paso, el
+selector de entidad ya no dice «1 entidades».
+
 ## 0.33.0
 
 ### El estado de carga, debajo del de potencia
