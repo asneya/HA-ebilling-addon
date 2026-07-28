@@ -200,6 +200,19 @@
         </p>
       </div>
 
+      <!-- Estado de carga de la batería. Va en su propio gráfico y no como una
+         serie más porque el % no comparte eje con los W, y solo sale en la
+         vista de batería. -->
+      <div class="panel glass hidden" id="e-soc-panel">
+        <div class="panel-head"><h2>Estado de carga</h2></div>
+        <div class="e-soc-head">
+          <div class="e-soc-now"><b id="e-soc-last">—</b><span>%</span></div>
+          <div class="e-soc-meta" id="e-soc-meta">—</div>
+        </div>
+        <vatia-chart id="e-soc" class="e-chart"></vatia-chart>
+        <ul class="readout" id="ro-e-soc"></ul>
+      </div>
+
       <div class="panel glass hidden" id="e-breakdown-panel">
         <div class="panel-head"><h2 id="e-breakdown-title">Reparto del periodo</h2></div>
         <div class="sum-total"><b id="e-bd-total">—</b><span id="e-bd-unit">kWh</span></div>

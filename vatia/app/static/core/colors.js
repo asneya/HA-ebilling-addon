@@ -10,6 +10,7 @@ const SERIES_VAR = {
   solar: "--s-solar", home: "--s-home", grid: "--s-grid",
   grid_import: "--s-grid", grid_export: "--s-exp",
   battery: "--s-batt", battery_charge: "--s-batt", battery_discharge: "--s-batt-out",
+  battery_soc: "--s-batt",
   yesterday: "--ink-3", forecast: "--s-forecast",
   to_load: "--s-home", to_battery: "--s-batt", to_grid: "--s-exp",
   from_solar: "--s-solar", from_battery: "--s-batt", from_grid: "--s-grid",
@@ -30,10 +31,19 @@ export function seriesColor(key) { return token(SERIES_VAR[key] || "--ink-3"); }
 /* Al cambiar de tema los tokens cambian: hay que olvidar lo memorizado. */
 export function forgetTokens() { memoria = {}; }
 
+/* El token tal cual, sin color de respaldo: sirve para saber si existe. */
+function leer(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 /* Los gráficos de Facturación van por tramo (`punta`, `llano`…), cuyo token se
-   llama igual que la clave. */
+   llama igual que la clave. Si no hay token con ese nombre se cae a la tabla de
+   series: así los acumulados y el estado de carga dejan de salir con el gris de
+   respaldo y llevan el color que les toca. */
 export function chartColor(key) {
-  return key.startsWith("--") ? token(key) : token(`--${key}`);
+  if (key.startsWith("--")) return token(key);
+  if (memoria[key] === undefined) memoria[key] = leer(`--${key}`) || seriesColor(key);
+  return memoria[key];
 }
 
 /* El color de una serie o de un token, que es lo que esperan los componentes. */

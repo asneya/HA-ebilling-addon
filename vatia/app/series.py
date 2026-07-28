@@ -385,6 +385,47 @@ def free_window(
     }
 
 
+# ---------------------------------------------------------------------------
+# Estado de carga de la batería
+# ---------------------------------------------------------------------------
+# Va en un gráfico propio debajo del de potencia y no como una serie más: un
+# porcentaje no comparte eje con los vatios, y meterlo en el mismo eje dejaría
+# la curva del 0 al 100 pegada al suelo frente a picos de 3.000 W.
+
+
+def _soc_block(
+    result: dict[str, Any],
+    entity: str,
+    tz,
+    x_keys: list[str],
+) -> dict[str, Any] | None:
+    """Bloque `soc` del payload, o ``None`` si el sensor no tiene datos.
+
+    Comparte el eje X con el gráfico de arriba —los mismos `x_keys`— para que
+    las dos curvas se lean a la misma altura del día.
+    """
+    if not entity:
+        return None
+    rows = _extract(result, entity, "mean", tz, 1.0)
+    if not rows:
+        return None
+    # Un porcentaje fuera de 0–100 es un sensor mal escalado, no un dato: se
+    # recorta en vez de deformar el eje.
+    rows = {k: min(max(v, 0.0), 100.0) for k, v in rows.items()}
+    values = _align(x_keys, rows)
+    medidos = [v for v in values if v is not None]
+    if not medidos:
+        return None
+    return {
+        "unit": "%",
+        "series": [_series("battery_soc", "Carga", values)],
+        "min": round(min(medidos), 1),
+        "max": round(max(medidos), 1),
+        "last": round(medidos[-1], 1),
+        "avg": round(sum(medidos) / len(medidos), 1),
+    }
+
+
 def _interpolate(points: list[tuple[datetime, float]], grid: list[datetime]) -> dict[str, float]:
     """Interpola la curva de previsión sobre la rejilla del eje X."""
     if not points:
@@ -838,10 +879,16 @@ async def _build_power(
     ]
     ids = [sensor for _k, _l, sensor in wanted if sensor]
     power_ids = list(dict.fromkeys(sensor for _k, sensor in all_power if sensor))
-    if not ids and not forecast_points:
-        return {"unit": "W", "chart": "line", "x": [], "series": [], "breakdown": None}
+    # El estado de carga va en su propio gráfico, debajo del de potencia: es un
+    # porcentaje y no comparte eje con los vatios. Se pide en la misma consulta.
+    soc_entity = (flow.get("battery_soc") or "") if view == "battery" else ""
+    if soc_entity:
+        power_ids = list(dict.fromkeys(power_ids + [soc_entity]))
+    if not ids and not forecast_points and not soc_entity:
+        return {"unit": "W", "chart": "line", "x": [], "series": [],
+                "breakdown": None, "soc": None}
 
-    if not ids:
+    if not ids and not soc_entity:
         grid = _grid(start, end, 5)
         values = _interpolate(forecast_points, grid)
         x_keys = [moment.isoformat() for moment in grid]
@@ -850,7 +897,7 @@ async def _build_power(
             dashed=True, legend=False, total_unit="kWh",
         )
         return {"unit": "W", "chart": "line", "x": x_keys,
-                "series": [forecast], "breakdown": None}
+                "series": [forecast], "breakdown": None, "soc": None}
 
     requests = [
         {"ids": power_ids, "start": start, "end": end, "period": "5minute", "types": ["mean"]}
@@ -1089,7 +1136,8 @@ async def _build_power(
 
     breakdown = _make_breakdown(_breakdown_rows(view, [flows])) if flows else None
 
-    return {"unit": "W", "chart": "line", "x": x_keys, "series": series, "breakdown": breakdown}
+    return {"unit": "W", "chart": "line", "x": x_keys, "series": series,
+            "breakdown": breakdown, "soc": _soc_block(main, soc_entity, tz, x_keys)}
 
 
 async def _build_energy(
@@ -1108,11 +1156,25 @@ async def _build_energy(
     keys = ENERGY_KEYS
     ids = [energy.get(k) for k in keys if energy.get(k)]
     if not ids:
-        return {"unit": "kWh", "chart": "line", "x": [], "series": [], "breakdown": None}
+        return {"unit": "kWh", "chart": "line", "x": [], "series": [],
+                "breakdown": None, "soc": None}
 
     requests = [
         {"ids": ids, "start": start, "end": end, "period": period, "types": ["change"]}
     ]
+    # El estado de carga, para el gráfico de debajo. Aquí la media del bucket es
+    # justo lo que interesa: dice si la batería cicla a fondo o se queda arriba.
+    # En «total» los buckets del gráfico son años y los de la consulta meses: no
+    # se pueden alinear, y una media anual de carga no dice nada. Se omite.
+    soc_entity = ((settings.get("flow_sensors") or {}).get("battery_soc") or "") \
+        if view == "battery" and range_key != "total" else ""
+    soc_index = None
+    if soc_entity:
+        soc_index = len(requests)
+        requests.append(
+            {"ids": [soc_entity], "start": start, "end": end,
+             "period": period, "types": ["mean"]}
+        )
     # Buckets más finos que los del gráfico. Hacen falta para dos cosas:
     #
     #  - El desglose: con buckets de un día, una carga de batería desde la red
@@ -1280,4 +1342,6 @@ async def _build_energy(
         )
 
     return {"unit": "kWh", "chart": "line", "x": x_keys, "series": series,
-            "breakdown": breakdown}
+            "breakdown": breakdown,
+            "soc": _soc_block(results[soc_index], soc_entity, tz, x_keys)
+                   if soc_index is not None else None}
