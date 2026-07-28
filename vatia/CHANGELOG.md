@@ -2,6 +2,36 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.33.0
+
+### El estado de carga, debajo del de potencia
+
+La vista de batería enseña un segundo gráfico con el **estado de carga**, bajo el
+de carga y descarga. Va aparte y no como una serie más porque un porcentaje no
+comparte eje con los vatios: metido en el mismo eje, la curva del 0 al 100
+quedaría pegada al suelo frente a picos de 3.000 W.
+
+- **Comparte el eje del tiempo** con el gráfico de arriba, así que las dos curvas
+  se leen a la misma altura del día: se ve de un vistazo que la batería empieza a
+  subir cuando la carga arranca.
+- **El eje vertical va de 0 a 100 fijo**, no al recorrido del día. Si se ajustara,
+  la misma batería parecería vaciarse más un día que otro solo porque el eje se
+  ha reencuadrado.
+- Encima, la **última lectura del periodo** con el mínimo, el máximo y la media,
+  que es lo que dice si la batería ha ciclado a fondo o se ha quedado arriba.
+- Deslizar el dedo dice la carga de ese momento; en las horas que aún no han
+  pasado lo dice también —«sin lectura»— en vez de callarse.
+- Está en **día, semana, mes y año**: en los rangos agregados es la media del
+  bucket. En «total» no sale, porque los buckets del gráfico son años y una media
+  anual de carga no informa de nada.
+- **Sin sensor de estado de carga la tarjeta entera se esconde**, como la ventana
+  de energía: mejor no enseñar nada que un eje vacío.
+
+De paso, los puntos de las líneas de lectura recuperan su color: `chartColor`
+buscaba un token con el nombre de la clave y, al no encontrarlo, caía al gris de
+respaldo. Los dos acumulados de Facturación llevaban el gris desde que se
+migraron a uPlot.
+
 ## 0.32.0
 
 ### El dedo recorre el gráfico

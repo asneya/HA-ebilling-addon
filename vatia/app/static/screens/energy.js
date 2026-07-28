@@ -11,6 +11,7 @@ import { on } from "../core/bus.js";
 import { fallo } from "../core/banner.js";
 import { fmtNum, fmtValue, xLabel, stampLabel } from "../core/format.js";
 import { seriesColor, colorForSeries, isLightColor } from "../core/colors.js";
+import { renderReadout } from "../core/graficos.js";
 
 const eState = {
   range: "day",
@@ -23,6 +24,7 @@ const eState = {
   zoomed: false,  // el eje no está al completo
 };
 const E_ZOOM_MAX = 12;
+const SOC_PISTA = "Toca el gráfico para ver la carga de un momento";
 
 async function loadEnergy() {
   const banner = $("#e-error");
@@ -62,7 +64,29 @@ function renderEnergy() {
   renderStamp();
   renderEnergyLegend();
   if (hasData) renderEnergyChart();
+  renderSoc();
   renderEnergyBreakdown();
+}
+
+/* El estado de carga, en su propio gráfico debajo del de potencia.
+   Solo en la vista de batería, y solo si el sensor tiene datos: sin él la
+   tarjeta entera se esconde, que es mejor que un hueco con un eje vacío. */
+function renderSoc() {
+  const soc = eState.data && eState.data.soc;
+  $("#e-soc-panel").classList.toggle("hidden", !soc);
+  if (!soc) return;
+  $("#e-soc-last").textContent = fmtNum.format(soc.last);
+  $("#e-soc-meta").textContent =
+    `mínimo ${fmtNum.format(soc.min)} % · máximo ${fmtNum.format(soc.max)} % · media ${fmtNum.format(soc.avg)} %`;
+  const box = $("#e-soc");
+  box.colorFor = colorForSeries;
+  box.formatX = (ms) => xLabel(new Date(ms).toISOString(), eState.range);
+  box.height = 150;
+  // De 0 a 100 siempre: si el eje se ajustara al recorrido del día, la misma
+  // batería parecería vaciarse más un día que otro.
+  box.yRange = [0, 100];
+  box.data = { x: eState.data.x, series: soc.series };
+  renderReadout("e-soc", null, SOC_PISTA);
 }
 
 /* El punto que está mandando en la leyenda: el fijado o, si no hay, el que
@@ -308,6 +332,32 @@ $("#e-picker").addEventListener("click", () => {
     eState.zoomed = !ev.detail.full;
     syncZoomControls();
   });
+
+  // El gráfico del estado de carga tiene su propia línea de lectura: es otra
+  // magnitud y otro eje, así que no comparte cursor con el de arriba.
+  const soc = $("#e-soc");
+  const leerSoc = (i) => {
+    const d = eState.data && eState.data.soc;
+    if (!d || i == null) return null;
+    const v = d.series[0].values[i];
+    if (v == null) return null;
+    return {
+      label: stampLabel(eState.data.x[i], eState.range), unit: "%",
+      rows: [{ key: "battery_soc", label: "Carga", value: v }],
+    };
+  };
+  const pintarSoc = (ev) => {
+    const i = ev.detail.index;
+    const d = eState.data && eState.data.soc;
+    // Un punto sin lectura —las horas del día que aún no han pasado— lo dice en
+    // vez de repetir la pista, que ahí parecería que no ha respondido al dedo.
+    const sinDato = !!d && i != null && d.series[0].values[i] == null;
+    renderReadout("e-soc", leerSoc(i), sinDato
+      ? "Sin lectura de carga a esa hora"
+      : SOC_PISTA);
+  };
+  soc.addEventListener("hover", pintarSoc);
+  soc.addEventListener("pick", pintarSoc);
 }
 
 /* ------------- lo que Energía escucha ------------- */

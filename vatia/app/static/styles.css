@@ -1171,6 +1171,24 @@ body.scrolled .scroll-top { opacity: .95; }
 .readout b { color: var(--ink-2); font-weight: 600; }
 .readout .ro-hint { color: var(--ink-3); opacity: .8; }
 
+/* ---------------- Estado de carga de la batería ----------------
+   La cifra grande es la última lectura del periodo; al lado, el recorrido del
+   día, que es lo que dice si la batería ha ciclado o se ha quedado arriba. */
+.e-soc-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin: 2px 0 10px;
+}
+.e-soc-now { display: flex; align-items: baseline; gap: 4px; }
+.e-soc-now b {
+  font-size: 30px; font-weight: 700; letter-spacing: -.8px;
+  font-variant-numeric: tabular-nums;
+}
+.e-soc-now span { font-size: 14px; color: var(--ink-2); }
+.e-soc-meta {
+  font-size: 12.5px; color: var(--ink-3); text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------- Home según la maqueta ----------------
    Sin titular: la pantalla abre con el caudal, y el momento del día y el tiempo
    viven en la píldora flotante de la derecha. */

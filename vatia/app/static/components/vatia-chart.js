@@ -22,7 +22,7 @@
 (() => {
   "use strict";
 
-  const ALTO = 268;
+  const ALTO = 268;   // alto por defecto; los secundarios lo cambian
 
   /* Hora local de la casa: se lee el desfase que trae la cadena del servidor y
      se desplaza el instante, igual que en la ventana de energía. Con el reloj
@@ -56,6 +56,12 @@
     /* «time» (por defecto) usa las cadenas ISO de `x`; «index» las trata como
        etiquetas ya formateadas, para las series que no van sobre el reloj. */
     set xMode(mode) { this._xMode = mode; }
+    /* Eje Y fijo, para las magnitudes que tienen tope propio: un porcentaje va
+       siempre de 0 a 100, si no la misma batería parecería vaciarse más un día
+       que otro solo porque el eje se ha reajustado. */
+    set yRange(par) { this._yRange = par; }
+    /* Alto del lienzo, para los gráficos secundarios. */
+    set height(px) { this._alto = px; }
     get data() { return this._data; }
 
     set hidden(set) {
@@ -89,7 +95,7 @@
     _width() { return Math.max(240, this.clientWidth || 320); }
 
     _resize() {
-      if (this._plot) this._plot.setSize({ width: this._width(), height: ALTO });
+      if (this._plot) this._plot.setSize({ width: this._width(), height: this._alto || ALTO });
     }
 
     /* Las series visibles, en el orden en que se pintan: «ayer» al fondo para
@@ -156,7 +162,7 @@
       const self = this;
       this._plot = new uPlot({
         width: this._width(),
-        height: ALTO,
+        height: this._alto || ALTO,
         padding: [12, 10, 0, 0],
         legend: { show: false },      // la leyenda es la de la página, pulsable
         cursor: {
@@ -169,7 +175,7 @@
         },
         scales: {
           x: porIndice ? { time: false } : { time: true },
-          y: { range: rangoY },
+          y: this._yRange ? { range: () => this._yRange } : { range: rangoY },
         },
         axes: [
           {
