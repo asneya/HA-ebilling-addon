@@ -474,6 +474,65 @@ def _soc_block(
     }
 
 
+async def flow_curves(
+    settings: dict[str, Any],
+    states: dict[str, Any],
+    start: datetime,
+    end: datetime,
+    tz,
+) -> dict[str, Any]:
+    """Las seis potencias del día y el estado de carga, en pasos de 5 minutos.
+
+    Es lo que necesita el diagrama del flujo para poder recorrer el día: en cada
+    muestra hay que repartir la potencia entre los seis enlaces, y para eso hacen
+    falta las seis curvas a la vez sobre el **mismo eje**. Una sola llamada a
+    ``ws_statistics``: cada llamada abre un socket y se trae la lista entera de
+    metadatos, así que pedirlas por separado costaría siete veces lo mismo.
+
+    Devuelve ``{"x": [iso…], "power": {clave: [W|None]}, "soc": [%|None]}``.
+    """
+    flow = settings.get("flow_sensors") or {}
+    pares = [
+        ("pv", flow.get("pv", "")),
+        ("home", flow.get("home", "")),
+        ("battery_charge", flow.get("battery_charge", "")),
+        ("battery_discharge", flow.get("battery_discharge", "")),
+        ("grid_import", flow.get("grid_import", "")),
+        ("grid_export", flow.get("grid_export", "")),
+    ]
+    soc_entity = flow.get("battery_soc") or ""
+    ids = list(dict.fromkeys([s for _k, s in pares if s] + ([soc_entity] if soc_entity else [])))
+    x_keys = [moment.isoformat() for moment in _grid(start, end, 5)]
+    if not ids:
+        return {"x": x_keys, "power": {}, "soc": None}
+
+    results, units = await ws_statistics(
+        settings,
+        [{"ids": ids, "start": start, "end": end, "period": "5minute", "types": ["mean"]}],
+    )
+    main = results[0]
+    curves: dict[str, dict[str, float]] = {}
+    for key, sensor in pares:
+        if not sensor:
+            continue
+        curves[key] = _extract(main, sensor, "mean", tz, _unit_factor(sensor, states, "power", units))
+    # Un medidor bidireccional en las dos casillas se reparte por signo; en el
+    # resto, un negativo no es una magnitud válida (la casa no genera).
+    split_signed_buckets(curves, flow, POWER_PAIRS)
+    curves = {k: {t: max(v, 0.0) for t, v in data.items()} for k, data in curves.items()}
+
+    soc = None
+    if soc_entity:
+        rows = _extract(main, soc_entity, "mean", tz, 1.0)
+        if rows:
+            soc = _align(x_keys, {t: min(max(v, 0.0), 100.0) for t, v in rows.items()})
+    return {
+        "x": x_keys,
+        "power": {k: _align(x_keys, data) for k, data in curves.items() if data},
+        "soc": soc,
+    }
+
+
 def _interpolate(points: list[tuple[datetime, float]], grid: list[datetime]) -> dict[str, float]:
     """Interpola la curva de previsión sobre la rejilla del eje X."""
     if not points:
@@ -685,6 +744,42 @@ def split_signed_values(values: dict[str, float], cfg: dict[str, str], pairs) ->
             continue
         values[pos] = raw if raw > 0 else 0.0
         values[neg] = -raw if raw < 0 else 0.0
+
+
+def power_flows(power: dict[str, float]) -> dict[str, float]:
+    """Reparte la potencia instantánea entre los seis flujos posibles.
+
+    Vive aquí y no en ``live`` porque la usan los dos: la tarjeta de «Ahora
+    mismo», con la potencia del estado de los sensores, y el diagrama del día,
+    con cada muestra de cinco minutos del histórico. El diseño del flujo v2
+    deriva el reparto de la producción y el consumo porque su prototipo no tiene
+    telemetría; aquí no hace falta deducirlo, porque los seis contadores están
+    medidos. Con dos consecuencias buenas: sale un enlace más que el prototipo
+    no puede producir (red→batería, cargar de red de noche) y no hay que
+    integrar el estado de carga para saber si la batería podía dar o recibir.
+
+    Todas las magnitudes en W.
+    """
+    pv = max(power.get("pv") or 0.0, 0.0)
+    gi = max(power.get("grid_import") or 0.0, 0.0)
+    ge = max(power.get("grid_export") or 0.0, 0.0)
+    bc = max(power.get("battery_charge") or 0.0, 0.0)
+    bd = max(power.get("battery_discharge") or 0.0, 0.0)
+    solar_grid = min(ge, pv)
+    rest = max(pv - solar_grid, 0.0)
+    solar_battery = min(bc, rest)
+    rest -= solar_battery
+    solar_home = rest
+    grid_battery = max(bc - solar_battery, 0.0)
+    grid_home = max(gi - grid_battery, 0.0)
+    return {
+        "solar_home": solar_home,
+        "solar_grid": solar_grid,
+        "solar_battery": solar_battery,
+        "grid_home": grid_home,
+        "grid_battery": grid_battery,
+        "battery_home": bd,
+    }
 
 
 def split_flows(

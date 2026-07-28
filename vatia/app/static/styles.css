@@ -61,6 +61,12 @@
      dos van juntas —la punteada continúa a la continua— y con el mismo ámbar no
      se distinguía dónde acaba lo medido y empieza lo previsto. */
   --s-forecast: #b87a10;
+  /* Diagrama del flujo. El valor va **dentro** de la cinta, así que su tinta es
+     la del diseño: oscura sobre el degradado, que en los dos temas queda claro
+     ahí donde el número cae. La partícula que recorre la cinta sí cambia: en
+     claro la cinta es pálida y una línea blanca no se ve. */
+  --sobre-cinta: #0b1016;
+  --particula: rgba(10, 16, 23, .55);
   /* Esqueleto de carga: la pieza gris y el brillo que la barre. Han de leerse
      como «hueco que se va a llenar», no como contenido apagado. */
   --skel: #e4e9f0;
@@ -143,6 +149,7 @@
   --s-batt-out: #3ecdd8;
   --s-exp: #b08cff;
   --s-forecast: #f5c46b;
+  --particula: #ffffff;
   --skel: #232c36;
   --skel-brillo: rgba(255, 255, 255, .05);
   --pill-sky: rgba(255, 255, 255, .1);
@@ -1289,6 +1296,122 @@ body.scrolled .scroll-top { opacity: .95; }
 }
 .band-caption { font-size: 12px; color: var(--ink-3);
   font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------------------
+   Flujo de energía v2
+   --------------------------------------------------------------------------- */
+
+/* La píldora de estado del diagrama: tres estados y ni uno más. Las medidas son
+   las del diseño; el suelo y la tinta se derivan del color de cada serie, así
+   que en el tema claro salen saturados y en el oscuro se aclaran solos. */
+.state-pill { padding: 8px 14px; border-radius: 999px; font-size: 12.5px;
+  font-weight: 600; white-space: nowrap; border: 1px solid transparent;
+  color: var(--ink-3); }
+.state-pill[data-estado="export"] { background: color-mix(in srgb, var(--s-exp) 16%, transparent);
+  color: var(--s-exp); border-color: color-mix(in srgb, var(--s-exp) 30%, transparent); }
+.state-pill[data-estado="import"] { background: color-mix(in srgb, var(--s-grid) 14%, transparent);
+  color: var(--s-grid); border-color: color-mix(in srgb, var(--s-grid) 28%, transparent); }
+.state-pill[data-estado="libre"] { background: color-mix(in srgb, var(--s-batt) 15%, transparent);
+  color: var(--s-batt); border-color: color-mix(in srgb, var(--s-batt) 30%, transparent); }
+
+/* El titular del diagrama, en la tarjeta de la Home y en la pantalla del día. */
+.flow-head, .f-headline { margin: 0 2px 10px; font-size: 15px; line-height: 1.45;
+  color: var(--ink-2); text-wrap: pretty; }
+.flow-head:empty, .f-headline:empty { display: none; }
+
+/* Pastillas de hora y botón de reproducir. */
+.f-controls { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.f-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.f-chip { padding: 9px 15px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+  cursor: pointer; border: 1px solid var(--hair-2); background: var(--node);
+  color: var(--ink-2); font-family: inherit; }
+.f-chip.active { background: var(--ink); color: var(--solid); border-color: var(--ink); }
+.f-play { align-self: flex-start; padding: 10px 18px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; display: flex;
+  align-items: center; gap: 9px; font-family: inherit;
+  border: 1px solid var(--hair-2); background: var(--node); color: var(--ink); }
+.f-play .f-play-ico { font-size: 11px; }
+.f-play.playing { background: color-mix(in srgb, var(--s-solar) 18%, transparent);
+  color: var(--s-solar); border-color: color-mix(in srgb, var(--s-solar) 34%, transparent); }
+
+/* Cabecera de la tarjeta del diagrama. */
+.f-head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 20px; margin-bottom: 4px; }
+.f-clock { font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600; font-variant-numeric: tabular-nums; }
+.f-head .f-headline { margin: 5px 0 0; }
+
+/* La franja del día, con su cabecera y el deslizador. */
+.f-strip { margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--hair); }
+.f-strip-head { display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600; }
+.f-strip-sub { font-size: 11.5px; letter-spacing: 0; text-transform: none;
+  font-weight: 400; color: var(--ink-3); }
+.f-strip-svg { width: 100%; display: block; touch-action: none; }
+.f-slider { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+.f-tick { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+.f-slider input[type=range] { flex: 1; -webkit-appearance: none; appearance: none;
+  height: 26px; background: transparent; cursor: grab; }
+.f-slider input[type=range]::-webkit-slider-runnable-track { height: 4px;
+  border-radius: 2px; background: var(--hair-2); }
+.f-slider input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
+  width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+  background: var(--solid); box-shadow: 0 2px 10px rgba(0, 0, 0, .55);
+  border: 1px solid var(--hair-2); }
+.f-slider input[type=range]::-moz-range-track { height: 4px; border-radius: 2px;
+  background: var(--hair-2); }
+.f-slider input[type=range]::-moz-range-thumb { width: 18px; height: 18px;
+  border: 1px solid var(--hair-2); border-radius: 50%; background: var(--solid); }
+
+/* Las cuatro tarjetas de métricas. En el móvil van en una columna con la pareja
+   de batería y red a dos; a partir de 620 px la columna se parte en dos, que es
+   la rejilla que pide el diseño cuando hay sitio. */
+.f-metrics { display: flex; flex-direction: column; gap: 14px; }
+.f-metrics .panel { background: var(--solid); border: 1px solid var(--hair);
+  border-radius: var(--r-lg); }
+.f-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.f-label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600; }
+.f-self { padding: 20px 22px; border-radius: 26px;
+  background: linear-gradient(160deg,
+    color-mix(in srgb, var(--s-solar) 14%, transparent),
+    color-mix(in srgb, var(--s-solar) 3%, transparent)) !important;
+  border-color: color-mix(in srgb, var(--s-solar) 22%, transparent) !important; }
+.f-label-amber { color: var(--s-solar); }
+.f-big { font-size: 44px; font-weight: 600; letter-spacing: -.04em; line-height: 1;
+  font-variant-numeric: tabular-nums; margin-top: 9px; color: var(--ink); }
+.f-foot { font-size: 12.5px; margin-top: 6px;
+  color: color-mix(in srgb, var(--s-solar) 55%, var(--ink-2)); }
+.f-small { padding: 16px 17px; border-radius: 20px; }
+.f-mid { font-size: 23px; font-weight: 600; letter-spacing: -.03em; margin-top: 8px;
+  font-variant-numeric: tabular-nums; color: var(--ink); }
+.f-mid-batt { color: var(--s-batt); }
+.f-mid[data-estado="exp"] { color: var(--s-exp); }
+.f-mid[data-estado="imp"] { color: var(--bad); }
+.f-mid[data-estado="nada"] { color: var(--ink-3); }
+.f-mid[data-estado="bien"] { color: var(--good); }
+.f-mid[data-estado="caro"] { color: var(--bad); }
+.f-note { font-size: 11.5px; color: var(--ink-3); margin: 4px 0 0; line-height: 1.4; }
+.f-cost { padding: 18px 20px; }
+.f-cost-head { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px; }
+.f-price { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.f-cost-row { display: flex; align-items: baseline; gap: 8px; }
+.f-cost-val { font-size: 32px; letter-spacing: -.035em; margin-top: 0; }
+.f-per { font-size: 13px; color: var(--ink-3); }
+.f-cost-note { font-size: 12px; color: var(--ink-2); margin-top: 8px; line-height: 1.5;
+  text-wrap: pretty; }
+.f-legend { padding: 18px 20px; display: flex; flex-direction: column; gap: 11px; }
+.f-leg { display: flex; align-items: center; gap: 10px; font-size: 12.5px;
+  color: var(--ink-2); }
+.f-leg i { width: 20px; height: 8px; border-radius: 4px; flex: none; }
+
+@media (min-width: 620px) {
+  .f-controls { flex-direction: row; align-items: center; justify-content: space-between; }
+  .f-metrics { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+  .f-pair { grid-column: span 2; }
+}
 
 /* Interruptor deshabilitado (§04): 55 % de opacidad y sin sombra en el pulgar,
    para que se lea como «no se puede tocar» y no como «apagado». */

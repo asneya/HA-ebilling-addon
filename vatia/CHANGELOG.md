@@ -2,6 +2,81 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.37.0
+
+### El flujo de energía, como lo dibujó el diseño
+
+Implementado el diseño **«Flujo de energía v2»**. La especificación está en
+`docs/design/`, junto al código.
+
+**El cambio de fondo es la escala.** El diagrama de antes normalizaba: repartía
+el alto de la banda entre las corrientes, así que 200 W a las tres de la mañana
+se dibujaban con el mismo grosor que 5 kW a mediodía y el Sankey solo decía
+*proporciones*. Ahora la escala es **píxeles por kilovatio de verdad** —46 px/kW
+hasta 5,4 kW y a partir de ahí normalizada para no desbordar—, así que a las
+horas de poco caudal las cintas son finas de verdad. Eso es la mitad de la
+información y no estaba.
+
+Con ello llega el resto de la geometría de la maqueta: barras de 54 px con radio
+8, separación de 14, degradado del color del origen al del destino (.72 → .5),
+partículas de `2 26` a 3,4 s con grosor proporcional, el valor **dentro** de la
+cinta cuando pasa de 17 px, `Entra` / `Va a`, el pie con el caudal total, y las
+etiquetas con nombre y valor **antirreapiladas**: paso mínimo entre centros y
+línea guía al color del nodo cuando una se separa más de 6 px de su barra. Los
+sufijos son parte del nombre —`Batería · descarga`, `Red · excedente`— porque sin
+ellos la misma palabra nombraba dos cosas contrarias.
+
+**Dos orientaciones**, con el corte que da el propio diseño en 600 px: en tablet
+las columnas van a los lados, tal cual la maqueta; en el móvil pasan a entradas
+arriba y salidas abajo, con las cintas giradas 90°. Y se construye en píxeles y
+no en un `viewBox` fijo: las medidas del diseño son píxeles, y escalando un
+lienzo de 976 al ancho de la tarjeta la letra de 14 se dibujaba a 10.
+
+### Una pantalla para recorrer el día
+
+La tarjeta de «Ahora mismo» ahora se puede tocar, y lleva a **Flujo de energía**:
+el mismo diagrama con el día entero por delante.
+
+- **Deslizador de hora** y arrastre directo sobre la franja del día, que es lo
+  que se intenta hacer al verla.
+- **«Ver el día entero»**: el día pasa completo en unos segundos.
+- **La franja del día**: el sol producido en área y el consumo de la casa en
+  línea, con el cabezal de lectura.
+- **Cuatro tarjetas de métricas**: autoconsumo del instante, batería, red y el
+  **coste de esta hora** con el precio de tu tarifa.
+- **La píldora de estado** y el **titular** —«El sol cubre la casa, llena la
+  batería y aún sobra: 2,0 kW se van a la red»— con las ocho copias del diseño en
+  su orden de prioridad, que también salen en la Home. El titular es una región
+  `aria-live`, y el Sankey lleva la lista de pares origen→destino que pide el
+  diseño para quien no lo ve.
+
+El prototipo simulaba el día con fórmulas; esto va con **lo medido**, que es lo
+que el propio diseño pide para producción: el reparto de cada muestra de cinco
+minutos lo hace el servidor con la misma función que la tarjeta de la Home.
+
+### Lo que se ha hecho distinto, y por qué
+
+- **La casa sigue siendo rosa.** El diseño la pinta gris neutro (`#D3DCE6`); en
+  Vatia ese color es el de la casa en las cuatro pantallas y además el del tramo
+  punta. Cambiarlo aquí solo habría hecho que el mismo dato tuviera dos colores.
+- **La maqueta es de tema oscuro** y aquí hay dos temas, así que las superficies
+  y la tinta salen de los tokens de la app. No es una traducción libre: en oscuro
+  los tokens *son* los valores del diseño —`#F2F6FA` de tinta, `#F5A93C` el sol,
+  `#35D69B` la batería—.
+- **Los vatios se siguen escribiendo en vatios** por debajo del kilovatio, como en
+  el resto de la app, en vez de «0,32 kW».
+- **Una pastilla «Ahora»** que la maqueta no tiene, porque con datos de verdad hay
+  un presente al que volver; y reproducir **da la vuelta al llegar a ahora**, no a
+  las 24 h: del futuro no hay medidas.
+- **El techo de la franja sale del día**, no de los 6 kW fijos del prototipo, que
+  en una casa de 10 kW recortaba la campana.
+- **Aparece un enlace que el prototipo no puede producir**: red → batería. Su
+  reparto se deduce de producción y consumo; el nuestro sale de seis contadores
+  medidos, así que cargar la batería de la red de noche se ve, y tiene su titular.
+- No se han añadido los tres parámetros de la maqueta (`showParticles`,
+  `showValues`, `batteryKwh`): son mandos de prototipo. El movimiento reducido ya
+  apaga las partículas, y la capacidad de la batería la dice el sensor.
+
 ## 0.36.0
 
 ### «Ahora mismo», siempre lo primero

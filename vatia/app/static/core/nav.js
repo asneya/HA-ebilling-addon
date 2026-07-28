@@ -13,13 +13,19 @@ import { emit } from "./bus.js";
 
 const donde = { view: "home", sub: null, settingsPage: null };
 
+/* Pantallas empujadas: no tienen pestaña propia y se llega a ellas desde una
+   tarjeta. Mientras se está dentro sigue encendida la pestaña que las contiene,
+   que es de donde se ha venido y a donde se vuelve. */
+const PESTANA_DE = { flow: "home" };
+
 export function currentView() { return donde.view; }
 export function currentSub() { return donde.sub; }
 
 export function showView(name) {
   donde.view = name;
   document.body.dataset.view = name;
-  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
+  const pestana = PESTANA_DE[name] || name;
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === pestana));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   window.scrollTo({ top: 0, behavior: "smooth" });
   emit("vista", { name });
