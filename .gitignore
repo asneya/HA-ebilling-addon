@@ -6,3 +6,11 @@ node_modules/
 *.pid
 fakeha.py
 *.log
+
+# La configuración del add-on, si un servidor de pruebas la escribe aquí por
+# error (un CONFIG_DIR mal puesto apunta a la raíz del repositorio). Lleva el
+# token de Home Assistant **en claro**, así que no puede acabar en un commit
+# por un `git add -A` despistado.
+vatia.json
+pvpc_cache.json
+data-*/
