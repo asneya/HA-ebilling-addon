@@ -5,7 +5,7 @@
 import { $, esc } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on } from "../core/bus.js";
-import { fmtNum } from "../core/format.js";
+import { fmtNum, fmtTemp } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
 
@@ -85,7 +85,9 @@ function renderLive() {
   bg.dataset.weather = weatherFamily(live.weather.condition);
 
   const temp = live.weather.temperature;
-  $("#weather-temp").textContent = temp != null ? `${Math.round(temp)}°` : "—";
+  // Con un decimal, como la maqueta («28,6°»): redondeando a entero se pierde
+  // medio grado y la cifra tabular de la pastilla deja de tener sentido.
+  $("#weather-temp").textContent = temp != null ? `${fmtTemp.format(temp)}°` : "—";
   $("#weather-icon").innerHTML = weatherIcon(live.weather.condition, live.phase);
   $("#weather").title = live.weather.condition
     ? `${live.weather.condition} · ${PHASE_TEXT[live.phase] || ""}`

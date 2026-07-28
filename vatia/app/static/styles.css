@@ -65,6 +65,16 @@
      como «hueco que se va a llenar», no como contenido apagado. */
   --skel: #e4e9f0;
   --skel-brillo: rgba(255, 255, 255, .75);
+  /* La pastilla del tiempo flota sobre el cielo, no sobre una tarjeta: su
+     suelo es blanco translúcido. La maqueta da dos valores, uno por tema. */
+  --pill-sky: rgba(255, 255, 255, .22);
+  --pill-sky-brd: rgba(255, 255, 255, .32);
+  /* La maqueta dibuja la pastilla con tinta blanca, pero sobre un cielo azul
+     saturado. El cielo del tema claro es casi blanco en las cuatro fases, y
+     medido daba 1,16:1 — invisible. Se conserva el material de la maqueta y se
+     adapta la tinta, que es lo único que su único cielo no podía prever. */
+  --pill-sky-ink: var(--ink);
+  --pill-sky-sombra: none;
   /* semánticos */
   --good: #0e7a52;
   --good-chip: rgba(22, 164, 111, .14);
@@ -135,6 +145,10 @@
   --s-forecast: #f5c46b;
   --skel: #232c36;
   --skel-brillo: rgba(255, 255, 255, .05);
+  --pill-sky: rgba(255, 255, 255, .1);
+  --pill-sky-brd: rgba(255, 255, 255, .16);
+  --pill-sky-ink: #fff;
+  --pill-sky-sombra: 0 1px 8px rgba(10, 20, 40, .4);
   --good: #35d69b;
   --good-chip: rgba(53, 214, 155, .16);
   --warn: #f0a22e;
@@ -333,18 +347,25 @@ body[data-view="energy"] .bg-scrim {
 
 /* Meteorología: va sobre el cielo, así que lleva superficie oscura propia
    (con la clara del resto de la interfaz, el texto blanco no se leería). */
+/* La pastilla del tiempo, exacta a la maqueta.
+   Es la única pieza que flota sobre el cielo sin tarjeta debajo, y por eso su
+   material es blanco translúcido y no el cristal oscuro del resto: 34 px de
+   alto, relleno 0/12, hueco de 7 y desenfoque de 14 px. Estaba en 46 px con
+   suelo oscuro —casi el doble de alta— y se comía la cabecera. */
 .weather {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px 8px 10px; border-radius: 999px;
-  color: #fff; background: rgba(8, 14, 30, .38);
-  border: 1px solid rgba(255, 255, 255, .22);
-  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
-  flex: 0 0 auto; box-shadow: 0 6px 20px rgba(0,0,0,.18);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, .4);
+  display: flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 12px; border-radius: 999px;
+  color: var(--pill-sky-ink); background: var(--pill-sky);
+  border: 1px solid var(--pill-sky-brd);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  flex: 0 0 auto;
+  text-shadow: var(--pill-sky-sombra);
 }
-.weather-icon { display: grid; place-items: center; width: 30px; height: 30px; }
-.weather-icon .i { width: 28px; height: 28px; }
-.weather-temp { font-size: 19px; font-weight: 700; letter-spacing: -.3px; }
+.weather-icon { display: grid; place-items: center; width: 17px; height: 17px; }
+.weather-icon .i { width: 17px; height: 17px; stroke-width: 1.9; }
+.weather-temp {
+  font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
 
 /* ---------------- paneles ---------------- */
 .panel { padding: 16px 16px 14px; margin-bottom: 14px; }
@@ -1141,6 +1162,10 @@ body[data-bg="flat"] .section-title .soft { color: var(--ink-3); opacity: 1; }
   }
   .glass-nav, .weather { backdrop-filter: none; -webkit-backdrop-filter: none;
     background: var(--solid); }
+  /* La pastilla lleva tinta blanca porque flota sobre el cielo; con el suelo
+     opaco de este modo el cielo desaparece y en claro quedaba blanco sobre
+     blanco, es decir invisible justo para quien pide más contraste. */
+  .weather { color: var(--ink); text-shadow: none; border-color: var(--hair-2); }
 }
 
 /* Borde al desplazar (§07): un degradado de 24 px del color de la barra en el
