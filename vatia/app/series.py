@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from collections.abc import Callable
 from typing import Any
 
 import aiohttp
@@ -315,7 +316,9 @@ def _midnight(moment: datetime) -> datetime:
 # 150 W de sol no sobra nada, aunque el panel esté generando.
 
 def free_window(
-    points: list[tuple[datetime, float]], baseline_w: float, day: datetime
+    points: list[tuple[datetime, float]],
+    baseline: float | Callable[[datetime], float],
+    day: datetime,
 ) -> dict[str, Any] | None:
     """Ventana de un día concreto, o ``None`` si ese día no sobra nada.
 
@@ -323,65 +326,110 @@ def free_window(
     la medianoche local del día que interesa. Los cortes se interpolan entre
     puntos: la previsión viene cada media hora o cada hora, y decir «abre a las
     12:00» cuando abre a las 11:40 es media hora de energía regalada.
+
+    ``baseline`` puede ser una cifra —el consumo típico de la casa, plano— o una
+    función de la hora. Con el perfil horario deja de ser plano, y entonces la
+    ventana puede **partirse**: si a la una pones el horno, esa hora no sobra
+    nada aunque el sol siga dando. Por eso se devuelven además los `spans` (los
+    tramos en los que de verdad sobra) y los `gaps` (los huecos de en medio):
+    `start` y `end` son el primero y el último corte, y el kWh es la integral
+    real del excedente, que ya descuenta los huecos.
     """
+    umbral = baseline if callable(baseline) else (lambda _t: float(baseline))
     end_of_day = day + timedelta(days=1)
     curve = [(t, w) for t, w in points if day <= t < end_of_day]
     if len(curve) < 2:
         return None
 
-    # Cortes con el umbral. Cada tramo entre dos puntos se trata como una recta,
-    # así que el cruce se despeja sin iterar.
+    # Cruce de dos rectas: la previsión entre dos puntos y el umbral entre esos
+    # mismos dos instantes. Con umbral plano se reduce al caso de siempre.
     def cross(a: tuple[datetime, float], b: tuple[datetime, float]) -> datetime:
-        span = b[1] - a[1]
+        d0, d1 = a[1] - umbral(a[0]), b[1] - umbral(b[0])
+        span = d1 - d0
         if span == 0:
             return a[0]
-        ratio = max(min((baseline_w - a[1]) / span, 1.0), 0.0)
+        ratio = max(min(-d0 / span, 1.0), 0.0)
         return a[0] + (b[0] - a[0]) * ratio
 
-    start: datetime | None = None
-    end: datetime | None = None
+    # Tramos con excedente. Se recorre la curva marcando dónde entra y dónde sale
+    # de por encima del umbral; con el perfil horario puede entrar y salir varias
+    # veces en el mismo día.
+    spans: list[tuple[datetime, datetime]] = []
+    abierto: datetime | None = None
+    if curve[0][1] > umbral(curve[0][0]):
+        abierto = curve[0][0]
     for index in range(len(curve) - 1):
         left, right = curve[index], curve[index + 1]
-        if left[1] <= baseline_w < right[1]:
-            moment = cross(left, right)
-            if start is None:
-                start = moment
-        elif right[1] <= baseline_w < left[1]:
-            end = cross(left, right)
-    # La previsión puede empezar o acabar ya por encima del umbral (curva
-    # recortada, o un día en el que amanece generando).
-    if start is None and curve[0][1] > baseline_w:
-        start = curve[0][0]
-    if end is None and curve[-1][1] > baseline_w:
-        end = curve[-1][0]
-    if start is None or end is None or end <= start:
+        sube = left[1] <= umbral(left[0]) and right[1] > umbral(right[0])
+        baja = left[1] > umbral(left[0]) and right[1] <= umbral(right[0])
+        if sube and abierto is None:
+            abierto = cross(left, right)
+        elif baja and abierto is not None:
+            spans.append((abierto, cross(left, right)))
+            abierto = None
+    # La previsión puede acabar aún por encima (curva recortada, o un día en el
+    # que se pone el sol generando).
+    if abierto is not None:
+        spans.append((abierto, curve[-1][0]))
+    spans = [(a, b) for a, b in spans if b > a]
+    if not spans:
         return None
 
-    # Energía que sobra dentro de la ventana: la integral del excedente. Se
-    # integra sobre la curva recortada a la ventana, incluidos los extremos
-    # interpolados, para no contar de más ni de menos.
-    inside = [(t, w) for t, w in curve if start < t < end]
-    shape = [(start, baseline_w)] + inside + [(end, baseline_w)]
+    start, end = spans[0][0], spans[-1][1]
+
+    # Energía que sobra: la integral del excedente dentro de cada tramo, con los
+    # extremos interpolados para no contar de más ni de menos.
+    def integrar(a: datetime, b: datetime) -> tuple[float, float]:
+        dentro = [(t, w) for t, w in curve if a < t < b]
+        shape = [(a, umbral(a))] + dentro + [(b, umbral(b))]
+        wh = 0.0
+        alto = 0.0
+        for i in range(len(shape) - 1):
+            (t0, w0), (t1, w1) = shape[i], shape[i + 1]
+            horas = (t1 - t0).total_seconds() / 3600.0
+            sobre0 = max(w0 - umbral(t0), 0.0)
+            sobre1 = max(w1 - umbral(t1), 0.0)
+            wh += (sobre0 + sobre1) / 2.0 * horas
+            alto = max(alto, sobre0, sobre1)
+        return wh, alto
+
+    detalle = []
     surplus_wh = 0.0
     peak = 0.0
-    for index in range(len(shape) - 1):
-        (t0, w0), (t1, w1) = shape[index], shape[index + 1]
-        hours = (t1 - t0).total_seconds() / 3600.0
-        above0 = max(w0 - baseline_w, 0.0)
-        above1 = max(w1 - baseline_w, 0.0)
-        surplus_wh += (above0 + above1) / 2.0 * hours
-        peak = max(peak, above0, above1)
+    for a, b in spans:
+        wh, alto = integrar(a, b)
+        surplus_wh += wh
+        peak = max(peak, alto)
+        detalle.append({
+            "start": a.isoformat(), "end": b.isoformat(),
+            "hours": round((b - a).total_seconds() / 3600.0, 3),
+            "kwh": round(wh / 1000.0, 3),
+        })
 
+    gaps = [
+        {"start": spans[i][1].isoformat(), "end": spans[i + 1][0].isoformat(),
+         "hours": round((spans[i + 1][0] - spans[i][1]).total_seconds() / 3600.0, 3)}
+        for i in range(len(spans) - 1)
+    ]
+
+    # `hours` es el hueco de punta a punta —lo que dice la tarjeta— y `net_hours`
+    # el tiempo en el que de verdad sobra. Sin huecos son lo mismo.
     hours = (end - start).total_seconds() / 3600.0
+    net_hours = sum(item["hours"] for item in detalle)
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "hours": round(hours, 3),
+        "net_hours": round(net_hours, 3),
         "kwh": round(surplus_wh / 1000.0, 3),
         # La media es lo que se puede enchufar y mantener; el pico, lo que cabe
-        # en el mejor momento.
-        "surplus_w": round(surplus_wh / hours, 1) if hours > 0 else 0.0,
+        # en el mejor momento. La media se saca del tiempo con excedente, no del
+        # hueco entero: si no, un día con un agujero de dos horas saldría más
+        # flojo de lo que es.
+        "surplus_w": round(surplus_wh / net_hours, 1) if net_hours > 0 else 0.0,
         "peak_w": round(peak, 1),
+        "spans": detalle,
+        "gaps": gaps,
     }
 
 
