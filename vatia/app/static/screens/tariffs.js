@@ -7,6 +7,7 @@ import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fmtNum, nf4, num6 } from "../core/format.js";
 import { config, settings, tariffs, reloadConfig } from "../core/config.js";
+import { guardando } from "../core/guardando.js";
 
 let editingTariffId = null;
 
@@ -331,12 +332,13 @@ async function tarifaCambiada() {
 async function saveTariff() {
   const tariff = tariffFromForm();
   $("#tariff-error").textContent = "";
+  const listo = guardando($("#save-tariff-btn"));
   try {
     if (editingTariffId) await api(`tariffs/${editingTariffId}`, { method: "PUT", body: JSON.stringify(tariff) });
     else await api("tariffs", { method: "POST", body: JSON.stringify(tariff) });
     $("#tariff-modal").classList.add("hidden");
     await tarifaCambiada();
-  } catch (err) { $("#tariff-error").textContent = err.message; }
+  } catch (err) { $("#tariff-error").textContent = err.message; } finally { listo(); }
 }
 
 async function cloneTariff(id) {
@@ -372,6 +374,7 @@ async function doImport() {
   if (!text) { err.textContent = "Pega el CSV o carga un archivo."; return; }
   const btn = $("#do-import-btn");
   btn.disabled = true;
+  const listo = guardando(btn, "Importando…");
   try {
     // No pasa por `api()`: el cuerpo es CSV, no JSON.
     const resp = await fetch("api/tariffs/import", {
@@ -386,7 +389,7 @@ async function doImport() {
     $("#import-modal").classList.add("hidden");
     $("#import-status").textContent = `✓ Tarifa «${tariff.name}» importada.`;
     await tarifaCambiada();
-  } catch (e) { err.textContent = `✗ ${e.message}`; } finally { btn.disabled = false; }
+  } catch (e) { err.textContent = `✗ ${e.message}`; } finally { listo(); btn.disabled = false; }
 }
 
 /* ------------- controles ------------- */

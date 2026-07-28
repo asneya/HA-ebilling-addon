@@ -29,20 +29,54 @@ const SOC_PISTA = "Toca el gráfico para ver la carga de un momento";
 async function loadEnergy() {
   const banner = $("#e-error");
   banner.classList.add("hidden");
-  $("#e-busy").classList.remove("hidden");
+  // El esqueleto sustituye al gráfico mientras carga —no se pone encima— para
+  // que no se vea el gráfico anterior debajo de una capa: sería el dato de otro
+  // periodo, y eso es peor que un hueco.
+  const primero = !eState.data;
+  const abortar = new AbortController();
+  mostrarEsqueleto(true, abortar);
   try {
-    eState.data = await api(`series?view=${eState.view}&range=${eState.range}&offset=${eState.offset}`);
+    eState.data = await api(
+      `series?view=${eState.view}&range=${eState.range}&offset=${eState.offset}`,
+      { signal: abortar.signal },
+    );
     // Al entrar en un gráfico todas las series están visibles y sin punto
     // seleccionado: se muestran los totales del periodo.
     eState.hidden.clear();
     eState.cursor = null;
     renderEnergy();
   } catch (err) {
+    // Cancelar es una decisión, no un fallo: no se enseña un aviso rojo por
+    // haber pulsado «Cancelar». Se deja lo que hubiera, o el hueco si era la
+    // primera carga.
+    if (err.name === "AbortError") {
+      if (primero) $("#e-empty").classList.remove("hidden");
+      else renderEnergy();
+      return;
+    }
     fallo(banner, err.message, loadEnergy);
     $("#e-chart").innerHTML = "";
   } finally {
-    $("#e-busy").classList.add("hidden");
+    mostrarEsqueleto(false);
   }
+}
+
+/* El esqueleto de carga. Se crea al mostrarlo y se destruye al ocultarlo: así
+   su reloj de los 8 s y su observador de visibilidad se van con él, sin dejar
+   nada animándose detrás. */
+function mostrarEsqueleto(encendido, abortar) {
+  const hueco = $("#e-skel");
+  hueco.classList.toggle("hidden", !encendido);
+  $(".e-chart-wrap").classList.toggle("hidden", encendido);
+  $(".e-zoom-hint").classList.toggle("hidden", encendido);
+  if (!encendido) { hueco.textContent = ""; return; }
+  $("#e-empty").classList.add("hidden");
+  hueco.textContent = "";
+  const skel = document.createElement("vatia-skeleton");
+  skel.shape = "chart";
+  skel.label = "Leyendo estadísticas del recorder…";
+  skel.addEventListener("cancel", () => abortar && abortar.abort());
+  hueco.appendChild(skel);
 }
 
 function renderEnergy() {

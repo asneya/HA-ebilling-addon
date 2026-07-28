@@ -10,6 +10,7 @@ import { api } from "./api.js";
 import { on, emit } from "./bus.js";
 import { config, settings } from "./config.js";
 import { forgetTokens } from "./colors.js";
+import { guardando } from "./guardando.js";
 
 const THEMES = { auto: "Automático", light: "Claro", dark: "Oscuro" };
 
@@ -44,9 +45,16 @@ function applyBackground(on_) {
 
 async function setBackground(on_) {
   applyBackground(on_);
-  await api("settings", { method: "PUT", body: JSON.stringify({ dynamic_background: !!on_ }) });
-  const s = settings();
-  if (s) s.dynamic_background = !!on_;
+  // El interruptor guarda él solo, así que es el que necesita el estado del
+  // §04: el pulgar se para a medio camino y gira hasta que el servidor contesta.
+  const listo = guardando($("#s-dynamic-bg"));
+  try {
+    await api("settings", { method: "PUT", body: JSON.stringify({ dynamic_background: !!on_ }) });
+    const s = settings();
+    if (s) s.dynamic_background = !!on_;
+  } finally {
+    listo();
+  }
 }
 
 /* El borde de la cabecera solo existe cuando hay contenido por encima. Se

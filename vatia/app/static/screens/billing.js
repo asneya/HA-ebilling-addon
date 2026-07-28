@@ -19,13 +19,33 @@ let openBillId = null;
 export async function loadSimulation() {
   const banner = $("#error-banner");
   banner.classList.add("hidden");
+  // En la primera carga la rejilla de tarifas está vacía y la pantalla entraba
+  // en blanco: se pone el esqueleto con la forma que va a tener (§04).
+  const abortar = new AbortController();
+  const quitar = simulation ? () => {} : esqueletoDeFacturas(abortar);
   try {
-    simulation = await api(`simulate?cycles_back=${cyclesBack}`);
+    simulation = await api(`simulate?cycles_back=${cyclesBack}`,
+      { signal: abortar.signal });
     renderSimulation();
   } catch (err) {
+    if (err.name === "AbortError") return;
     banner.textContent = err.message;
     banner.classList.remove("hidden");
+  } finally {
+    quitar();
   }
+}
+
+/* Esqueleto de la lista de tarifas mientras llega la comparativa. */
+function esqueletoDeFacturas(abortar) {
+  const grid = $("#bills-grid");
+  grid.textContent = "";
+  const skel = document.createElement("vatia-skeleton");
+  skel.shape = "rows";
+  skel.label = "Calculando lo que costaría el ciclo con cada tarifa…";
+  skel.addEventListener("cancel", () => abortar.abort());
+  grid.appendChild(skel);
+  return () => { if (skel.parentNode === grid) skel.remove(); };
 }
 
 function renderSimulation() {

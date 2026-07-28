@@ -8,6 +8,7 @@ import { on, emit } from "../core/bus.js";
 import { fmtNum } from "../core/format.js";
 import { config, settings, tariffs, reloadConfig } from "../core/config.js";
 import { showSettingsPage } from "../core/nav.js";
+import { guardando } from "../core/guardando.js";
 
 /* Las entidades de HA agrupadas por tipo. Se piden una vez y se guardan aquí:
    son trescientas y no cambian mientras dura la sesión. */
@@ -184,6 +185,8 @@ async function assignSensor(slot, entity) {
   await api("settings", { method: "PUT",
     body: JSON.stringify({ [grupo]: { [slot]: entity } }) });
   $("#pick-modal").classList.add("hidden");
+  // La hoja se cierra al instante; la fila que se está guardando se recarga
+  // justo debajo, así que el estado «Guardando» no aporta nada aquí.
   await reloadConfig();
   await loadSensors();
 }
@@ -352,6 +355,7 @@ function settingsFromForm() {
 
 async function saveSettings(silent = false) {
   const status = $("#settings-status");
+  const listo = silent ? () => {} : guardando($("#save-settings-btn"));
   try {
     const result = await api("settings", { method: "PUT", body: JSON.stringify(settingsFromForm()) });
     Object.assign(settings(), result.settings);
@@ -362,6 +366,8 @@ async function saveSettings(silent = false) {
     }
   } catch (err) {
     if (!silent) status.textContent = `Error: ${err.message}`; else throw err;
+  } finally {
+    listo();
   }
 }
 
@@ -387,6 +393,7 @@ $("#import-config-btn").addEventListener("click", async () => {
     status.textContent = `No es un JSON válido: ${err.message}`;
     return;
   }
+  const listo = guardando($("#import-config-btn"), "Importando…");
   try {
     const r = await api("config/import", { method: "POST", body: JSON.stringify(payload) });
     await reloadConfig();
@@ -399,6 +406,8 @@ $("#import-config-btn").addEventListener("click", async () => {
     $("#import-config-text").value = "";
   } catch (err) {
     status.textContent = `Error: ${err.message}`;
+  } finally {
+    listo();
   }
 });
 

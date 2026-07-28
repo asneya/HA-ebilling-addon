@@ -61,6 +61,10 @@
      dos van juntas —la punteada continúa a la continua— y con el mismo ámbar no
      se distinguía dónde acaba lo medido y empieza lo previsto. */
   --s-forecast: #b87a10;
+  /* Esqueleto de carga: la pieza gris y el brillo que la barre. Han de leerse
+     como «hueco que se va a llenar», no como contenido apagado. */
+  --skel: #e4e9f0;
+  --skel-brillo: rgba(255, 255, 255, .75);
   /* semánticos */
   --good: #0e7a52;
   --good-chip: rgba(22, 164, 111, .14);
@@ -129,6 +133,8 @@
   --s-batt-out: #3ecdd8;
   --s-exp: #b08cff;
   --s-forecast: #f5c46b;
+  --skel: #232c36;
+  --skel-brillo: rgba(255, 255, 255, .05);
   --good: #35d69b;
   --good-chip: rgba(53, 214, 155, .16);
   --warn: #f0a22e;
@@ -144,7 +150,7 @@
 
 /* Foco visible solo con teclado, con el anillo del sistema. */
 :focus { outline: none; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
 
 /* Barra de progreso indeterminada (se muestra con .busy en <html>). */
 .progress {
@@ -530,7 +536,9 @@ body[data-view="energy"] .bg-scrim {
   paint-order: stroke; stroke: var(--glass); stroke-width: 3.5px; stroke-linejoin: round;
 }
 .e-axis { fill: var(--ink-3); font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
-.e-busy { position: absolute; inset: 0; display: grid; place-items: center; background: var(--glass); }
+/* El hueco del esqueleto: ocupa el sitio del gráfico mientras carga, con su
+   mismo alto, para que al llegar el dato no salte nada. */
+.e-skel { padding: 2px 0 0; min-height: 268px; }
 .spinner {
   width: 26px; height: 26px; border-radius: 50%; display: block;
   border: 2.5px solid var(--ink-3); border-top-color: transparent;
@@ -679,9 +687,29 @@ body[data-view="energy"] .bg-scrim {
 }
 .btn:active { transform: scale(.97); }
 .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
-.btn.big { padding: 13px 22px; border-radius: 14px; font-size: 15px; }
+/* `.big` solo da más aire: el radio sigue siendo el de una cápsula, que es lo
+   que el §02 pide para todos los controles (el 14 es de fila y campo). */
+.btn.big { padding: 13px 22px; font-size: 15px; }
 .btn.subtle:hover { background: var(--glass); }
 .btn.danger { color: var(--bad); }
+/* ---------------- estado «Guardando» (§04) ----------------
+   Un guardado lento no daba señal: el botón se quedaba igual y se volvía a
+   pulsar. El aro gira delante del texto, sin cambiar el ancho del botón, para
+   que la barra de guardado no dé un salto. */
+.btn.guardando { color: var(--ink-3); }
+.btn.guardando::before {
+  content: ""; width: 15px; height: 15px; margin-right: 9px; flex: none;
+  border-radius: 999px; border: 2px solid var(--hair-2);
+  border-top-color: var(--accent); animation: gira .9s linear infinite;
+}
+.btn.primary.guardando { color: rgba(255, 255, 255, .85); }
+.btn.primary.guardando::before {
+  border-color: rgba(255, 255, 255, .34); border-top-color: #fff;
+}
+@keyframes gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn.guardando::before, .ios-switch.guardando::after { animation: none; }
+}
 /* 44×44 es el mínimo recomendado por las HIG de Apple para zonas táctiles. */
 .icon-btn {
   width: 44px; height: 44px; flex: 0 0 auto; border-radius: 999px; cursor: pointer;
@@ -730,7 +758,9 @@ input, select, textarea {
   font: inherit; color: var(--ink); background: var(--glass-2);
   border: 1px solid var(--sep); border-radius: 11px; padding: 9px 11px; max-width: 100%;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent); outline-offset: 3px; border-color: transparent;
+}
 input[type="color"] { padding: 3px; height: 40px; }
 /* Los interruptores (.ios-switch) tienen su propio tamaño: esta regla, más
    específica, los aplastaba a 18 px y el círculo se salía de la pista. */
@@ -752,6 +782,27 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .ios-switch:active::after { width: 27px; }
 .ios-switch:checked { background: var(--switch-on); border-color: transparent; }
 .ios-switch:checked::after { transform: translateX(21px); }
+/* «Guardando»: el pulgar se detiene a medio camino y gira hasta la respuesta
+   (§04). Tiene que ir **después** de la regla de `:checked`: las dos tienen la
+   misma especificidad, así que manda el orden, y si no el pulgar se iría al
+   final al encender en vez de quedarse esperando. */
+.ios-switch.guardando::after {
+  border: 2px solid var(--hair-2); border-top-color: var(--accent);
+  background: var(--card); box-shadow: none;
+  /* El giro lleva el desplazamiento dentro, y no es un detalle: con
+     `transform: translateX(10.5px)` declarado aparte, `@keyframes gira`
+     —que solo tiene `to { rotate }`— interpola desde el translate hacia el
+     rotate y el pulgar se arrastra hacia la izquierda mientras gira. Medido:
+     acababa en 6,2 px en vez de quedarse en 10,5. */
+  animation: gira-pulgar .9s linear infinite;
+}
+@keyframes gira-pulgar {
+  from { transform: translateX(10.5px) rotate(0deg); }
+  to { transform: translateX(10.5px) rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ios-switch.guardando::after { animation: none; transform: translateX(10.5px); }
+}
 
 /* ---------------- listas iOS ---------------- */
 .group { padding: 0; overflow: hidden; }
