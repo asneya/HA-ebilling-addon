@@ -59,21 +59,45 @@ function renderEnergy() {
   $(".e-chart-wrap").classList.toggle("hidden", !hasData);
   $(".e-zoom-hint").classList.toggle("hidden", !hasData);
 
-  // Marca de tiempo: el punto seleccionado o el periodo completo.
-  const idx = eState.cursor;
-  const picked = idx != null && d.x[idx];
-  $("#e-stamp").textContent = picked ? stampLabel(d.x[idx], eState.range) : d.label;
-  $("#e-clear").classList.toggle("hidden", !picked);
-
+  renderStamp();
   renderEnergyLegend();
   if (hasData) renderEnergyChart();
   renderEnergyBreakdown();
 }
 
+/* El punto que está mandando en la leyenda: el fijado o, si no hay, el que
+   tenga el dedo o el ratón encima. */
+function puntoMostrado() {
+  return eState.cursor != null ? eState.cursor : eState.hover;
+}
+
+/* Marca de tiempo y salida a los totales.
+   «Totales» sale con cualquier punto a la vista, fijado o no. Antes solo con el
+   fijado, y en el móvil eso dejaba sin salida: al levantar el dedo no hay
+   `mouseleave` que devuelva el cursor, así que la leyenda se quedaba con los
+   valores del instante y no había forma de volver a los totales del periodo. */
+function renderStamp() {
+  const d = eState.data;
+  const idx = puntoMostrado();
+  const enPunto = idx != null && d && d.x[idx];
+  $("#e-stamp").textContent = enPunto ? stampLabel(d.x[idx], eState.range)
+    : (d ? d.label : "—");
+  $("#e-clear").classList.toggle("hidden", !enPunto);
+}
+
+/* Suelta el punto y vuelve a los totales del periodo. */
+function volverATotales() {
+  eState.cursor = null;
+  eState.hover = null;
+  const box = $("#e-chart");
+  if (box) box.picked = null;
+  renderStamp();
+  renderEnergyLegend();
+}
+
 function renderEnergyLegend() {
   const d = eState.data;
-  // Manda el punto fijado; si no hay, el que esté bajo el dedo.
-  const idx = eState.cursor != null ? eState.cursor : eState.hover;
+  const idx = puntoMostrado();
   // El forecast no tiene leyenda (legend === false).
   const shown = d.series.filter((s) => s.legend !== false);
   $("#e-legend").innerHTML = shown.map((s) => {
@@ -241,7 +265,7 @@ $("#e-prev").addEventListener("click", () => { eState.offset -= 1; loadEnergy();
 $("#e-next").addEventListener("click", () => { if (eState.offset < 0) { eState.offset += 1; loadEnergy(); } });
 
 // Volver a los totales del periodo tras seleccionar un punto.
-$("#e-clear").addEventListener("click", () => { eState.cursor = null; renderEnergy(); });
+$("#e-clear").addEventListener("click", volverATotales);
 
 // Zoom del eje del tiempo.
 $("#e-zoom-in").addEventListener("click", () => setZoom(1.6));
@@ -266,19 +290,17 @@ $("#e-picker").addEventListener("click", () => {
 /* Los gestos y el cursor los publica el componente; aquí solo se recogen. */
 {
   const box = $("#e-chart");
-  // Fijar un punto rellena la leyenda con los valores de ese instante.
+  // Tocar o deslizar el dedo elige el punto y lo deja elegido.
   box.addEventListener("pick", (ev) => {
     eState.cursor = ev.detail.index;
+    renderStamp();
     renderEnergyLegend();
-    const d = eState.data;
-    const picked = eState.cursor != null && d && d.x[eState.cursor];
-    $("#e-stamp").textContent = picked ? stampLabel(d.x[eState.cursor], eState.range) : (d ? d.label : "—");
-    $("#e-clear").classList.toggle("hidden", !picked);
   });
-  // Al mover el dedo por encima, la leyenda sigue al cursor sin fijarlo.
+  // Con el ratón por encima, la leyenda sigue al cursor sin fijarlo.
   box.addEventListener("hover", (ev) => {
     if (ev.detail.index == null && eState.cursor != null) return;
     eState.hover = ev.detail.index;
+    renderStamp();
     renderEnergyLegend();
   });
   // El rango del eje decide si los controles de zoom están activos.
