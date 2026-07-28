@@ -187,12 +187,12 @@
             </button>
           </div>
         </div>
+        <!-- Mientras carga se enseña el esqueleto en vez del gráfico: imita la
+           forma que va a tener el contenido, así el salto al dato real no mueve
+           nada de sitio (§04). -->
+        <div class="e-skel hidden" id="e-skel" role="status" aria-live="polite"></div>
         <div class="e-chart-wrap">
           <vatia-chart id="e-chart" class="e-chart"></vatia-chart>
-          <div class="e-busy hidden" id="e-busy" role="status" aria-live="polite">
-            <span class="spinner" aria-hidden="true"></span>
-            <span class="sr-only">Cargando datos…</span>
-          </div>
         </div>
         <p class="e-zoom-hint">La leyenda muestra el total del periodo · desliza el dedo por el gráfico para recorrerlo punto a punto · pellizca con dos dedos para ampliar el eje del tiempo</p>
         <p class="empty hidden" id="e-empty">
@@ -1034,6 +1034,7 @@
   <script src="static/components/vatia-schedule.js"></script>
   <script src="static/components/vatia-chart.js"></script>
   <script src="static/components/vatia-bars.js"></script>
+  <script src="static/components/vatia-skeleton.js"></script>
   <!-- La app va en módulos (core/ y screens/). Un módulo se aplaza siempre, así
      que se evalúa con el documento ya montado y después de los componentes de
      arriba, que son scripts clásicos y se registran durante el análisis. -->

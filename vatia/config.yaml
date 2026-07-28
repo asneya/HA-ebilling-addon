@@ -1,5 +1,5 @@
 name: Vatia
-version: "0.34.0"
+version: "0.35.0"
 slug: vatia
 description: Tu electricidad en tiempo real, con el origen del consumo, el coste del ciclo y comparativa de tarifas
 url: https://github.com/asneya/HA-ebilling-addon

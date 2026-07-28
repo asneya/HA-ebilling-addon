@@ -2,6 +2,46 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.35.0
+
+### El catálogo de componentes, cerrado
+
+Los dos que faltaban del §04.
+
+**El esqueleto de carga.** No es un remolino en el centro: imita la **forma** del
+contenido que va a llegar —una curva con silueta de serie donde irá el gráfico,
+cuatro filas de leyenda, las marcas del eje— para que el salto al dato real no
+mueva nada de sitio. Como pide el documento:
+
+- **pulso de 1,4 s en un barrido diagonal**, no en la opacidad de cada bloque: un
+  bloque que late parece roto, un barrido parece que carga;
+- **tras 8 s** aparece «Está tardando más de lo normal» con opción de cancelar, y
+  cancelar no es un error: no sale ningún aviso rojo, se queda lo que hubiera;
+- se anima **solo mientras se ve**, con `IntersectionObserver` y
+  `visibilitychange` (§07): nada animado en segundo plano.
+
+Sustituye al gráfico en vez de ponerse encima, para que no se vea debajo el dato
+del periodo anterior — que es peor que un hueco. Y la lista de tarifas de
+Facturación, que en la primera carga entraba en blanco, también lo estrena.
+
+**El estado «Guardando».** Un guardado lento no daba ninguna señal: el botón se
+quedaba igual y se volvía a pulsar. Ahora el botón gira mientras espera y el
+interruptor que guarda solo hace lo que pide el catálogo al pie de la letra: **el
+pulgar se detiene a medio camino y gira hasta la respuesta**. Con un umbral de
+140 ms, para que un guardado de 40 ms no dé un parpadeo — que se lee como un
+fallo, no como una respuesta.
+
+### Dos desvíos que salieron al repasar el catálogo entero
+
+Al comprobar el §04 completo —y no solo los dos huecos— aparecieron dos cosas que
+llevaban tiempo mal:
+
+- El **foco de teclado** iba desplazado 2 px y el §04 pide 3 px «en todos los
+  controles»; en los campos de texto no estaba desplazado en absoluto.
+- El botón grande de guardar tenía **radio 14 px** en vez de cápsula. El 14 es de
+  «fila y campo» según el §02; un botón es un control, y los controles son
+  cápsulas.
+
 ## 0.34.0
 
 ### La ventana deja de mentir a la hora del horno
