@@ -571,6 +571,47 @@ async def get_hourly_consumption(
     return respaldo
 
 
+async def ha_ficha(settings: dict[str, Any], entity: str) -> dict[str, Any]:
+    """Qué sabe Home Assistant de este sensor: si existe y con qué atributos.
+
+    Es la primera pregunta y no la hacía nadie. «No tiene estadísticas» puede
+    ser porque le falta `state_class` —lo normal en un ayudante o una plantilla—
+    o porque **la entidad no existe**, que es otra cosa muy distinta y se
+    arregla en otro sitio.
+    """
+    if not entity:
+        return {"existe": False, "motivo": "sin asignar"}
+    try:
+        base, _ws, token = _ha_endpoints(settings)
+        headers = {"Authorization": f"Bearer {token}"}
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.get(
+                f"{base}/states/{entity}", timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 404:
+                    return {"existe": False, "motivo": "no existe en Home Assistant"}
+                if resp.status != 200:
+                    return {"existe": False, "motivo": f"HA respondió {resp.status}"}
+                datos = await resp.json()
+    except (SourceError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+        return {"existe": None, "motivo": str(err)}
+    attrs = datos.get("attributes") or {}
+    estado = datos.get("state")
+    if estado in (None, "unknown", "unavailable"):
+        # Un `unknown` es tan inútil como un 404, y hay instalaciones donde la
+        # entidad figura pero no la sirve nadie. Se dice tal cual.
+        return {"existe": False, "estado": estado,
+                "motivo": f"está en «{estado}» en Home Assistant"}
+    return {
+        "existe": True,
+        "estado": datos.get("state"),
+        "unidad": attrs.get("unit_of_measurement") or "",
+        "state_class": attrs.get("state_class") or "",
+        "device_class": attrs.get("device_class") or "",
+        "nombre": attrs.get("friendly_name") or entity,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Qué hay de verdad en InfluxDB
 # ---------------------------------------------------------------------------

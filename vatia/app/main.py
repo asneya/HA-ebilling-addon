@@ -519,9 +519,10 @@ async def diagnostics_billing():
         "sensor_export": (energia.get("grid_export_energy") or "").strip(),
     }
 
-    # 1 · Home Assistant: ¿existe la estadística y trae horas?
+    # 1 · Home Assistant: ¿existe siquiera el sensor, y trae estadísticas?
     paso: dict[str, Any] = {"intentado": fuera["source"] == "homeassistant"}
     if paso["intentado"]:
+        paso["ficha"] = await datasources.ha_ficha(settings, entity)
         try:
             filas = await datasources.ha_hourly_consumption(settings, start, end, tz, entity)
             paso.update(horas=len(filas), kwh=round(sum(f["kwh"] for f in filas), 3))
@@ -574,12 +575,23 @@ def _veredicto_facturacion(d: dict[str, Any]) -> str:
 
     ha = d["home_assistant"]
     ifx = d["influxdb"]
-    if ha.get("error"):
+    ficha = ha.get("ficha") or {}
+    if ficha.get("existe") is False:
+        # El caso que no se estaba mirando: el sensor de Ajustes no está en HA.
+        pistas = [f"«{d['sensor_import']}» {ficha.get('motivo', 'no está')}. "
+                  "Revisa el contador en Ajustes → Sensores."]
+    elif ha.get("error"):
         pistas = [f"Home Assistant no ha dado las estadísticas: {ha['error']}"]
+    elif ficha.get("existe") and not ficha.get("state_class"):
+        pistas = [f"«{d['sensor_import']}» existe y marca "
+                  f"{ficha.get('estado')} {ficha.get('unidad')}, pero no tiene "
+                  "`state_class`, así que Home Assistant no le guarda "
+                  "estadísticas de largo plazo y la facturación no puede "
+                  "diferenciarlo hora a hora."]
     else:
         pistas = [f"«{d['sensor_import']}» no tiene estadísticas horarias en Home "
-                  "Assistant. Suele faltarle `state_class: total_increasing`, o "
-                  "está excluido del recorder."]
+                  "Assistant en este periodo, aunque su `state_class` es "
+                  f"«{ficha.get('state_class') or '—'}»."]
     if not ifx.get("configurado"):
         pistas.append("No hay InfluxDB configurado del que sacarlas.")
     elif ifx.get("error"):

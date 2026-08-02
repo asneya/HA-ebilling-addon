@@ -289,10 +289,17 @@ function fillEntitySelects() {
   $("#s-forecast").innerHTML = opciones("any", s.solar_forecast_sensor || "");
 }
 
+/* Lo que manda la barra de «Guardar ajustes».
+
+   Aquí **no van los sensores**. La pantalla de Sensores dejó de ser un
+   formulario de catorce desplegables y pasó a ser una lista de filas que se
+   guardan una a una al asignarlas, así que ya no hay ningún `[data-flow]` ni
+   `[data-energy]` en el documento. Este formulario seguía recorriéndolos: no
+   rompía nada —el servidor fusiona por claves y fusionar con vacío no cambia
+   nada— pero mandaba `flow_sensors: {}` y `energy_sensors: {}` en cada guardado,
+   y el día que alguien hiciera que un PUT reemplace en vez de fusionar, se
+   llevaba por delante los catorce sensores de una vez. */
 function settingsFromForm() {
-  const flow = {}; const energy = {};
-  $$("[data-flow]").forEach((el) => { flow[el.dataset.flow] = el.value; });
-  $$("[data-energy]").forEach((el) => { energy[el.dataset.energy] = el.value; });
   return {
     ha_url: $("#s-ha-url").value.trim(),
     ha_token: $("#s-ha-token").value,
@@ -302,8 +309,6 @@ function settingsFromForm() {
     holidays: $("#s-holidays").value.split(",").map((x) => x.trim()).filter(Boolean),
     export_sensors: $("#s-export-sensors").checked,
     sensor_update_minutes: parseInt($("#s-sensor-minutes").value, 10) || 5,
-    flow_sensors: flow,
-    energy_sensors: energy,
     energy_counters: $("#s-energy-counters").value,
     battery_kwh: Number($("#s-battery-kwh").value) || 0,
     condition_sensor: $("#s-condition").value,
