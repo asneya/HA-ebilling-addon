@@ -343,6 +343,7 @@ def free_window(
     points: list[tuple[datetime, float]],
     baseline: float | Callable[[datetime], float],
     day: datetime,
+    bateria_wh: float | None = None,
 ) -> dict[str, Any] | None:
     """Ventana de un día concreto, o ``None`` si ese día no sobra nada.
 
@@ -358,6 +359,18 @@ def free_window(
     tramos en los que de verdad sobra) y los `gaps` (los huecos de en medio):
     `start` y `end` son el primero y el último corte, y el kWh es la integral
     real del excedente, que ya descuenta los huecos.
+
+    ``bateria_wh`` es lo que le cabe todavía a la batería. Un inversor en
+    autoconsumo carga con lo que sobra **antes** de exportar, así que ese trozo
+    del excedente no se puede gastar en otra cosa aunque el sol lo esté dando:
+    se descuenta y sale aparte en ``battery_kwh`` / ``spendable_kwh``. ``None``
+    —sin batería, o sin saber cómo está— deja el excedente entero como gastable,
+    que es lo que se hacía antes.
+
+    Además del resumen se devuelve ``shape``: la previsión y el consumo típico
+    en los mismos instantes, para poder **dibujar** el día. Una sola cifra media
+    no distingue una meseta de una punta de veinte minutos, y esa es justo la
+    diferencia que decide a qué hora se pone la lavadora.
     """
     umbral = baseline if callable(baseline) else (lambda _t: float(baseline))
     end_of_day = day + timedelta(days=1)
@@ -417,13 +430,20 @@ def free_window(
             alto = max(alto, sobre0, sobre1)
         return wh, alto
 
+    # Dónde está el mejor momento, no solo cuánto mide. «Sobran 2,4 kW de media»
+    # no dice si eso es una meseta o una punta de veinte minutos, y para decidir
+    # cuándo poner la lavadora eso es justo lo que hace falta.
+    peak_at: datetime | None = None
+
     detalle = []
     surplus_wh = 0.0
     peak = 0.0
     for a, b in spans:
         wh, alto = integrar(a, b)
         surplus_wh += wh
-        peak = max(peak, alto)
+        if alto > peak:
+            peak = alto
+            peak_at = _cuando_el_pico(curve, umbral, a, b)
         detalle.append({
             "start": a.isoformat(), "end": b.isoformat(),
             "hours": round((b - a).total_seconds() / 3600.0, 3),
@@ -440,6 +460,14 @@ def free_window(
     # el tiempo en el que de verdad sobra. Sin huecos son lo mismo.
     hours = (end - start).total_seconds() / 3600.0
     net_hours = sum(item["hours"] for item in detalle)
+
+    # Lo que la batería se va a llevar del excedente, si es que le cabe algo.
+    # Un inversor en autoconsumo carga con lo que sobra **antes** de exportar,
+    # así que ese trozo no es gastable aunque el sol lo esté dando: prometerlo
+    # entero era la queja de fondo, «la tarjeta dice que sobran 2 kW y cuando
+    # enchufo algo no sobra nada».
+    a_bateria_wh = min(max(bateria_wh or 0.0, 0.0), surplus_wh)
+    gastable_wh = surplus_wh - a_bateria_wh
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -452,8 +480,71 @@ def free_window(
         # flojo de lo que es.
         "surplus_w": round(surplus_wh / net_hours, 1) if net_hours > 0 else 0.0,
         "peak_w": round(peak, 1),
+        "peak_at": peak_at.isoformat() if peak_at else None,
+        # `kwh` sigue siendo el excedente bruto —es con lo que se compara hoy
+        # con mañana— y estas dos lo parten en lo que se lleva la batería y lo
+        # que queda para enchufar algo.
+        "battery_kwh": round(a_bateria_wh / 1000.0, 3),
+        "spendable_kwh": round(gastable_wh / 1000.0, 3),
+        "spendable_w": round(gastable_wh / net_hours, 1) if net_hours > 0 else 0.0,
         "spans": detalle,
         "gaps": gaps,
+        # La forma del día, para poder dibujarla: la previsión y el consumo
+        # típico en los mismos instantes. En columnas y no en objetos porque va
+        # en cada `/api/live` y son tres veces menos bytes.
+        "shape": _forma(curve, umbral),
+    }
+
+
+def _cuando_el_pico(
+    curve: list[tuple[datetime, float]],
+    umbral: Callable[[datetime], float],
+    a: datetime,
+    b: datetime,
+) -> datetime:
+    """El instante de mayor excedente dentro de un tramo.
+
+    Se mira en los puntos de la propia previsión y en los dos extremos
+    interpolados, que es donde puede estar el máximo de una curva lineal a
+    trozos: entre dos puntos no hay nada más alto que sus extremos.
+    """
+    candidatos = [(t, w - umbral(t)) for t, w in curve if a <= t <= b]
+    if not candidatos:
+        return a + (b - a) / 2
+    return max(candidatos, key=lambda item: item[1])[0]
+
+
+# Puntos de la forma del día. La previsión suele venir cada media hora o cada
+# hora, así que un día entero son 24-48: se recorta por si alguna fuente da
+# resolución de minuto, que no aporta nada a un dibujo de 340 px de ancho.
+_MAX_FORMA = 96
+
+
+def _forma(
+    curve: list[tuple[datetime, float]], umbral: Callable[[datetime], float]
+) -> dict[str, list[Any]]:
+    """La previsión y el consumo típico, hora a hora, para dibujar el día.
+
+    Solo las horas de luz, con un punto a cero a cada lado. El eje del dibujo es
+    el día de luz —la madrugada no aporta nada y comprimiría lo que sí importa—,
+    así que mandar las veinticuatro horas serviría para que la mitad de los
+    puntos se amontonaran en los dos extremos.
+    """
+    luz = [i for i, (_t, w) in enumerate(curve) if w > 0]
+    if luz:
+        # Un punto antes y uno después: así la curva arranca y acaba en el
+        # suelo en vez de empezar cortada a media altura.
+        curve = curve[max(0, luz[0] - 1):min(len(curve), luz[-1] + 2)]
+    # División hacia arriba: con la de abajo el paso se queda corto y salen más
+    # muestras que el tope (720 puntos con paso 7 dan 103, no 96).
+    paso = max(1, -(-len(curve) // _MAX_FORMA))
+    muestras = curve[::paso]
+    if muestras[-1] is not curve[-1]:
+        muestras.append(curve[-1])
+    return {
+        "t": [t.isoformat() for t, _w in muestras],
+        "sol": [round(w, 1) for _t, w in muestras],
+        "casa": [round(umbral(t), 1) for t, _w in muestras],
     }
 
 

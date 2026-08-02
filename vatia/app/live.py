@@ -839,6 +839,24 @@ async def _house_profile(
     return perfil
 
 
+def _hueco_bateria(
+    settings: dict[str, Any], states: dict[str, Any]
+) -> float | None:
+    """Lo que le cabe todavía a la batería, en Wh. ``None`` si no se sabe.
+
+    Hace falta la capacidad (que se teclea en Ajustes, no la dice ningún sensor)
+    y el estado de carga. Sin una de las dos no se descuenta nada: es mejor
+    prometer un excedente de más y decir con qué se ha contado que restar una
+    cifra inventada.
+    """
+    capacidad = float(settings.get("battery_kwh") or 0.0)
+    entidad = (settings.get("flow_sensors") or {}).get("battery_soc") or ""
+    soc = _num((states.get(entidad) or {}).get("state")) if entidad else None
+    if capacidad <= 0 or soc is None:
+        return None
+    return max(0.0, min(100.0 - soc, 100.0)) / 100.0 * capacidad * 1000.0
+
+
 async def free_energy(
     settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
 ) -> dict[str, Any] | None:
@@ -857,7 +875,11 @@ async def free_energy(
         return None
 
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today = series_mod.free_window(points, perfil.at, midnight)
+    hueco = _hueco_bateria(settings, states)
+    today = series_mod.free_window(points, perfil.at, midnight, hueco)
+    # Mañana **sin** descontar la batería: cómo estará mañana por la mañana no
+    # se sabe, y suponerlo sería inventar. Así además `kwh` de hoy y de mañana
+    # siguen siendo la misma magnitud y se pueden comparar en la nota.
     tomorrow = series_mod.free_window(points, perfil.at, midnight + timedelta(days=1))
 
     # Eje de la línea de tiempo: las horas de luz de hoy, sacadas de la propia
@@ -912,6 +934,9 @@ async def free_energy(
         "hours_left": round(left_h, 3),
         # Cuándo vuelve a haber excedente, si estamos en un hueco de la ventana.
         "reopens_at": reopens,
+        # Con qué se ha contado la batería, para poder decirlo en la tarjeta en
+        # vez de restar en silencio. `null` = no se ha descontado nada.
+        "battery_room_kwh": None if hueco is None else round(hueco / 1000.0, 2),
     }
 
 
