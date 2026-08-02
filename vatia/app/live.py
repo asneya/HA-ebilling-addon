@@ -201,6 +201,7 @@ def _energy_summary(
     from_battery = flows["from_battery"]
     from_grid = flows["from_grid"]
     home_total = flows["home_total"]
+    sin_explicar = flows.get("unexplained") or 0.0
 
     # Lecturas del día tal cual, sin reparto: son lo que muestran los nodos del
     # diagrama de flujo (un nodo representa un contador, no una atribución).
@@ -268,6 +269,12 @@ def _energy_summary(
                     ("from_solar", "Desde solar", from_solar),
                     ("from_battery", "Desde batería", from_battery),
                     ("from_grid", "Desde la red", from_grid),
+                    # Energía que el contador de la casa dice haber consumido y
+                    # que ningún origen entregó. Solo aparece si es de verdad
+                    # (50 Wh); por debajo es la deriva normal entre contadores y
+                    # una fila más sería ruido.
+                    *([("unexplained", "Sin explicar", sin_explicar)]
+                      if sin_explicar >= 50.0 else []),
                 ],
             ),
         },

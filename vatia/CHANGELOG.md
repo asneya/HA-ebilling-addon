@@ -4,6 +4,26 @@ Todas las versiones relevantes del add-on Vatia.
 
 ## 0.47.0
 
+### «Desde la red» ya no se pasa del contador de la compañía
+
+Lo encontró el CI, y solo a ciertas horas. Cuando el contador de la casa
+reclamaba más energía de la que el sol, la batería y la red podían haber
+entregado, ese hueco se le apuntaba entero a la red. Resultado: «Desde la red:
+1,13 kWh» justo al lado del nodo de la red diciendo «1,05». Dos cifras que se
+contradicen en la misma pantalla, sin ninguna explicación — y encima tapaba la
+nota de red→batería, que se calcula restando, así que el descuadre desaparecía
+sin dejar rastro.
+
+Ahora la red se queda en su contador y lo que sobra sale en una fila propia,
+**«Sin explicar»**, en ámbar y a partir de 50 Wh. Es el mismo criterio que la
+0.46.1 aplicó al diagnóstico con la descarga de la batería: si ningún contador
+entregó esa energía, se dice, en vez de repartirla donde menos se note.
+
+Con un matiz: **sin contador de importación no hay techo**. Si nadie desmiente a
+la red, puede seguir cubriendo el hueco; inventar una contradicción que no
+existe sería el error contrario.
+
+
 ### Sungrow: dejar de deducir lo que el inversor ya mide
 
 Leyendo el protocolo Modbus de los híbridos residenciales de Sungrow salen dos

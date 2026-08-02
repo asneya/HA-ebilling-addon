@@ -14,6 +14,9 @@ const SERIES_VAR = {
   yesterday: "--ink-3", forecast: "--s-forecast",
   to_load: "--s-home", to_battery: "--s-batt", to_grid: "--s-exp",
   from_solar: "--s-solar", from_battery: "--s-batt", from_grid: "--s-grid",
+  // Lo que el contador de la casa reclama y ningún origen entregó. En ámbar y
+  // no en un color de fuente: no es una fuente, es un descuadre entre sensores.
+  unexplained: "--warn",
 };
 
 let memoria = {};

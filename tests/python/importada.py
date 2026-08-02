@@ -193,6 +193,26 @@ gen = aj["to_home"] + aj["to_battery"] + aj["to_grid"]
 ok(abs(gen - totals["pv_energy"]) < 1e-6,
    f"la generación sigue cuadrando con la suya ({gen:.3f})")
 
+print("\n7c · la casa que reclama más de lo que hay")
+# El contador de la casa dice 12 y entre el sol, la batería y la red no llegan
+# a 10. Antes ese hueco se le echaba a la red, que acababa enseñando más de lo
+# que marca el contador de la compañía. Ahora se declara.
+apretado = rescale_flows(
+    {"to_home": 6.0, "to_battery": 1.0, "to_grid": 1.0,
+     "from_solar": 6.0, "from_battery": 2.0, "from_grid": 2.0,
+     "grid_to_battery": 0.0, "battery_to_grid": 0.0, "home_total": 10.0},
+    {"pv_energy": 8.0, "grid_import_energy": 2.0,
+     "battery_discharge_energy": 2.0, "home_energy": 12.0},
+)
+ok(apretado["from_grid"] <= 2.0 + 1e-9,
+   f"«Desde la red» se queda en su contador ({apretado['from_grid']:.2f} ≤ 2,00)")
+ok(apretado["unexplained"] > 0,
+   f"y el hueco se declara sin explicar ({apretado['unexplained']:.2f} kWh)")
+suma = (apretado["from_solar"] + apretado["from_battery"]
+        + apretado["from_grid"] + apretado["unexplained"])
+ok(abs(suma - 12.0) < 1e-9,
+   f"las cuatro filas siguen sumando el consumo medido ({suma:.2f} = 12,00)")
+
 print("\n7b · la invariante, con contadores adversos")
 # Lo que el usuario mira es la leyenda («Importada: 6,2 kWh») y el desglose
 # («Desde la red»). La diferencia entre las dos tiene que ser exactamente lo que
@@ -252,11 +272,20 @@ if BASE:
     with urllib.request.urlopen(BASE + "/api/live", timeout=30) as resp:
         e = json.load(resp)["energy"]
     m = e["meters"]
-    fila = next(r for r in e["home"]["rows"] if r["key"] == "from_grid")
-    importado, desde_red, a_bateria = m["grid_import"], fila["kwh"], m["grid_to_battery"]
+    filas = {r["key"]: r["kwh"] for r in e["home"]["rows"]}
+    importado, desde_red = m["grid_import"], filas["from_grid"]
+    a_bateria = m["grid_to_battery"]
     ok(abs(desde_red + a_bateria - importado) < 0.02,
        f"lo importado sale entero en el resumen "
        f"({desde_red} + {a_bateria} = {importado} kWh)")
+    # Y nunca al revés: «Desde la red» no puede pasarse de lo que marca el
+    # contador de la compañía. Cuando el contador de la casa reclama más de lo
+    # que hay entre todos, eso sale en su propia fila y no inflando la red.
+    ok(desde_red <= importado + 0.02,
+       f"y «Desde la red» no se pasa de su contador ({desde_red} ≤ {importado})")
+    ok(abs(sum(filas.values()) - e["home"]["total"]) < 0.02,
+       f"las filas del consumo siguen sumando su total "
+       f"({sum(filas.values()):.2f} = {e['home']['total']})")
     ok(importado <= 0.01 or desde_red > 0,
        f"y si se ha comprado algo, a la casa llega algo ({desde_red} kWh)")
 

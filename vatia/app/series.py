@@ -1067,15 +1067,23 @@ def split_flows(
         # resto, el factor vale 1 y esto no cambia nada.
         supply = (to_home, battery_home)
         offered = sum(supply)
+        unexplained = 0.0
         if offered > rest and offered > 0:
             factor = rest / offered
             from_solar, from_battery = (part * factor for part in supply)
         else:
-            # Ni con todo se cubre el consumo medido: el hueco entra por la red,
-            # que es lo único que puede aportar sin que lo vea otro contador.
+            # Ni con todo se cubre el consumo medido. La red puede subir hasta lo
+            # que de verdad entregó —`grid_home`— y **ni un vatio más**: pasarse
+            # de ahí es enseñar una cifra que el contador de la compañía
+            # desmiente. Lo que no llegue se queda sin explicar, que es lo que es:
+            # energía que la casa dice haber gastado y que ningún contador vio.
             from_solar, from_battery = supply
-            from_grid = max(home_total - offered, 0.0)
+            falta = max(home_total - offered - from_grid, 0.0)
+            sube = min(falta, max(grid_home - from_grid, 0.0))
+            from_grid += sube
+            unexplained = falta - sube
     else:
+        unexplained = 0.0
         from_solar = to_home
         from_battery = battery_home
         from_grid = grid_home
@@ -1089,6 +1097,9 @@ def split_flows(
         "from_battery": from_battery,
         "from_grid": from_grid,
         "home_total": home_total,
+        # Lo que el contador de la casa reclama y ningún origen entregó. Cero
+        # mientras los contadores se lleven bien.
+        "unexplained": unexplained,
         # Partes que no pasan por la casa ni por la generación, y que explican
         # la diferencia entre los contadores de la red y el reparto:
         # lo importado que acaba en la batería y lo vertido que no es solar.
@@ -1172,9 +1183,17 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
     Si la casa mide menos que la red y el sol juntos, los contadores se
     contradicen y algo tiene que ceder: cede el sol —y la diferencia con
     «A la casa» queda a la vista, que es la manera honesta de enseñar una
-    contradicción—, nunca la red. Y si mide más de lo que hay entre todos, el
-    hueco se apunta a la red, que es la única fuente que puede entregar sin que
-    lo vea otro contador.
+    contradicción—, nunca la red.
+
+    Y si mide **más** de lo que hay entre todos, antes ese hueco se le apuntaba
+    a la red. Era la peor de las salidas: dejaba «Desde la red: 1,13 kWh» al lado
+    del nodo de la red diciendo «1,05», dos cifras que se contradicen en la misma
+    pantalla y ninguna explicación. Y encima tapaba la nota de red→batería, que
+    se calcula restando, así que el descuadre desaparecía sin dejar rastro.
+
+    Ahora la red se queda en su contador y el hueco sale en ``unexplained``: es
+    energía que la casa dice haber consumido y que **ningún contador entregó**.
+    Es el mismo criterio que el diagnóstico usa con la descarga de la batería.
     """
     out = dict(flows)
     # Un reparto sin estas dos claves es un reparto sin batería de por medio;
@@ -1227,26 +1246,42 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
             if descarga is not None
             else out["from_battery"]
         )
+        sin_explicar = 0.0
         if bateria > tope_bateria:
             # Falta energía para llegar al consumo medido. Se coge primero de la
             # importación que se había apartado a la batería —era una atribución,
-            # no una medida— y solo lo que ni así se cubre se apunta a la red por
-            # encima de su contador, que es la contradicción entre sensores que
-            # el resumen no puede resolver y prefiere enseñar.
+            # no una medida—, y lo que ni así se cubre **no se le echa a la red**:
+            # su contador es una medida y pasarse de él es enseñar una cifra que
+            # el contador de la compañía desmiente. Se queda sin explicar, que es
+            # exactamente lo que es.
             falta = bateria - tope_bateria
             devuelto = min(falta, sobrante)
             sobrante -= devuelto
-            red += falta
+            red += devuelto
+            falta -= devuelto
+            # Lo que quede solo puede ponerlo la red, y solo hasta su contador.
+            # **Sin contador de importación no hay techo**: nada desmiente a la
+            # red, y dejar el hueco «sin explicar» cuando podría haberlo cubierto
+            # ella sería inventarse una contradicción que no existe.
+            importado = totals.get("grid_import_energy")
+            techo = (max(importado - out["grid_to_battery"] - sobrante, 0.0)
+                     if importado is not None else float("inf"))
+            sube = min(falta, max(techo - red, 0.0))
+            red += sube
+            sin_explicar = falta - sube
             bateria = tope_bateria
         out["grid_to_battery"] = out.get("grid_to_battery", 0.0) + sobrante
         out["from_grid"] = red
         out["from_solar"] = sol
         out["from_battery"] = bateria
+        out["unexplained"] = sin_explicar
         out["home_total"] = casa
     else:
         # Sin contador de la casa no hay a qué ajustar, pero las dos columnas
-        # tienen que seguir diciendo lo mismo del mismo vatio.
+        # tienen que seguir diciendo lo mismo del mismo vatio. Y sin contador no
+        # hay nada que pueda quedar sin explicar: el total *es* la suma.
         out["from_solar"] = solar_a_casa
+        out["unexplained"] = 0.0
         out["home_total"] = (
             out["from_solar"] + out["from_battery"] + out["from_grid"]
         )
@@ -1256,7 +1291,9 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
 def _breakdown_rows(view: str, flows: list[dict[str, float]]) -> list[tuple[str, str, float]]:
     """Filas del desglose según la vista (vacío para batería y red)."""
     def total(key: str) -> float:
-        return sum(item[key] for item in flows)
+        # Con `get`: `unexplained` solo lo pone `rescale_flows`, y aquí llegan
+        # también repartos crudos de `split_flows` que no lo traen.
+        return sum(item.get(key, 0.0) for item in flows)
 
     if view == "solar":
         return [
@@ -1265,11 +1302,16 @@ def _breakdown_rows(view: str, flows: list[dict[str, float]]) -> list[tuple[str,
             ("to_grid", "A la red", total("to_grid")),
         ]
     if view in ("home", "overview"):
-        return [
+        filas = [
             ("from_solar", "Desde solar", total("from_solar")),
             ("from_battery", "Desde batería", total("from_battery")),
             ("from_grid", "Desde la red", total("from_grid")),
         ]
+        # Lo que el contador de la casa reclama y ningún origen entregó. Como en
+        # la Home: solo si pasa de 50 Wh, que por debajo es deriva.
+        if total("unexplained") >= 0.05:
+            filas.append(("unexplained", "Sin explicar", total("unexplained")))
+        return filas
     return []
 
 
