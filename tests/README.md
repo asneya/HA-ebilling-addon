@@ -41,6 +41,24 @@ bancos escriben en la configuración —crean usuarios, cambian roles, guardan
 sesgos—, así que apuntando al repositorio lo ensuciarían y la segunda vuelta no
 daría lo mismo que la primera.
 
+### Ojo con lo que se pone en una fixture
+
+Una fixture es un `vatia.json`, y un `vatia.json` de verdad **lleva el token de
+Home Assistant en claro**. Por eso el `.gitignore` de la raíz ignora ese nombre
+en todo el árbol… menos aquí, donde hace falta versionarlo. Es decir: en
+`tests/fixtures/` la red de seguridad está desarmada a propósito.
+
+La regla, entonces: **nunca copies aquí tu configuración de verdad.** Tokens y
+contraseñas de una letra, URLs a `127.0.0.1`, entidades y nombres inventados.
+
+`fixtures.py` lo vigila, y no por el nombre de la clave sino por la forma del
+valor —un JWT, una cadena larga aleatoria, una IP de red doméstica—, porque un
+secreto puede acabar guardado en cualquier campo. Y vigila también lo contrario,
+que es como se descubrió todo esto: que ningún fichero de fixture se quede fuera
+del commit. Cinco ejecuciones del CI en rojo, con la aplicación devolviendo 502
+en todo, porque catorce de los veintidós ficheros nunca llegaron al repositorio y
+en local no se notaba.
+
 Los puertos están fijos y escritos en `run.py`, que son los que cada banco
 espera por defecto: mientras se trabaja en uno se puede lanzar suelto
 (`cd tests/python && python3 resumen.py`) con los servidores ya levantados.
