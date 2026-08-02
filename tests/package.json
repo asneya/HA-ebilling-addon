@@ -1,0 +1,8 @@
+{
+  "name": "vatia-tests",
+  "private": true,
+  "description": "Bancos de navegador de Vatia (Playwright).",
+  "dependencies": {
+    "playwright-core": "1.61.1"
+  }
+}

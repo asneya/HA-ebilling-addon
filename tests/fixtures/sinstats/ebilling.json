@@ -1,0 +1,26 @@
+{
+ "settings": {
+  "source": "homeassistant",
+  "ha_url": "http://127.0.0.1:8128",
+  "ha_token": "x",
+  "flow_sensors": {
+   "pv": "sensor.pv_power",
+   "grid_import": "sensor.grid_import_power",
+   "grid_export": "sensor.grid_export_power",
+   "battery_charge": "sensor.batt_charge_power",
+   "battery_discharge": "sensor.batt_discharge_power",
+   "home": "sensor.home_power",
+   "battery_soc": "sensor.batt_soc"
+  },
+  "energy_sensors": {
+   "pv_energy": "sensor.pv_hoy",
+   "grid_import_energy": "sensor.grid_import_hoy",
+   "grid_export_energy": "sensor.grid_export_hoy",
+   "battery_charge_energy": "sensor.batt_charge_hoy",
+   "battery_discharge_energy": "sensor.batt_discharge_hoy",
+   "home_energy": "sensor.home_hoy"
+  },
+  "energy_counters": "daily",
+  "export_sensors": false
+ }
+}

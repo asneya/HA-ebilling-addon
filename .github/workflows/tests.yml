@@ -1,0 +1,70 @@
+name: Regresión
+
+# Pasa el banco entero en cada push y en cada pull request. Hasta ahora la
+# regresión vivía en la máquina de quien la escribió, así que protegía esa
+# sesión y nada más: aquí protege el repositorio.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Un push encima de otro cancela la ejecución anterior: lo que importa es si la
+# última versión de la rama está en verde.
+concurrency:
+  group: regresion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regresion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            vatia/app/requirements.txt
+            tests/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+
+      - name: Instalar dependencias de Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r vatia/app/requirements.txt -r tests/requirements.txt
+
+      - name: Instalar Playwright y su Chromium
+        working-directory: tests
+        # `--with-deps` trae las bibliotecas del sistema que Chromium necesita y
+        # que el runner no lleva. Sin ellas el navegador arranca y se cae sin
+        # decir por qué.
+        run: |
+          npm ci
+          npx --yes playwright@1.61.1 install --with-deps chromium
+
+      - name: Pasar la regresión
+        # `PLAYWRIGHT_BROWSERS_PATH` vacío: aquí el navegador lo acaba de
+        # instalar Playwright con la versión que le toca, así que hay que dejar
+        # que lo resuelva él y no ir a buscarlo a mano como en el contenedor de
+        # desarrollo.
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ""
+        run: python3 tests/run.py
+
+      - name: Guardar los registros si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: registros-regresion
+          path: tests/.reg/
+          retention-days: 7
