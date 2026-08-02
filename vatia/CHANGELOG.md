@@ -2,6 +2,43 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.40.4
+
+### Tras actualizar, la app se quedaba a medias
+
+El fallo que explica los «le doy al botón y no pasa nada», y probablemente unos
+cuantos «he actualizado y sigue igual».
+
+El `index.html` se sirve con `Cache-Control: no-store`, así que llega siempre
+fresco. Los ficheros de `/static/` no llevaban ninguna cabecera de caché, y aquí
+había una suposición equivocada escrita en el propio código: «los estáticos
+llevan su ETag y se revalidan solos». **No es verdad.** Sin `Cache-Control`, el
+navegador aplica *caché heurística* —del orden del 10 % del tiempo que el fichero
+lleva sin cambiar— y sirve el JavaScript de su copia **sin preguntar**. Para un
+fichero que lleva semanas quieto, eso son días.
+
+El resultado tras actualizar el add-on es de los peores que hay: el documento
+llega nuevo y el JavaScript, viejo. La pantalla enseña lo nuevo y no responde,
+porque quien tenía que escuchar el clic está en la versión anterior. Y ni un
+error en la consola.
+
+Ahora `/static/` va con `no-cache`, que no quiere decir «no guardes» sino
+«guarda, pero pregunta antes de usarlo». Lo que no ha cambiado se responde con un
+304 de unos pocos bytes; en una red local no se nota, y que una actualización se
+vea entera, sí.
+
+Versionar la URL del `app.js` no habría servido: los `import` de un módulo se
+resuelven contra la URL del módulo **sin heredar su query**, así que
+`app.js?v=2` seguiría cargando un `core/dom.js` viejo.
+
+### El diagnóstico, en paralelo
+
+Las tres consultas de inventario a InfluxDB —medidas, `entity_id` y en qué medida
+está el contador— son independientes y se hacían en serie. Con una base lenta el
+diagnóstico se acercaba al minuto, que es justo cuando más falta hace. Ahora van
+a la vez, y si una falla las otras siguen: cada una responde una pregunta
+distinta y con cualquiera se avanza.
+
 ## 0.40.3
 
 ### El diagnóstico mira primero si el sensor existe

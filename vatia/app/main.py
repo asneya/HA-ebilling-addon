@@ -978,10 +978,38 @@ async def index():
     # Sin caché, y a propósito. El documento es lo único que sabe cómo se carga
     # la app —con `type="module"` desde que está repartida en core/ y
     # screens/—, así que un index.html viejo guardado por el navegador junto a
-    # un app.js nuevo daría una pantalla en blanco tras actualizar el add-on, y
-    # solo se arreglaría recargando a la fuerza. Los estáticos sí se cachean:
-    # llevan su ETag y se revalidan solos.
+    # un app.js nuevo daría una pantalla en blanco tras actualizar el add-on.
     return HTMLResponse(_index_html(), headers={"Cache-Control": "no-store"})
 
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+class _EstaticosFrescos(StaticFiles):
+    """Estáticos que **se revalidan siempre**.
+
+    Aquí había una suposición equivocada que costó cara: «los estáticos llevan su
+    ETag y se revalidan solos». No es verdad. Sin `Cache-Control`, un navegador
+    aplica *caché heurística* —del orden del 10 % del tiempo que lleva sin
+    cambiar el fichero— y sirve el JavaScript de su copia **sin preguntar**. Para
+    un fichero que lleva semanas quieto, eso son días.
+
+    El resultado tras actualizar el add-on es de los peores que hay: el
+    `index.html` llega fresco (va con `no-store`) y el JavaScript, viejo. La
+    pantalla enseña lo nuevo y no responde, porque quien tenía que escuchar el
+    clic está en la versión anterior. Ni un error en la consola.
+
+    `no-cache` no quiere decir «no guardes»: quiere decir «guarda, pero pregunta
+    antes de usarlo». Lo que no cambia se responde con un 304 de unos pocos
+    bytes, y en una red local eso no se nota. Que una actualización se vea
+    entera, sí.
+
+    Versionar la URL del `app.js` no serviría: los `import` de un módulo se
+    resuelven contra la URL del módulo **sin heredar su query**, así que
+    `app.js?v=2` seguiría cargando un `core/dom.js` viejo.
+    """
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+app.mount("/static", _EstaticosFrescos(directory=STATIC_DIR), name="static")

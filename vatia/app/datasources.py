@@ -635,18 +635,25 @@ async def influx_inventario(
         "url": url, "base": base,
         "measurement_configurada": influx.get("measurement") or "kWh",
     }
-    try:
-        if fuera["version"] == 1:
-            fuera["medidas"] = await _v1_show(influx, "SHOW MEASUREMENTS")
-            fuera["entidades"] = await _v1_show(
-                influx, 'SHOW TAG VALUES WITH KEY = "entity_id"', columna=1)
+    # Las tres a la vez: son independientes y en serie el diagnóstico se acercaba
+    # al minuto con una base lenta, que es justo cuando más falta hace.
+    if fuera["version"] == 1:
+        tareas = [_v1_show(influx, "SHOW MEASUREMENTS"),
+                  _v1_show(influx, 'SHOW TAG VALUES WITH KEY = "entity_id"', columna=1)]
+    else:
+        tareas = [_v2_show(influx, _FLUX_MEDIDAS), _v2_show(influx, _FLUX_ENTIDADES)]
+    if entity:
+        tareas.append(influx_medidas_de(settings, entity))
+    hecho = await asyncio.gather(*tareas, return_exceptions=True)
+
+    nombres = ["medidas", "entidades"] + (["medidas_del_sensor"] if entity else [])
+    for nombre, valor in zip(nombres, hecho):
+        if isinstance(valor, Exception):
+            # Que falle una no debe dejar sin las otras: cada una responde una
+            # pregunta distinta y con cualquiera se avanza.
+            fuera.setdefault("error", str(valor))
         else:
-            fuera["medidas"] = await _v2_show(influx, _FLUX_MEDIDAS)
-            fuera["entidades"] = await _v2_show(influx, _FLUX_ENTIDADES)
-        if entity:
-            fuera["medidas_del_sensor"] = await influx_medidas_de(settings, entity)
-    except (SourceError, aiohttp.ClientError, asyncio.TimeoutError) as err:
-        fuera["error"] = str(err)
+            fuera[nombre] = valor
     return fuera
 
 
