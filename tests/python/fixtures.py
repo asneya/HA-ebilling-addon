@@ -76,24 +76,61 @@ for f in sorted(FIX.rglob("*.json")):
 ok(not malos, f"las {len(list(FIX.rglob('*.json')))} fixtures se leen{' · ' + str(malos) if malos else ''}")
 
 print("\n4-5 · sin secretos")
-# Un token de Home Assistant es un JWT largo; una contraseña de verdad rara vez
-# tiene una sola letra. Se busca cualquier cosa que no parezca de adorno.
-ADORNO = {"", "x", "t", "p", "test", "token", "secret", "abc", "123", "-"}
+# Se busca por **forma del valor** y no por nombre de clave. Mirar solo las
+# claves que se llamen `token` o `password` deja pasar un secreto guardado en
+# cualquier otro sitio, y aquí la red de seguridad del `.gitignore` está
+# desarmada a propósito: si algo se cuela, se cuela hasta un repositorio
+# público.
+#
+# La regla de fondo: en una fixture **no hay ningún motivo** para que aparezca
+# una cadena larga y aleatoria, ni una máquina que no sea la local. Todo lo que
+# tiene que haber son marcadores de una letra y `127.0.0.1`.
+SEGURAS = (
+    re.compile(r"^sensor\.[a-z0-9_]+$"),          # entidades de mentira
+    re.compile(r"^#[0-9a-f]{6}$", re.I),          # colores
+    re.compile(r"^\d{4}-\d\d-\d\dT[\d:+.-]+$"),   # marcas de tiempo
+    re.compile(r"^[0-9a-f]{32}$"),                # ids de usuario del banco
+    re.compile(r"^a0d7b954-[a-z]+$"),             # nombre de un add-on de HA
+)
+SOSPECHOSAS = (
+    (re.compile(r"eyJ[A-Za-z0-9_-]{8,}\."), "parece un JWT"),
+    (re.compile(r"^[A-Za-z0-9+/]{40,}={0,2}$"), "parece base64 largo"),
+    (re.compile(r"^[0-9a-f]{40,}$", re.I), "parece una clave hexadecimal"),
+    (re.compile(r"\b(?:192\.168|10\.\d+|172\.(?:1[6-9]|2\d|3[01]))\.\d+\.\d+"),
+     "es una IP de una red doméstica"),
+)
+HOSTS_OK = ("127.0.0.1", "localhost", "::1")
+
 sospechosos, fuera = [], []
 for f in sorted(FIX.rglob("*.json")):
     crudo = f.read_text()
-    for clave, valor in re.findall(r'"(\w*(?:token|password|api_key|secret)\w*)"\s*:\s*"([^"]*)"',
-                                   crudo, re.I):
-        if valor.lower() not in ADORNO and len(valor) > 8:
-            sospechosos.append(f"{f.name}:{clave}={valor[:12]}…")
-    for url in re.findall(r'"https?://([^"/:]+)', crudo):
-        if url not in ("127.0.0.1", "localhost") and not url.startswith("a0d7b954-"):
-            fuera.append(f"{f.name}: {url}")
+    for valor in re.findall(r'"([^"\\]{6,})"', crudo):
+        if any(p.match(valor) for p in SEGURAS):
+            continue
+        for patron, por_que in SOSPECHOSAS:
+            if patron.search(valor):
+                sospechosos.append(f"{f.parent.name}/{f.name}: «{valor[:24]}…» {por_que}")
+                break
+    for host in re.findall(r'"https?://([^"/:]+)', crudo):
+        if host not in HOSTS_OK and not host.startswith("a0d7b954-"):
+            fuera.append(f"{f.parent.name}/{f.name}: {host}")
 
 ok(not sospechosos,
-   f"ningún token ni contraseña con pinta de real{' · ' + str(sospechosos) if sospechosos else ''}")
+   "nada con forma de credencial de verdad"
+   + ("" if not sospechosos else " · " + "; ".join(dict.fromkeys(sospechosos))))
 ok(not fuera,
-   f"y ninguna URL apunta fuera de la máquina{' · ' + str(fuera) if fuera else ''}")
+   "y ninguna URL sale de la máquina local"
+   + ("" if not fuera else " · " + "; ".join(dict.fromkeys(fuera))))
+
+# Y que el guardián sirva de algo: se le enseña un token con la pinta que tiene
+# uno de verdad y tiene que reconocerlo. Un detector que nunca ha detectado nada
+# no ha demostrado que detecte.
+TOKEN_FALSO = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+               "eyJpc3MiOiJhYmMxMjMiLCJpYXQiOjE3MDAwMDAwMDB9.xxxxxxxxxxxxxxx")
+ok(any(p.search(TOKEN_FALSO) for p, _ in SOSPECHOSAS),
+   "y reconoce un token de Home Assistant si se le pone delante")
+ok(any(p.search("http://192.168.1.40:8123") for p, _ in SOSPECHOSAS),
+   "y la IP de un Home Assistant de una casa de verdad")
 
 print()
 if fallos:
