@@ -2,6 +2,39 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.46.3
+
+### El arreglo de la barra lateral, esta vez de verdad
+
+Lo que hacía la 0.46.2 no podía funcionar, y conviene decir por qué.
+
+Pedía al Supervisor que volviera a inscribir el panel. El Supervisor obedecía y
+se lo pedía a Home Assistant… que **no actualiza un panel que ya existe: se
+niega**. El componente que registra los paneles de los add-ons llama a la
+función de Home Assistant sin el permiso de reemplazo, y ésa levanta un error si
+el panel ya está puesto. Así que la petición terminaba en un 500 y no cambiaba
+nada. Funcionaba solo en el caso que no importa: cuando el panel estaba
+escondido y por tanto no había nada que reemplazar.
+
+Por eso el interruptor «Mostrar en la barra lateral» sí arregla el problema:
+apagarlo **borra** el panel, y encenderlo lo crea de cero con el ajuste de ahora.
+
+Vatia hace ahora exactamente eso, en dos pasos y contra Home Assistant
+directamente: quita el panel y lo vuelve a poner. Sigue bastando con reiniciar
+el add-on una vez.
+
+Con tres cuidados que la versión anterior no necesitaba:
+
+- **no se toca el interruptor del Supervisor**, que guarda su estado en disco.
+  Si un fallo pillara la operación a medias, lo peor que puede pasar es que el
+  panel falte hasta el siguiente arranque; la preferencia de quien lo escondió
+  no se toca nunca;
+- los dos pasos van **juntos y blindados**, para que apagar el add-on justo en
+  medio no deje el panel borrado;
+- Home Assistant puede no estar listo cuando arranca el add-on, así que se
+  reintenta poco más de un minuto antes de rendirse. Y si se rinde, lo dice una
+  sola vez y explica qué hacer a mano.
+
 ## 0.46.2
 
 ### Vatia sale de verdad en la barra lateral de quien no es administrador
