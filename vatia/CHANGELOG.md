@@ -36,7 +36,15 @@ siguen aplicando los topes de la 0.46.1, así que un sensor mal elegido no puede
 inventarse generación.
 
 En `DOCS.md` hay ahora una tabla con la correspondencia completa entre las
-casillas de Vatia y las entidades de la integración Modbus de Sungrow.
+casillas de Vatia y las entidades de la integración Modbus de Sungrow, y en
+`docs/sungrow-modbus.md` el **diccionario entero**: los 99 sensores con su
+número de registro, las tres trampas —además del autoconsumo, el «consumo
+calculado» que es el mismo balance que hace Vatia, y el 5003 que suma sol y
+descarga—, y los detalles de escala, signo y cadencia.
+
+De ahí sale además el dato que más justifica el reparto por horas de la
+0.46.1: la integración refresca las potencias **cada 5 segundos** y los
+contadores de energía **cada 600**.
 
 ## 0.46.3
 
