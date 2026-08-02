@@ -260,6 +260,11 @@ def colas(lineas: int = 25) -> None:
         if not log.name.startswith(("app-", "falso-", "ficheros-")):
             continue
         texto = log.read_text(errors="replace").strip().splitlines()
+        # Fuera el registro de accesos de uvicorn: mil líneas iguales de
+        # «GET /api/live 502» empujan fuera de la cola justo la traza que
+        # explica *por qué* es 502, que es lo único que se viene a buscar.
+        texto = [l for l in texto if ' - "GET ' not in l and ' - "PUT ' not in l
+                 and ' - "POST ' not in l and ' - "DELETE ' not in l]
         if not texto:
             continue
         print(f"\n--- {log.name} ---", file=sys.stderr)
