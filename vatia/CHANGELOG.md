@@ -2,6 +2,46 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.46.0
+
+### El botón responde antes de que lleguen los datos
+
+Al tocar una pestaña, la selección se movía **al terminar de cargar la pantalla**.
+En una casa con InfluxDB al otro lado de la red eso son varios cientos de
+milisegundos en los que se ha pulsado y no ha pasado nada visible: no se sabe si
+el toque ha entrado, y se vuelve a pulsar.
+
+Ahora la marca se mueve **en el mismo instante del toque**, antes de que la carga
+arranque siquiera. El dato tarda lo que tarda; decir que se ha recibido la orden
+no tiene por qué tardar nada. Medido en el banco: **menos de 10 ms**, con la
+respuesta del servidor retrasada medio segundo a propósito.
+
+Afecta a los tres sitios donde hay botones que se turnan: la barra de pestañas
+de abajo, el selector de tipo de análisis en Energía y los selectores de periodo.
+La pantalla sigue teniendo la última palabra —si la carga acabara en otro sitio,
+o fallara, la marca se corrige sola—, pero ya no es ella quien la mueve primero.
+
+De paso, en los selectores de periodo la marca **se desliza** de una opción a la
+siguiente en vez de apagarse aquí y encenderse allí, que es lo que hace legible
+de un vistazo hacia dónde se ha ido.
+
+### El detalle del flujo, sin lo que no servía
+
+La pantalla llevaba una botonera con cuatro franjas fijas —Amanecer, Mediodía,
+Tarde, Noche— y un «Ver el día entero» que animaba la jornada. Venían del
+prototipo del diseño y no resolvían nada que el deslizador no resuelva mejor: las
+franjas caen en horas arbitrarias que rara vez son la que se busca, y la
+animación se mira una vez.
+
+Queda **un solo botón, «Volver a ahora»**, y ya no en un panel suelto en lo alto
+sino dentro de la tarjeta del día, pegado al deslizador que lo hace falta. Está
+apagado mientras se mira el presente, así que además dice, sin etiquetas, dónde
+está la lectura.
+
+Y el reloj de la tarjeta ha dejado de mentir: arrastrado a las nueve de la
+mañana ponía «Ahora · 09:00». Ahora pone «Hoy · 09:00», y reserva el «Ahora» para
+cuando de verdad lo es.
+
 ## 0.45.0
 
 ### Quién entra en Vatia, y quién puede configurarla

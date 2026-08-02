@@ -190,19 +190,6 @@
         <h1 class="nav-title">Flujo de energía</h1>
       </header>
 
-      <div class="panel glass f-controls">
-        <div class="f-chips" role="group" aria-label="Momento del día">
-          <button class="f-chip" data-hour="now">Ahora</button>
-          <button class="f-chip" data-hour="8.4">Amanecer</button>
-          <button class="f-chip" data-hour="13.2">Mediodía</button>
-          <button class="f-chip" data-hour="19.6">Tarde</button>
-          <button class="f-chip" data-hour="23.2">Noche</button>
-        </div>
-        <button class="f-play" id="f-play" aria-live="off">
-          <span class="f-play-ico" aria-hidden="true">▶</span><span id="f-play-txt">Ver el día entero</span>
-        </button>
-      </div>
-
       <div id="f-error" class="banner error hidden"></div>
 
       <section class="panel glass" id="f-card">
@@ -217,10 +204,21 @@
         <vatia-skeleton id="f-skel" class="hidden"></vatia-skeleton>
         <div id="f-flow" class="flow"></div>
 
+        <!-- Aquí arriba había una botonera con cuatro franjas fijas —Amanecer,
+             Mediodía, Tarde, Noche— y un «Ver el día entero» que animaba la
+             jornada. Venían del prototipo del diseño y no resolvían nada que el
+             deslizador no resuelva mejor: las franjas caen en horas arbitrarias
+             que rara vez son la que se busca, y la animación se mira una vez.
+             Lo único que hace falta después de arrastrar es el camino de
+             vuelta, y por eso el botón vive aquí, pegado al deslizador que lo
+             hace falta, y no en un panel suelto en lo alto de la pantalla. -->
         <div class="f-strip">
           <div class="f-strip-head">
-            <span>El día completo</span>
-            <span class="f-strip-sub">Sol producido · casa consumida</span>
+            <div class="f-strip-titles">
+              <span>El día completo</span>
+              <span class="f-strip-sub">Sol producido · casa consumida</span>
+            </div>
+            <button class="f-chip" id="f-now" data-hour="now">Volver a ahora</button>
           </div>
           <div id="f-daystrip"></div>
           <div class="f-slider">

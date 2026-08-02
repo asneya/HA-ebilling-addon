@@ -12,6 +12,7 @@ import { fallo } from "../core/banner.js";
 import { fmtNum, fmtValue, xLabel, stampLabel } from "../core/format.js";
 import { seriesColor, colorForSeries, isLightColor } from "../core/colors.js";
 import { renderReadout } from "../core/graficos.js";
+import { recolocar } from "../core/pulsado.js";
 
 const eState = {
   range: "day",
@@ -87,6 +88,10 @@ function renderEnergy() {
   $("#e-unit").textContent = d.unit;
   $$(".seg[data-range]").forEach((s) => s.classList.toggle("active", s.dataset.range === eState.range));
   $$(".vt").forEach((v) => v.classList.toggle("active", v.dataset.eview === eState.view));
+  // La marca la acaba de poner esta función; la píldora, la de al lado. Al
+  // pulsar ya se movieron las dos —eso es lo que da el acuse instantáneo— y
+  // esto solo las confirma, o las corrige si la carga acabó en otro sitio.
+  recolocar();
   syncPeriodPicker();
   syncZoomControls();
 
