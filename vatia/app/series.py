@@ -919,17 +919,28 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
     los contadores desfasados —que es lo normal— el resumen enseñaba las dos
     cifras a la vez, distintas, una al lado de la otra.
 
-    Ahora se ajusta en este orden:
+    **Y la red no se recorta.** «Desde la red» sale del reparto por intervalos:
+    es lo importado menos lo que en cada intervalo estaba cargando la batería,
+    con el contador de la compañía detrás. Encajarla en «lo que quede» tras el
+    sol la aplastaba cuando el contador de la casa se queda corto, y el resumen
+    acababa diciendo que casi toda la importación había cargado la batería
+    —`grid_to_battery` se calcula restando `from_grid` del contador— aunque las
+    curvas enseñaran la batería cargándose de sol. El mismo orden que
+    ``split_flows``, y por las mismas razones:
 
     1. la generación, a su contador: ahí `to_home` queda fijo;
-    2. `from_solar` **es** ese `to_home`, sin tocar;
-    3. la batería y la red se reparten lo que falte hasta el contador de la casa.
+    2. la red, primero y entera: es una entrega medida;
+    3. `from_solar` **es** ese `to_home`, hasta donde el contador de la casa dé;
+    4. la batería absorbe la deriva, que de las tres es la fila más deducida
+       (su valor es la descarga menos lo que se atribuyó a la red, estimado
+       intervalo a intervalo).
 
-    La excepción es que la casa mida **menos** que lo que el sol solo le entregó:
-    entonces los contadores se contradicen y no hay reparto coherente posible, así
-    que se escalan los tres a lo medido, que es lo que hacía antes. Es preferible
-    un reparto proporcional a una fila en negativo o a unas filas que no sumen su
-    propio total.
+    Si la casa mide menos que la red y el sol juntos, los contadores se
+    contradicen y algo tiene que ceder: cede el sol —y la diferencia con
+    «A la casa» queda a la vista, que es la manera honesta de enseñar una
+    contradicción—, nunca la red. Y si mide más de lo que hay entre todos, el
+    hueco se apunta a la red, que es la única fuente que puede entregar sin que
+    lo vea otro contador.
     """
     out = dict(flows)
 
@@ -946,29 +957,41 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
 
     casa = totals.get("home_energy")
     solar_a_casa = out["to_home"]
-    if casa is not None and casa > 0 and casa >= solar_a_casa:
-        out["from_solar"] = solar_a_casa
-        resto = casa - solar_a_casa
-        if out["from_battery"] + out["from_grid"] > 0:
-            fit(("from_battery", "from_grid"), resto)
-        else:
-            # El contador dice que la casa gastó más de lo que le llegó del sol,
-            # pero el reparto no tiene de dónde: escalar un cero no da nada y las
-            # filas se quedarían por debajo de su propio total. La red es la única
-            # fuente que siempre puede dar, así que la diferencia se le apunta.
-            out["from_grid"] = resto
+    if casa is not None and casa > 0:
+        red = min(out["from_grid"], casa)
+        # «Entera» no es «más que el contador»: los buckets van por detrás del
+        # contador de importación y a veces por delante. Lo que entró a la casa
+        # desde la red no puede pasar de lo importado menos lo que las curvas
+        # vieron cargando la batería.
+        importado = totals.get("grid_import_energy")
+        if importado is not None:
+            red = min(red, max(importado - out.get("grid_to_battery", 0.0), 0.0))
+        sol = min(solar_a_casa, casa - red)
+        bateria = casa - red - sol
+        # La batería no puede haber dado más de lo que descargó. El techo es su
+        # contador —menos lo que las curvas atribuyeron a la red—, no la
+        # estimación por buckets: la estimación arrastra la misma deriva de
+        # cinco minutos que motiva todo este ajuste.
+        descarga = totals.get("battery_discharge_energy")
+        tope_bateria = (
+            max(descarga - out.get("battery_to_grid", 0.0), 0.0)
+            if descarga is not None
+            else out["from_battery"]
+        )
+        if bateria > tope_bateria:
+            red += bateria - tope_bateria
+            bateria = tope_bateria
+        out["from_grid"] = red
+        out["from_solar"] = sol
+        out["from_battery"] = bateria
         out["home_total"] = casa
     else:
-        out["home_total"] = fit(
-            ("from_solar", "from_battery", "from_grid"), casa
+        # Sin contador de la casa no hay a qué ajustar, pero las dos columnas
+        # tienen que seguir diciendo lo mismo del mismo vatio.
+        out["from_solar"] = solar_a_casa
+        out["home_total"] = (
+            out["from_solar"] + out["from_battery"] + out["from_grid"]
         )
-        if casa is None or casa <= 0:
-            # Sin contador de la casa no hay a qué ajustar, pero las dos columnas
-            # tienen que seguir diciendo lo mismo del mismo vatio.
-            out["from_solar"] = solar_a_casa
-            out["home_total"] = (
-                out["from_solar"] + out["from_battery"] + out["from_grid"]
-            )
     return out
 
 

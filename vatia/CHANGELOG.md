@@ -2,6 +2,33 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.41.2
+
+### La red no se recorta: lo importado que fue a la casa es una medida
+
+El arreglo de la 0.41.1 dejaba fijo el sol que va a la casa y encajaba la
+batería y la red en «lo que quede» hasta el contador de la casa. Si ese
+contador se queda corto, «Desde la red» se aplastaba —0,11 de 6,2 kWh
+importados— y, como la nota de la importación se calcula restando, el resumen
+acababa diciendo que casi toda la importación había cargado la batería, aunque
+las curvas del día enseñaran la batería cargándose de sol.
+
+El reparto por intervalos de cinco minutos ya sabe a dónde fue cada cosa: lo
+importado que no estaba cargando la batería en ese momento fue a la casa, y lo
+mide el contador de la compañía. Eso no se negocia. El ajuste al contador de la
+casa sigue ahora el mismo orden que el reparto:
+
+1. la generación, a su contador: «A la casa» queda fijo;
+2. la red, primero y entera, con su contador de importación como techo;
+3. «Desde solar» es el mismo número que «A la casa», hasta donde el contador
+   de la casa dé;
+4. la batería absorbe la deriva, con su contador de descarga como techo.
+
+Si los contadores se contradicen —la casa mide menos que la red y el sol
+juntos— cede el sol y la diferencia con «A la casa» queda a la vista, que es la
+manera honesta de enseñar una contradicción: nunca se recorta la red ni se
+inventa una carga desde la red que las curvas no vieron.
+
 ## 0.41.1
 
 ### El consumo de la casa no cuadraba consigo mismo
