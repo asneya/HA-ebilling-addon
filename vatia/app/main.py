@@ -13,7 +13,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               PlainTextResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
 import billing
@@ -43,6 +44,47 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Vatia", docs_url=None, redoc_url=None, lifespan=lifespan)
+
+
+# Lo que puede leer quien no administra, aunque parezca de administrador por la
+# ruta. Todo lo demás bajo `/api/` que **escriba** —y las dos lecturas que
+# enseñan cosas que no son suyas— pide el rol.
+_LECTURA_ADMIN = ("/api/config/export", "/api/users")
+
+
+@app.middleware("http")
+async def _permisos(request: Request, call_next):
+    """Quien no es administrador mira, y toca solo lo suyo.
+
+    Va en un middleware y no en cada endpoint a propósito: así lo que nace
+    protegido es **el sitio**, y añadir mañana un `POST /api/loquesea` no abre
+    un agujero por olvidarse de poner el guardia. La lista de excepciones es
+    corta y está aquí, a la vista, en vez de repartida por veinte funciones.
+
+    La única excepción es `PUT /api/settings`, que sirve para las dos cosas: un
+    administrador cambia los sensores de la casa y cualquiera cambia su tema.
+    Decidir eso necesita mirar el cuerpo de la petición, y leerlo aquí lo
+    consumiría antes de que llegue al endpoint, así que la comprobación fina la
+    hace `put_settings` con el parche ya en la mano.
+    """
+    ruta = request.url.path
+    if not ruta.startswith("/api/"):
+        return await call_next(request)
+    # El alta va aquí y no en `/api/config` para que ocurra **al primer
+    # contacto**, sea cual sea la ruta: si dependiera de una petición concreta,
+    # quien empezara por otra se encontraría sin rol y sin manera de tenerlo.
+    # `visto` solo escribe cuando hay algo nuevo que apuntar.
+    ficha = storage.visto(_usuario(request), _nombre_usuario(request))
+    escribe = request.method in ("PUT", "POST", "DELETE")
+    mira_de_otros = request.method == "GET" and ruta.startswith(_LECTURA_ADMIN)
+    if (escribe and ruta != "/api/settings") or mira_de_otros:
+        if ficha.get("role") != "admin":
+            return JSONResponse(
+                {"detail": "Hace falta ser administrador de Vatia para esto. "
+                           "Pídeselo a quien lo sea, en Ajustes → Usuarios."},
+                status_code=403,
+            )
+    return await call_next(request)
 
 
 def _tz(settings: dict) -> ZoneInfo:
@@ -208,7 +250,10 @@ def _usuario(request: Request) -> str:
 
 @app.get("/api/config")
 async def get_config(request: Request):
+    # El alta y la última visita las lleva el middleware, que lo hace en toda la
+    # API; aquí solo se lee el rol para poder decírselo al frontend.
     config = storage.load()
+    rol = storage.rol_de(config, _usuario(request))
     # Los ajustes que ve **esta** persona: los de la casa con sus preferencias
     # encima. El frontend no tiene que saber cuáles son de quién: lee
     # `settings.flow_style` como siempre y le llega el suyo.
@@ -227,34 +272,98 @@ async def get_config(request: Request):
         "supervisor": bool(os.environ.get("SUPERVISOR_TOKEN")),
         "version": _version(),
         # Quién está mirando, para poder decir en Ajustes si lo que se cambia
-        # ahí es solo suyo o lo va a ver toda la casa. `identificado` en falso
-        # significa que no se ha entrado por Ingress: entonces las preferencias
-        # se comparten y hay que avisar, no fingir que son personales.
-        "user": _ficha_usuario(request),
+        # ahí es solo suyo o lo va a ver toda la casa, y para esconder lo que no
+        # va a poder tocar. `identificado` en falso significa que no se ha
+        # entrado por Ingress: entonces las preferencias se comparten y hay que
+        # avisar, no fingir que son personales.
+        "user": {
+            # El id hace falta en la lista de usuarios, para poder marcar cuál
+            # de las filas eres tú. No es un secreto: es el mismo identificador
+            # que Home Assistant enseña en su propia pantalla de personas.
+            "id": _usuario(request),
+            "identificado": bool(_usuario(request)),
+            "name": _nombre_usuario(request),
+            "role": rol,
+            "admin": rol == "admin",
+        },
     }
 
 
-def _ficha_usuario(request: Request) -> dict[str, Any]:
+def _nombre_usuario(request: Request) -> str:
     """Cómo llamar a quien mira. El nombre es un adorno; el id es lo que manda.
 
     Se prefiere el nombre para enseñar (`X-Remote-User-Display-Name`) y se cae al
     de la cuenta, pero ninguno de los dos está garantizado: con un proveedor de
     autenticación que no sea el de Home Assistant puede llegar solo el id.
     """
-    uid = _usuario(request)
-    return {
-        "identificado": bool(uid),
-        "name": (request.headers.get("X-Remote-User-Display-Name")
-                 or request.headers.get("X-Remote-User-Name") or ""),
-    }
+    return (request.headers.get("X-Remote-User-Display-Name")
+            or request.headers.get("X-Remote-User-Name") or "")
 
 
 @app.put("/api/settings")
 async def put_settings(request: Request, patch: dict = Body(...)):
+    # La excepción del middleware: aquí se guardan las dos cosas. Cualquiera
+    # puede cambiar lo suyo —su tema, su orden de tarjetas, su diagrama— y solo
+    # un administrador toca lo de la casa. La frontera es `PREFS_USUARIO`, la
+    # misma lista con la que `update_settings` decide dónde va cada clave.
+    de_la_casa = set(patch) - set(storage.PREFS_USUARIO)
+    if de_la_casa and storage.rol_de(storage.load(), _usuario(request)) != "admin":
+        raise HTTPException(
+            403,
+            "Hace falta ser administrador de Vatia para cambiar los ajustes de "
+            f"la casa ({', '.join(sorted(de_la_casa))}). Lo tuyo sí: el tema, "
+            "el orden de las tarjetas y el diagrama del caudal.",
+        )
     _unmask(patch, storage.load()["settings"])
     settings = storage.update_settings(patch, _usuario(request))
     _cache.clear()
     return {"ok": True, "settings": settings}
+
+
+# ---------------------------------------------------------------------------
+# Usuarios
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/users")
+async def get_users():
+    """Quién ha entrado en Vatia y con qué rol. Solo administradores."""
+    config = storage.load()
+    return {
+        "users": storage.lista_usuarios(config),
+        # Con qué rol se recibe a quien entre de nuevas, y dónde se cambia. Es
+        # lo que hay que enseñar al lado de la lista: sin ello, «por qué este
+        # ha entrado como administrador» no tiene respuesta visible.
+        "welcome": storage.arranque(),
+        "roles": list(storage.ROLES),
+    }
+
+
+@app.put("/api/users/{user_id}/role")
+async def put_user_role(user_id: str, body: dict = Body(...)):
+    try:
+        ficha = storage.poner_rol(user_id, str(body.get("role") or ""))
+    except storage.UltimoAdmin as err:
+        raise HTTPException(409, str(err)) from err
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from err
+    return {"ok": True, "user": ficha}
+
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: str):
+    """Borra a alguien del registro, con sus preferencias.
+
+    No le quita el acceso —eso se hace en Home Assistant—: si vuelve a entrar
+    aparece de nuevo, y con el rol de bienvenida que toque. Sirve para limpiar
+    la lista de quien ya no vive aquí.
+    """
+    try:
+        if not storage.olvidar_usuario(user_id):
+            raise HTTPException(404, "Ese usuario no está en la lista.")
+    except storage.UltimoAdmin as err:
+        raise HTTPException(409, str(err)) from err
+    return {"ok": True}
 
 
 @app.get("/api/config/export")

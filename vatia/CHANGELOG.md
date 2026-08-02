@@ -2,6 +2,63 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.45.0
+
+### Quién entra en Vatia, y quién puede configurarla
+
+Desde la versión anterior el panel lo ve todo el mundo. Ahora, además, **no todo
+el mundo puede tocarlo todo**.
+
+Hay dos roles y no más:
+
+- **Administrador** — configura la casa: los sensores, las tarifas, InfluxDB, la
+  copia de seguridad. Y nombra a otros administradores.
+- **El resto** — ve todos los datos, con la misma frescura, y se configura **lo
+  suyo**: el tema, el orden de las tarjetas de inicio y el diagrama del caudal.
+
+En **Ajustes → Usuarios** (solo la ven los administradores) sale todo el que ha
+abierto Vatia alguna vez, con su nombre de Home Assistant, cuándo se le vio por
+última vez y un interruptor para nombrarlo administrador.
+
+**Cómo arranca esto sin que nadie se quede fuera.** En las opciones del add-on
+—Ajustes de Home Assistant → Complementos → Vatia → Configuración, donde solo
+llega un administrador de Home Assistant— hay un desplegable, `first_user_role`,
+que dice con qué rol se recibe a quien entra por primera vez: **primero** (el
+primero que entre manda, el resto no), **admin** (todos) o **viewer** (nadie).
+Cambiarlo no toca a quien ya tiene rol asignado.
+
+Encima de eso hay tres cerrojos para que el bloqueo sea imposible:
+
+- si **no queda ningún administrador**, el siguiente que entre lo será, diga lo
+  que diga esa opción;
+- **no se puede quitar el último administrador**, ni degradándolo ni borrándolo;
+- y el rol vive en el fichero de configuración, que se puede editar a mano desde
+  Samba o el File Editor si todo lo demás falla.
+
+**La apariencia pasa a ser de cada uno.** El tema y el fondo dinámico eran de la
+casa; ahora son personales, como ya lo eran el orden de las tarjetas y el
+diagrama del caudal. Sin eso, dejar que los cambiara quien no administra —que es
+lo razonable, es su pantalla— se los habría cambiado a todos. De paso, la regla
+de permisos cabe en una frase: **puedes escribir lo tuyo y nada más**.
+
+Lo que ya tenías configurado no cambia: quien no haya tocado nada sigue viendo
+los valores de la casa.
+
+**Dónde está de verdad el candado.** En el servidor, no en la interfaz.
+Esconderle a alguien la sección de sensores solo le ahorra el chasco; lo que
+impide que la toque es que la petición se rechaza con un 403, venga de donde
+venga. Se comprueba en un único sitio para toda la API, así que un endpoint
+nuevo nace protegido en vez de olvidado. La copia de seguridad —que lleva las
+credenciales de InfluxDB— también pasa a ser solo para administradores, que era
+el agujero que dejaba abierto la versión anterior.
+
+**Entrar sin pasar por Home Assistant.** Si se llega al puerto directamente, sin
+Ingress, no hay cabecera que diga quién eres y por tanto no hay rol: se mira y
+poco más. Es a propósito —si no, saltarse los permisos sería tan fácil como no
+mandar la cabecera— y significa que el puerto sigue sin poder exponerse. Para
+desarrollar fuera del Supervisor, el rol se puede poner a mano en el
+`vatia.json` de la carpeta del add-on.
+
 ## 0.44.1
 
 ### Vatia en la barra lateral de todos, no solo de los administradores

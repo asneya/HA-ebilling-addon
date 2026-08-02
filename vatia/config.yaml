@@ -1,5 +1,5 @@
 name: Vatia
-version: "0.44.1"
+version: "0.45.0"
 slug: vatia
 description: Tu electricidad en tiempo real, con el origen del consumo, el coste del ciclo y comparativa de tarifas
 url: https://github.com/asneya/HA-ebilling-addon
@@ -33,5 +33,20 @@ map:
   - addon_config:rw
 options:
   log_level: info
+  # Con qué rol se recibe a quien entra en Vatia por primera vez.
+  #
+  # Vive aquí, en las opciones del add-on, y no dentro de la propia app: a esta
+  # pantalla solo llega un administrador de Home Assistant, y es el único sitio
+  # desde el que se puede arrancar el reparto de permisos sin necesitar ya un
+  # permiso para llegar. Cambiarlo aquí no toca a quien ya tiene rol.
+  #
+  #   primero → el primero que entre es administrador y el resto, no
+  #   admin   → todo el que entre es administrador
+  #   viewer  → nadie es administrador por entrar
+  #
+  # Pase lo que pase, si no queda ningún administrador el siguiente que entre lo
+  # será: no hay manera de quedarse fuera.
+  first_user_role: primero
 schema:
   log_level: list(debug|info|warning|error)?
+  first_user_role: list(primero|admin|viewer)?

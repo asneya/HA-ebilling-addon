@@ -513,12 +513,21 @@
         <header class="hero compact">
           <div>
             <h1 class="hero-title">Ajustes</h1>
-            <p class="hero-sub">Datos, sensores, facturación e integración</p>
+            <p class="hero-sub" id="ajustes-sub">Datos, sensores, facturación e integración</p>
           </div>
         </header>
 
-        <div class="group-label">Datos</div>
-        <div class="panel glass nav-list">
+        <!-- Lo que ve quien no administra, en lugar de una pantalla con dos
+             cosas y sin explicación de por qué faltan las demás. -->
+        <div class="panel glass hidden" id="ajustes-mirador">
+          <p class="li-note">Aquí puedes cambiar <b>lo tuyo</b>: el tema, el
+            orden de las tarjetas de inicio y el diagrama del caudal. Los
+            sensores, las tarifas y el resto los configura quien administra
+            Vatia en esta casa, y son iguales para todos.</p>
+        </div>
+
+        <div class="group-label" data-admin>Datos</div>
+        <div class="panel glass nav-list" data-admin>
           <button class="nav-row" data-settings-page="source">
             <span class="nav-ico" style="--ico:#0a84ff">
               <svg class="i" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
@@ -528,8 +537,8 @@
           </button>
         </div>
 
-        <div class="group-label">Sensores</div>
-        <div class="panel glass nav-list">
+        <div class="group-label" data-admin>Sensores</div>
+        <div class="panel glass nav-list" data-admin>
           <button class="nav-row" data-settings-page="sensors">
             <span class="nav-ico" style="--ico:#ff9f0a">
               <svg class="i"><use href="#i-potencia"/></svg>
@@ -561,8 +570,8 @@
           </button>
         </div>
 
-        <div class="group-label">Facturación</div>
-        <div class="panel glass nav-list">
+        <div class="group-label" data-admin>Facturación</div>
+        <div class="panel glass nav-list" data-admin>
           <button class="nav-row" data-settings-page="tariffs">
             <span class="nav-ico" style="--ico:#bf5af2">
               <svg class="i"><use href="#i-factura"/></svg>
@@ -621,9 +630,21 @@
           </button>
         </div>
 
+        <div class="group-label" data-admin>Usuarios</div>
+        <div class="panel glass nav-list" data-admin>
+          <button class="nav-row" data-settings-page="users">
+            <span class="nav-ico" style="--ico:#ff375f">
+              <svg class="i"><use href="#i-casa"/></svg>
+            </span>
+            <span class="nav-txt"><b>Quién entra en Vatia</b>
+              <small id="nav-sub-users">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
+        </div>
+
         <div class="group-label">Aplicación</div>
         <div class="panel glass nav-list">
-          <button class="nav-row" data-settings-page="backup">
+          <button class="nav-row" data-admin data-settings-page="backup">
             <span class="nav-ico" style="--ico:#30d158">
               <svg class="i"><use href="#i-duplicar"/></svg>
             </span>
@@ -637,7 +658,7 @@
             <span class="nav-txt"><b>Acerca de</b><small id="nav-sub-about">—</small></span>
             <svg class="i nav-chev"><use href="#i-chevron"/></svg>
           </button>
-          <button class="nav-row" data-settings-page="diagnostics">
+          <button class="nav-row" data-admin data-settings-page="diagnostics">
             <span class="nav-ico" style="--ico:#ff9f0a">
               <svg class="i"><use href="#i-balance"/></svg>
             </span>
@@ -646,8 +667,8 @@
           </button>
         </div>
 
-        <div class="group-label">Integración</div>
-        <div class="panel glass nav-list">
+        <div class="group-label" data-admin>Integración</div>
+        <div class="panel glass nav-list" data-admin>
           <button class="nav-row" data-settings-page="influx">
             <span class="nav-ico" style="--ico:#22a0d8">
               <svg class="i"><use href="#i-balance"/></svg>
@@ -725,6 +746,31 @@
            scroll vertical, arrastrar pelea con el scroll, hace falta pulsación
            larga para desambiguar y con teclado o lector de pantalla no hay por
            dónde cogerlo. Las flechas funcionan en los tres sitios. -->
+      <!-- Quién ha entrado y con qué rol. Solo la ve un administrador: el
+           servidor rechaza `GET /api/users` a quien no lo sea, así que
+           esconderla es cortesía y no la defensa. -->
+      <div class="settings-page" id="sp-users">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Quién entra en Vatia</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+        <div class="panel glass">
+          <p class="li-note">Aquí sale todo el que ha abierto Vatia alguna vez.
+            Un <b>administrador</b> configura la casa —los sensores, las tarifas,
+            InfluxDB— y puede nombrar a otros. El resto ve los datos y se
+            configura lo suyo: el tema, el orden de las tarjetas y el diagrama
+            del caudal.</p>
+          <p class="li-note" id="users-welcome"></p>
+        </div>
+
+        <p class="gal-estado" id="users-estado"></p>
+        <div class="panel glass">
+          <ul class="cards" id="users-list"></ul>
+        </div>
+      </div>
+
       <div class="settings-page" id="sp-home">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>

@@ -51,7 +51,7 @@ export function showSettingsPage(page) {
   // nada invita a pulsarla y a dudar de si el cambio se guardó.
   const hideSave = !page ||
     ["tariffs", "about", "diagnostics", "backup", "sensors", "source", "flows",
-     "home"].includes(page);
+     "home", "users"].includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   window.scrollTo(0, 0);
