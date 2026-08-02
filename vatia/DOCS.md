@@ -605,9 +605,10 @@ lo hace al restaurar una copia, al desinstalar y cuando alguien mueve el
 interruptor «Mostrar en la barra lateral». Así que el ajuste cambia y Core sigue
 con el de antes.
 
-Desde la 0.46.2 Vatia se lo pide al Supervisor **al arrancar**, así que basta
-con reiniciar el add-on una vez. Si aun así no aparece, cualquiera de estas dos
-cosas hace lo mismo a mano:
+Desde la 0.46.3 Vatia lo rehace **al arrancar** —quita el panel y lo vuelve a
+poner, que es lo único que Home Assistant admite: volver a inscribir un panel que
+ya existe no lo actualiza—, así que basta con reiniciar el add-on una vez. Si aun
+así no aparece, cualquiera de estas dos cosas hace lo mismo a mano:
 
 - **Ajustes → Sistema → Reiniciar → Reiniciar Home Assistant Core.**
 - En la página del add-on, apagar y volver a encender **«Mostrar en la barra
