@@ -903,6 +903,45 @@ def split_flows(
 
 
 
+def casa_cuadra(totals: dict[str, float]) -> bool:
+    """¿El contador de la casa es compatible con el balance de los demás?
+
+    El consumo de la casa está sobredeterminado: además de su contador, se
+    calcula con los otros cinco (generación + importada + descarga − exportada
+    − carga). Si las dos cifras se contradicen de verdad —no la deriva de
+    minutos entre estadísticas, sino un tercio o más— es que el sensor
+    configurado como «casa» no mide el consumo total.
+
+    El caso visto: el sensor de «consumo» de un inversor Sungrow que en
+    realidad es el **autoconsumo** diario (lo que la casa toma del sol y de la
+    batería, sin lo importado). Es traicionero porque los días sin importación
+    cuadra casi exacto, y en cuanto se importa se queda corto justo en lo
+    importado: 5,1 kWh medidos con un balance de 11,3. Forzar el reparto a ese
+    total obligaba a esconder 6,1 kWh de importación en una carga de batería
+    que las curvas no vieron.
+
+    Un contador que contradice el balance no sirve para repartir: se descarta
+    y el consumo se deduce, que para eso el balance existe. Sin generación ni
+    importación medidas no hay balance con el que comparar y el contador se da
+    por bueno. Funciona en Wh o kWh: la comparación es relativa.
+    """
+    casa = totals.get("home_energy")
+    if casa is None:
+        return True
+    if totals.get("pv_energy") is None and totals.get("grid_import_energy") is None:
+        return True
+    balance = (
+        (totals.get("pv_energy") or 0.0)
+        + (totals.get("grid_import_energy") or 0.0)
+        + (totals.get("battery_discharge_energy") or 0.0)
+        - (totals.get("grid_export_energy") or 0.0)
+        - (totals.get("battery_charge_energy") or 0.0)
+    )
+    if balance <= 0:
+        return True
+    return abs(casa - balance) <= balance / 3.0
+
+
 def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str, float]:
     """Escala el reparto para que cada columna cuadre con su contador.
 
@@ -1318,7 +1357,18 @@ async def _build_power(
     totals: dict[str, float] = {}
     if energy_index is not None:
         totals, by_key = counters(results[energy_index])
-        flows = flows_from(with_power(by_key))
+        # Un contador de casa que contradice el balance no reparte: fuerza el
+        # total y esconde en otro sitio lo que él no ve. Fuera también del
+        # respaldo por potencia: decidido que la casa se deduce, se deduce del
+        # balance en todos los intervalos, no de otro sensor que compita.
+        casa_fiable = casa_cuadra(totals)
+        if not casa_fiable:
+            totals.pop("home_energy", None)
+            by_key.pop("home_energy", None)
+        base = with_power(by_key)
+        if not casa_fiable:
+            base.pop("home_energy", None)
+        flows = flows_from(base)
         if flows:
             flows = rescale_flows(flows, totals)
     elif energy_ids and is_today:
@@ -1350,6 +1400,10 @@ async def _build_power(
     yesterday_flows: dict[str, float] | None = None
     if yesterday_index is not None:
         yesterday_totals, yesterday_by_key = counters(results[yesterday_index])
+        # El ayer de la comparativa, con la misma criba que el hoy.
+        if not casa_cuadra(yesterday_totals):
+            yesterday_totals.pop("home_energy", None)
+            yesterday_by_key.pop("home_energy", None)
         yesterday_flows = flows_from(yesterday_by_key)
     for item in series:
         integral = _sum(item["values"]) * (5.0 / 60.0) / 1000.0

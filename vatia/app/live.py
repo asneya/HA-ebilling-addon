@@ -197,6 +197,12 @@ def _energy_summary(
     }
     if energy.get("home_energy") is not None:
         meters["home"] = _kwh("home_energy")
+    else:
+        # Sin contador de casa que valga (no configurado, o descartado por
+        # contradecir el balance), la casa de la fila de contadores es la que
+        # deduce el reparto: la fila la enseña siempre, y un 0 fijo parecería
+        # una casa apagada.
+        meters["home"] = round(home_total / 1000.0, 2)
     # Lo importado que fue a la batería y lo vertido que salió de ella: son la
     # diferencia entre los contadores de la red y el reparto del consumo.
     #
@@ -279,6 +285,33 @@ def _prefer_power(totals: dict[str, float], power_totals: dict[str, float]) -> N
     for key, integral in power_totals.items():
         if integral > 0 and not totals.get(key):
             totals[key] = integral
+
+
+# El aviso del contador de casa descartado, una vez por arranque y no cada dos
+# minutos que se recalcula la caché del día.
+_CASA_AVISADA: set[str] = set()
+
+
+def _avisar_casa_descartada(out: dict[str, float], sensor: str) -> None:
+    if sensor in _CASA_AVISADA:
+        return
+    _CASA_AVISADA.add(sensor)
+    balance = (
+        (out.get("pv_energy") or 0.0)
+        + (out.get("grid_import_energy") or 0.0)
+        + (out.get("battery_discharge_energy") or 0.0)
+        - (out.get("grid_export_energy") or 0.0)
+        - (out.get("battery_charge_energy") or 0.0)
+    )
+    _LOGGER.warning(
+        "El contador de la casa (%s) marca %.1f kWh pero el balance de los "
+        "demás contadores da %.1f: no mide el consumo total (¿es el sensor de "
+        "autoconsumo del inversor?). Se descarta y el consumo se deduce del "
+        "balance.",
+        sensor,
+        (out.get("home_energy") or 0.0) / 1000.0,
+        balance / 1000.0,
+    )
 
 
 MODOS_CONTADOR = ("auto", "daily", "lifetime")
@@ -402,7 +435,12 @@ async def daily_energy(
         if del_dia:
             # El estado va al segundo; el reparto viene cacheado. El estado
             # tampoco manda si marca cero y la potencia dice otra cosa.
-            cached["totals"].update(_states_energy(energy_cfg, states, del_dia))
+            frescos = _states_energy(energy_cfg, states, del_dia)
+            if "home_energy" not in _daily_cache["value"]["totals"]:
+                # El contador de la casa se descartó al calcular (no cuadraba
+                # con el balance): su estado fresco tampoco vale.
+                frescos.pop("home_energy", None)
+            cached["totals"].update(frescos)
             _prefer_power(cached["totals"], _daily_cache["value"].get("power") or {})
         return cached
 
@@ -548,6 +586,16 @@ async def daily_energy(
         sources.pop("home_energy", None)
     out = {key: max(value, 0.0) for key, value in out.items()}
 
+    # Y un contador de casa que contradice el balance de los otros cinco
+    # tampoco reparte: no mide el consumo total (el caso visto: el sensor de
+    # «consumo» de un Sungrow que en realidad es el autoconsumo, sin lo
+    # importado). Forzar el total a ese contador escondía la importación en una
+    # carga de batería que las curvas no vieron.
+    if out.get("home_energy") is not None and not series_mod.casa_cuadra(out):
+        _avisar_casa_descartada(out, energy_cfg.get("home_energy") or "?")
+        out.pop("home_energy")
+        sources["home_energy"] = "balance"
+
     flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
     # Los buckets salen fuera para poder cruzarlos con la ventana en el cierre
     # del día: ya están descargados, así que no cuesta ninguna petición extra.
@@ -572,6 +620,9 @@ _DIAG_SOURCES = {
     "estado": "estado del sensor",
     "estadisticas": "estadísticas",
     "potencia": "integral de su potencia",
+    # El contador está configurado pero contradice el balance de los demás:
+    # se descarta y la cifra que se enseña se deduce de los otros cinco.
+    "balance": "descartado: contradice el balance (¿mide el autoconsumo?)",
 }
 
 

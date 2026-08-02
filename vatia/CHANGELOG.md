@@ -2,6 +2,33 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.41.3
+
+### El contador de casa que no mide la casa se detecta y se descarta
+
+El consumo de la casa está sobredeterminado: además de su contador, se calcula
+con los otros cinco (generación + importada + descarga − exportada − carga).
+Ahora las dos cifras se comparan, y si se contradicen de verdad —un tercio o
+más, no la deriva de minutos— el contador configurado como «casa» se descarta y
+el consumo se deduce del balance, intervalo a intervalo.
+
+El caso que lo destapó: el sensor de «consumo» de un inversor Sungrow que en
+realidad es el **autoconsumo** diario (lo que la casa toma del sol y de la
+batería, sin contar lo importado). Es traicionero porque los días sin
+importación cuadra casi exacto, y en cuanto se importa se queda corto justo en
+lo importado: marcaba 5,1 kWh con un balance de 11,3. Forzar el resumen a ese
+total obligaba a esconder 6,1 kWh de importación en una «carga de batería» que
+las curvas no habían visto. Con el contador descartado, el resumen reproduce el
+de la app oficial al vatio: casa 11,3 = 2,4 del sol + 2,7 de la batería + 6,2
+de la red.
+
+Se aplica en la Home, en la pantalla de Energía (hoy, días pasados y el ayer de
+la comparativa) y en la fila de contadores, donde «Casa» pasa a enseñar el
+consumo deducido en vez de un cero o la cifra del sensor equivocado. El
+diagnóstico de sensores lo dice con las palabras justas: «descartado:
+contradice el balance (¿mide el autoconsumo?)», y el log explica los números.
+Un contador de casa que sí cuadra con el balance se sigue usando tal cual.
+
 ## 0.41.2
 
 ### La red no se recorta: lo importado que fue a la casa es una medida
