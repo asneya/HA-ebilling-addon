@@ -2,6 +2,66 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.44.0
+
+### El plan de hoy: a qué hora poner cada cosa
+
+Una tarjeta nueva en la pantalla de inicio que contesta la pregunta entera. La
+ventana dice cuánto sobra y «Cabe en la ventana» dice qué entra ahora; esto dice
+**a qué hora exacta** sale más barato cada electrodoméstico de aquí a mañana, y
+si compensa cargar la batería de la red en las horas de valle.
+
+No es un modelo entrenado: es una búsqueda. Se prueban todos los comienzos
+posibles en las próximas 24 horas, cada uno se simula con la misma física que ya
+usaba el consejo —el sol previsto, lo que tu casa gasta a esa hora, lo que hay en
+la batería— y gana el más barato. Un plan que sale de una búsqueda se puede
+explicar entero: «a las 13:30, el 96 % lo pone el sol, ahorras 0,31 €». Uno
+entrenado, no; y para una decisión que cuesta dinero, poder explicarla es parte
+del producto.
+
+Dos decisiones que cambian los consejos y conviene saber:
+
+- **Gastar batería no cuesta el precio de la hora en que la gastas**, sino lo que
+  cuesta reponerla. Valorarla a precio de la hora haría que mover un ciclo de las
+  ocho a las tres pareciera un ahorro cuando la energía es exactamente la misma.
+- **Si ya estás en tu mejor hora, no se te pide esperar.** Y si el ahorro son
+  cuatro céntimos, tampoco: mover una lavadora por eso es hacer perder el tiempo.
+
+Lo de la batería sale solo cuando el sol **no** va a llenarla: comprar barato
+para no comprar caro tiene sentido; comprar lo que mañana iba a venir gratis, no.
+Y solo si el ahorro se nota, porque ciclar la batería tiene un coste de vida útil
+que no aparece en ninguna factura.
+
+Sin la tarifa «la mía» elegida en Ajustes el plan sigue saliendo, ordenado por lo
+que no habría que comprar, y lo dice en vez de inventar euros.
+
+### La previsión, corregida con lo que da tu tejado
+
+Ninguna previsión solar sabe de tu casa: no conoce la chimenea que da sombra
+hasta las diez ni el árbol del vecino. Eso es un sesgo sistemático —aparece a la
+misma hora todos los días— y por eso se puede aprender.
+
+Vatia guarda ahora, cada día, lo que la previsión prometió para cada hora y lo
+que se produjo de verdad, y saca la mediana del cociente. Un 0,6 a las nueve
+significa «a las nueve tu tejado da el 60 % de lo que promete la previsión», y la
+curva se corrige antes de calcular nada. La tarjeta lo explica en letra pequeña:
+qué horas corrige, cuánto y de cuántos días lo ha sacado.
+
+Home Assistant no guarda las previsiones pasadas —son un atributo, y los
+atributos no van a las estadísticas—, así que los pares salen de mirar hacia
+atrás dentro del propio día: la previsión de hoy incluye las horas que ya han
+pasado, y lo producido en ellas está en las estadísticas. Hace falta un mínimo de
+días por hora antes de corregir nada; con menos, esa hora se queda como viene.
+Y no corrige el tiempo: si hoy hay nubes que la previsión no vio, de eso sigue
+encargándose el ajuste en vivo con la producción de este momento.
+
+### Además
+
+- El reparto de un ciclo entre sol, batería y red podía sumar más de lo que el
+  ciclo gasta —se veía «104 % lo pone el sol»— porque la simulación redondeaba la
+  duración a cuartos de hora. Ahora el paso se reparte y las tres cifras suman
+  exactamente el ciclo.
+
 ## 0.43.0
 
 ### La ventana enseña la forma del día, y cuenta con la batería

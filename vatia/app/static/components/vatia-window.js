@@ -140,7 +140,7 @@
         <div class="pill ${d.state}"><i></i>${esc(say.pill)}</div>
         <h2>${esc(say.head)}</h2>
         <p class="sub">${esc(say.sub)}</p>
-        ${this._track(d, t)}${say.note}`;
+        ${this._track(d, t)}${say.note}${this._sesgo(d)}`;
     }
 
     /* «y el mejor rato es a las 14:30»: la media dice cuánto y el pico dice
@@ -214,6 +214,25 @@
           : "Tampoco mañana se espera excedente.",
         note: "",
       };
+    }
+
+    /* Que la curva no es la del sensor, dicho en letra pequeña.
+
+       La previsión que se dibuja lleva aplicado lo que este tejado corrige a
+       cada hora, aprendido de sus propios días. Un número que no coincide con
+       el del sensor de Solcast tiene que explicarse; si no, parece un error. */
+    _sesgo(d) {
+      const b = d.bias;
+      if (!b || !b.horas || !b.peor) return "";
+      const f = b.peor.factor;
+      const cuanto = Math.abs(Math.round((f - 1) * 100));
+      const signo = f < 1 ? "menos" : "más";
+      const hora = String(b.peor.hora).padStart(2, "0");
+      return `<p class="note">La previsión va corregida con lo que da tu tejado
+        de verdad: en ${esc(String(b.horas))} ${b.horas === 1 ? "hora" : "horas"}
+        del día se desvía, y donde más es a las <b>${esc(hora)}:00</b>, con un
+        <b>${esc(String(cuanto))} % ${esc(signo)}</b> de lo que promete.
+        Aprendido de ${esc(String(b.dias))} días tuyos.</p>`;
     }
 
     /* Lo que se lleva la batería, dicho en voz alta.

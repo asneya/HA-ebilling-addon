@@ -18,8 +18,11 @@ import aiohttp
 import appliances as appliances_mod
 import billing
 import datasources
+import planner
+import prevision
 import pvpc
 import series as series_mod
+import storage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -839,6 +842,67 @@ async def _house_profile(
     return perfil
 
 
+# El sesgo del tejado no se recalcula en cada refresco —la Home pide
+# `/api/live` cada veinte segundos— pero tampoco se caduca por reloj: se cachea
+# contra el sello del fichero, así que aparece en cuanto hay dato nuevo y no
+# cuando toque. La anotación sí lleva su propio reloj: escribe.
+_sesgo_cache: dict[str, Any] = {"sello": None, "value": None}
+_anotado: dict[str, Any] = {"dia": None, "at": 0.0}
+_ANOTAR_CADA = 1800.0
+
+
+def _sesgo_tejado() -> prevision.Sesgo:
+    sello = prevision.version(storage.CONFIG_DIR)
+    if _sesgo_cache["value"] is None or _sesgo_cache["sello"] != sello:
+        _sesgo_cache.update({
+            "value": prevision.aprender(storage.CONFIG_DIR), "sello": sello,
+        })
+    return _sesgo_cache["value"]
+
+
+def _anotar_prevision(
+    puntos: list[tuple[datetime, float]],
+    buckets: dict[str, dict[str, float]] | None,
+    now: datetime,
+) -> None:
+    """Apunta lo previsto y lo producido de las horas de hoy que ya han pasado.
+
+    Es la única manera de tener pares: Home Assistant no guarda las previsiones
+    de ayer —son un atributo, y los atributos no van a las estadísticas—, pero
+    la previsión de hoy sí incluye las horas que ya pasaron, y lo producido en
+    ellas está en los buckets que la Home ya se ha descargado.
+
+    Solo se apuntan las horas **cerradas**: la que está en curso va a medias y
+    daría un cociente bajo todos los días a la misma hora.
+    """
+    if not buckets:
+        return
+    if (_anotado["dia"] == now.date()
+            and time.monotonic() - _anotado["at"] < _ANOTAR_CADA):
+        return
+    previsto = {
+        h: wh for h, wh in prevision.por_horas(
+            [(t, w) for t, w in puntos if t.date() == now.date()]
+        ).items() if h < now.hour
+    }
+    real: dict[int, float] = {}
+    for iso, valores in buckets.items():
+        pv = valores.get("pv_energy")
+        if pv is None:
+            continue
+        try:
+            momento = datetime.fromisoformat(iso)
+        except ValueError:
+            continue
+        if momento.date() != now.date() or momento.hour >= now.hour:
+            continue
+        real[momento.hour] = real.get(momento.hour, 0.0) + pv * 1000.0
+    if not previsto or not real:
+        return
+    prevision.registrar(storage.CONFIG_DIR, now.date(), previsto, real)
+    _anotado.update({"dia": now.date(), "at": time.monotonic()})
+
+
 def _hueco_bateria(
     settings: dict[str, Any], states: dict[str, Any]
 ) -> float | None:
@@ -858,18 +922,33 @@ def _hueco_bateria(
 
 
 async def free_energy(
-    settings: dict[str, Any], states: dict[str, Any], tz, now: datetime
+    settings: dict[str, Any],
+    states: dict[str, Any],
+    tz,
+    now: datetime,
+    buckets: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Any] | None:
     """La ventana de energía gratis de hoy y de mañana, con su estado.
 
     ``None`` cuando falta con qué calcularla: sin previsión solar no hay ventana
     que enseñar, y es mejor no enseñar nada que inventarse una hora.
+
+    ``buckets`` es el detalle del día que ya trae `daily_energy`: sirve para
+    comparar lo previsto con lo producido de verdad y aprender el sesgo del
+    tejado. Sin ellos la ventana sale igual, solo sin corregir.
     """
     points = series_mod.forecast_power(
         series_mod._forecast_states(settings, states), tz
     )
     if not points:
         return None
+    # El sesgo del tejado: lo que la previsión se pasa o se queda corta a cada
+    # hora, aprendido de los días anteriores. Se aplica antes que nada, porque
+    # todo lo que viene detrás —la ventana, el consejo, el reparto— tiene que
+    # partir de la mejor curva que se tenga, no de la cruda.
+    _anotar_prevision(points, buckets, now)
+    sesgo = _sesgo_tejado()
+    points = sesgo.aplicar(points)
     perfil = await _house_profile(settings, states, tz, now)
     if perfil is None:
         return None
@@ -937,6 +1016,9 @@ async def free_energy(
         # Con qué se ha contado la batería, para poder decirlo en la tarjeta en
         # vez de restar en silencio. `null` = no se ha descontado nada.
         "battery_room_kwh": None if hueco is None else round(hueco / 1000.0, 2),
+        # Y lo que se le ha corregido a la previsión, por lo mismo: una curva
+        # que no es la del sensor tiene que decir que no lo es.
+        "bias": sesgo.payload(),
     }
 
 
@@ -1146,8 +1228,10 @@ async def build(
         home_power = flows["solar_home"] + flows["grid_home"] + flows["battery_home"]
 
     energy_summary = _energy_summary(energy, daily["flows"])
-    window = await free_energy(settings, states, now.tzinfo, now)
     buckets = daily.get("buckets") or {}
+    # Los buckets van a la ventana para poder comparar lo previsto de hoy con
+    # lo producido de verdad, que es de donde sale el sesgo del tejado.
+    window = await free_energy(settings, states, now.tzinfo, now, buckets)
     # El ahorro solo hace falta cuando el cierre va a salir: tras la puesta de
     # sol. Calcularlo a mediodía sería trabajo (y PVPC) tirado a la basura.
     sunset = _sunset(states, now)
@@ -1162,12 +1246,22 @@ async def build(
     ahora_aparatos = appliances_mod.instantaneo(states, aparatos)
     aprendido: dict[str, dict[str, Any]] = {}
     consejo = None
+    plan = None
     if aparatos:
         aprendido = await appliances_mod.learn(settings, states, aparatos, now.tzinfo, now)
+        fuentes = await _fuentes(settings, states, power, soc, now.tzinfo, now)
         consejo = appliances_mod.advice(
             aparatos, aprendido, window, now,
             _precio_tras_ventana(settings, tariffs, window, now),
-            await _fuentes(settings, states, power, soc, now.tzinfo, now),
+            fuentes,
+        )
+        # El plan del día: a qué hora sale más barato cada aparato y si
+        # compensa cargar la batería de la red. Comparte las fuentes con el
+        # consejo, así que no cuesta ninguna petición más que los precios.
+        plan = planner.plan(
+            aparatos, aprendido, fuentes,
+            await _precio_por_hora(settings, tariffs, now), now,
+            (window or {}).get("tomorrow"),
         )
         for fila in ahora_aparatos:
             datos = aprendido.get(fila["id"]) or {}
@@ -1191,6 +1285,7 @@ async def build(
         "window": window,
         "appliances": ahora_aparatos,
         "advice": consejo,
+        "plan": plan,
         "close": day_close(
             states, energy_summary, buckets, window, now, savings, aparatos, aprendido
         ),
@@ -1228,6 +1323,13 @@ async def _fuentes(
     if perfil is None:
         return None
 
+    # El sesgo del tejado primero y el factor en vivo después, en este orden:
+    # el sesgo es la diferencia constante entre lo que promete la previsión y
+    # lo que da este tejado, y el factor es cuánto se desvía **hoy** de eso. Al
+    # revés se contarían dos veces, porque el factor se mediría contra una curva
+    # que ya se sabe que miente.
+    puntos = _sesgo_tejado().aplicar(puntos)
+
     previsto_ahora = series_mod.forecast_at(puntos, now)
     real_ahora = max(power.get("pv") or 0.0, 0.0)
     factor = 1.0
@@ -1241,6 +1343,43 @@ async def _fuentes(
         "capacity_kwh": float(settings.get("battery_kwh") or 0.0),
         "factor": round(factor, 2),
     }
+
+
+async def _precio_por_hora(
+    settings: dict[str, Any],
+    tariffs: list[dict[str, Any]] | None,
+    now: datetime,
+) -> Any:
+    """Una función `precio(momento) → €/kWh` para las próximas 24 horas.
+
+    Devuelve una que siempre da ``None`` cuando no se puede saber: sin tarifa
+    «la mía» elegida no hay un precio que sea *el tuyo*, y planificar con el de
+    otra tarifa sería aconsejar sobre una factura que no es la que pagas.
+
+    Con PVPC se bajan los precios de hoy y mañana de una vez —una petición, con
+    caché en disco— en vez de por hora. Los de mañana no se publican hasta la
+    tarde: si faltan, esas horas salen `None` y el plan se queda en las que hay.
+    """
+    my_id = settings.get("my_tariff_id") or ""
+    tariff = next((t for t in tariffs or [] if t.get("id") == my_id), None)
+    if not tariff:
+        return lambda _momento: None
+    festivos = set(settings.get("holidays") or [])
+    precios_pvpc: dict[str, float] | None = None
+    if tariff["energy"]["type"] == "pvpc":
+        try:
+            precios_pvpc = await pvpc.get_prices(
+                now, now + timedelta(hours=int(planner.HORIZONTE_H) + 1), now.tzinfo
+            )
+        except Exception:  # noqa: BLE001 - sin PVPC el plan sale sin euros
+            _LOGGER.info("Sin precios PVPC para el plan del día", exc_info=True)
+            return lambda _momento: None
+
+    def precio(momento: datetime) -> float | None:
+        valor, _nombre = billing.price_now(tariff, momento, festivos, precios_pvpc)
+        return valor
+
+    return precio
 
 
 def _precio_tras_ventana(

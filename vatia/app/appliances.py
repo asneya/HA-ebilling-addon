@@ -389,20 +389,24 @@ def estimate(
     del_sol = de_bat = de_red = 0.0
     restante = guardado
     pasos = max(1, int(round(horas / _PASO_SIM_H)))
+    # El paso se reparte, no se fija: con uno fijo un ciclo de 1,9 h se simulaba
+    # en ocho cuartos de hora —2,0 h— y la suma del reparto no cuadraba con la
+    # energía aprendida, así que se veía «104 % lo pone el sol».
+    paso_h = horas / pasos
     for i in range(pasos):
-        momento = now + timedelta(hours=i * _PASO_SIM_H)
+        momento = now + timedelta(hours=i * paso_h)
         sol = max(0.0, sol_at(momento))
         casa = max(0.0, casa_at(momento))
         sobra = max(0.0, sol - casa)
         sol_ap = min(aparato_w, sobra)
         falta = aparato_w - sol_ap
-        del_sol += sol_ap * _PASO_SIM_H / 1000.0
+        del_sol += sol_ap * paso_h / 1000.0
         if falta <= 0:
             # Lo que sobre por encima del aparato carga la batería.
             if restante is not None and capacidad > 0:
-                restante = min(capacidad, restante + (sobra - sol_ap) * _PASO_SIM_H / 1000.0)
+                restante = min(capacidad, restante + (sobra - sol_ap) * paso_h / 1000.0)
             continue
-        pide = falta * _PASO_SIM_H / 1000.0
+        pide = falta * paso_h / 1000.0
         if restante is None:
             de_bat += pide            # sin capacidad: no se puede separar
         else:

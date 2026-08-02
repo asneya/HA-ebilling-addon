@@ -166,7 +166,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Las claves que no estén en la lista se pintan detrás, en este mismo
     # orden, para que una tarjeta nueva no desaparezca de las Homes ya
     # ordenadas a mano.
-    "home_order": ["ahora", "cierre", "ventana", "resumen"],
+    "home_order": ["ahora", "cierre", "ventana", "plan", "resumen"],
     # Tarjetas que quien mira ha decidido no ver. Ocultar no es apagar: lo que
     # hay detrás se sigue calculando, porque otras pantallas lo usan.
     "home_hidden": [],

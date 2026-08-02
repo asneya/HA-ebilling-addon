@@ -121,6 +121,7 @@ function renderLive() {
   // diseño, y es justo cuando más sirve: de noche lo que pongas sale de la
   // batería o de la red, y eso es lo que dice su renglón de estimación.
   renderAdvice(live.advice);
+  renderPlan(live.plan);
   // Lo que está haciendo cada electrodoméstico va en este payload, y su sección
   // de Ajustes lo enseña: se anuncia para no tener que pedirlo dos veces.
   emit("vivo", live);
@@ -259,6 +260,75 @@ function estimacion(e, kind) {
 /* La tarjeta del prototipo, con una diferencia de fondo: allí la duración y los
    kWh de cada electrodoméstico se teclean, y aquí se han medido. Del histórico
    del propio enchufe, así que el consejo habla de *tu* lavadora. */
+/* ------------- «El plan de hoy» ------------- */
+
+/* La hora de un ISO, y si es de mañana se dice: «a las 03:00» a secas, cuando
+   son las once de la noche, se lee como dentro de cuatro minutos. */
+function cuando(iso) {
+  const t = new Date(iso);
+  const hoy = new Date();
+  const manana = t.getDate() !== hoy.getDate();
+  const hhmm = t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  return manana ? `mañana a las ${hhmm}` : `a las ${hhmm}`;
+}
+
+/* A qué hora sale más barato cada aparato, y si compensa cargar la batería.
+   Es la pregunta que viene después de «Cabe en la ventana»: aquella dice qué
+   entra ahora, y esta a qué hora conviene de aquí a mañana. */
+function renderPlan(plan) {
+  const rows = (plan && plan.rows) || [];
+  const bat = plan && plan.battery;
+  $("#plan-panel").classList.toggle("hidden", !rows.length && !bat);
+  if (!rows.length && !bat) return;
+
+  // Solo se cuentan los que de verdad ganan algo esperando: decir «3 aparatos»
+  // cuando dos ya están en su mejor hora es inflar el titular.
+  const mueven = rows.filter((r) => r.worth_waiting);
+  const ahorro = mueven.reduce((a, r) => a + (r.saving_eur || 0), 0);
+  $("#plan-aside").textContent = ahorro > 0
+    ? `ahorras ${fmtEUR.format(ahorro)} moviéndolos`
+    : rows.length ? "ya están en su mejor hora" : "";
+
+  $("#plan-rows").innerHTML = rows.map((r) => {
+    const b = r.best;
+    const sub = r.worth_waiting
+      ? `${b.sun_pct} % con sol · ${dur(r.hours)}`
+      : `ahora mismo · ${b.sun_pct} % con sol`;
+    // El valor de la derecha es la hora, que es la respuesta; el ahorro va
+    // debajo, que es el porqué.
+    const valor = r.worth_waiting ? cuando(b.at) : "ahora";
+    const clase = r.worth_waiting ? "v-justo" : "v-gratis";
+    const porque = r.saving_eur > 0 ? `ahorras ${fmtEUR.format(r.saving_eur)}`
+      : r.worth_waiting ? "sale más barato" : "es su mejor hora";
+    return `
+      <div class="ad-row">
+        <span class="ad-chip" style="--ap:${esc(r.color)}">
+          <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
+        </span>
+        <span class="ad-txt"><b>${esc(r.name)}</b><small>${esc(sub)}</small></span>
+        <span class="ad-verdict">
+          <b class="${clase}">${esc(valor)}</b>
+          <small>${esc(porque)}</small>
+        </span>
+      </div>`;
+  }).join("");
+
+  const notas = [];
+  if (bat) {
+    notas.push(`Compensa <b>cargar ${fmtNum.format(bat.kwh)} kWh</b> de la red
+      ${cuando(bat.at)}, a ${fmtEUR.format(bat.valley_eur_kwh)}/kWh: mañana el sol
+      no va a llenar la batería y esa misma energía a las horas caras te costaría
+      ${fmtEUR.format(bat.peak_eur_kwh)}/kWh. Te ahorras
+      <b>${fmtEUR.format(bat.saving_eur)}</b>.`);
+  }
+  if (rows.length && !rows[0].priced) {
+    notas.push(`Sin tu tarifa elegida en Ajustes esto va por lo que no tendrías
+      que comprar, no por lo que cuesta. Con la tarifa, en euros.`);
+  }
+  $("#plan-note").innerHTML = notas.join(" ");
+  $("#plan-note").classList.toggle("hidden", !notas.length);
+}
+
 function renderAdvice(advice) {
   const rows = (advice && advice.rows) || [];
   $("#advice-panel").classList.toggle("hidden", !rows.length);
