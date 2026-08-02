@@ -377,12 +377,24 @@
       active.forEach((l, i) => {
         const id = `vf${i}`;
         const th = l.sb1 - l.sb0;
+        /* La cinta nace y muere en el color exacto de su barra, y a opacidad
+           llena: así no hay escalón donde se tocan y la cinta parece salir del
+           rectángulo en vez de estar pegada a él. La traslucidez se guarda para
+           el centro, que es donde las cintas se cruzan y hace falta ver por
+           debajo, y el cambio de color se confina al tramo del medio —fuera de
+           las dos zonas de contacto— para que cada extremo se lea del color de
+           su nodo y no de una mezcla. */
+        const cSrc = tono(SRC_COLOR, {}, l.from), cDst = tono(d.color, d.tinta, l.to);
         defs.push(
           `<linearGradient id="${id}" gradientUnits="userSpaceOnUse"
              x1="${P(A1, 0).split(",")[0]}" y1="${P(A1, 0).split(",")[1]}"
              x2="${P(A2, 0).split(",")[0]}" y2="${P(A2, 0).split(",")[1]}">
-             <stop offset="0" style="stop-color:${tono(SRC_COLOR, {}, l.from)}" stop-opacity=".72"/>
-             <stop offset="1" style="stop-color:${tono(d.color, d.tinta, l.to)}" stop-opacity=".5"/>
+             <stop offset="0" style="stop-color:${cSrc}" stop-opacity="1"/>
+             <stop offset=".07" style="stop-color:${cSrc}" stop-opacity=".88"/>
+             <stop offset=".3" style="stop-color:${cSrc}" stop-opacity=".62"/>
+             <stop offset=".7" style="stop-color:${cDst}" stop-opacity=".56"/>
+             <stop offset=".93" style="stop-color:${cDst}" stop-opacity=".88"/>
+             <stop offset="1" style="stop-color:${cDst}" stop-opacity="1"/>
            </linearGradient>`);
         bands.push(
           `<path fill="url(#${id})" d="M${P(A1, l.sb0)} C${P(AC, l.sb0)} ${P(AC, l.db0)} ${P(A2, l.db0)}

@@ -2,6 +2,41 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.41.1
+
+### El consumo de la casa no cuadraba consigo mismo
+
+En el resumen de energía, «A la casa» (en la columna de generación) y «Desde
+solar» (en la de consumo) son **la misma energía** contada desde los dos lados.
+Pues salían dos números distintos.
+
+El motivo: cada columna se ajustaba a su propio contador con su propio factor —la
+generación al contador solar, la casa al de la casa—, y como los dos contadores
+casi nunca van sincronizados, el mismo vatio acababa escrito de dos formas. Con
+un ejemplo real: 1.100 Wh por un lado y 950 Wh por el otro.
+
+Ahora se ajusta en orden: primero la generación a su contador, con lo que el sol
+que va a la casa queda fijo; ese número **es** «Desde solar», tal cual; y la
+batería y la red se reparten lo que falte hasta el contador de la casa. Las dos
+columnas dicen lo mismo y las filas suman su propio total.
+
+Si los contadores se contradicen de verdad —la casa mide menos de lo que el sol
+solo le entregó— se escalan los tres a lo medido, como antes: preferible a una
+fila en negativo. Y si mide de más sin que el reparto sepa de dónde, la
+diferencia se apunta a la red, que es la única fuente que siempre puede darla.
+
+### Las cintas del caudal salen y llegan sin escalón
+
+En el diagrama de caudales la cinta nacía a un 72 % de opacidad justo al lado de
+una barra opaca, y llegaba al otro extremo a un 50 %: en las dos junturas había
+un escalón de color que se veía, sobre todo en el tema oscuro.
+
+Ahora cada cinta nace y muere en el color exacto de su rectángulo y a opacidad
+llena, así que parece salir de él en lugar de estar pegada. La traslucidez se
+guarda para el centro —que es donde las cintas se cruzan y hace falta ver por
+debajo— y el cambio de color se confina al tramo del medio, lejos de los dos
+contactos, para que cada extremo se lea del color de su nodo y no de una mezcla.
+
 ## 0.41.0
 
 ### Qué mide cada contador, uno por uno
