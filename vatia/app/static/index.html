@@ -908,6 +908,20 @@
           <span class="nav-spacer"></span>
         </header>
 
+      <!-- Por qué la facturación no trae datos. Va lo primero porque es la
+           pregunta con la que se entra aquí cuando algo va mal: una consulta que
+           no encuentra su serie no falla, devuelve cero filas, y desde fuera no
+           hay manera de distinguirlo de «no has gastado nada». -->
+      <div class="panel glass group">
+        <div class="group-head">¿De dónde salen los datos de facturación?</div>
+        <div id="diag-fact">
+          <p class="li-note">Comprueba la cadena entera: el sensor, las
+            estadísticas de Home Assistant y, si hace falta, qué contiene
+            InfluxDB de verdad.</p>
+          <div class="li"><button id="diag-fact-btn" class="btn subtle">Comprobar</button></div>
+        </div>
+      </div>
+
       <div class="panel glass group">
         <div class="group-head">Balance de energía de hoy</div>
         <div id="diag-body">

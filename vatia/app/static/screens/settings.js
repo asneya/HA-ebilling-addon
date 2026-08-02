@@ -526,6 +526,67 @@ $("#import-config-btn").addEventListener("click", async () => {
 
 /* ---------------- diagnóstico ---------------- */
 
+/* Por qué la facturación trae —o no— datos.
+
+   Se pide a mano y no al abrir la pantalla porque son varias consultas a
+   InfluxDB —el inventario de la base— y no hay que hacerlas si nadie pregunta.
+   Lo primero que se enseña es el veredicto: la conclusión en una frase. Debajo,
+   los eslabones, para poder comprobarla en vez de creérsela. */
+async function diagnosticoFacturacion() {
+  const caja = $("#diag-fact");
+  const btn = $("#diag-fact-btn");
+  const listo = guardando(btn);
+  try {
+    const d = await api("diagnostics/billing");
+    const ha = d.home_assistant || {};
+    const ifx = d.influxdb || {};
+    const res = d.resultado || {};
+    const bien = res.horas > 0;
+    const lista = (xs) => (xs || []).length
+      ? (xs || []).map((x) => `<code>${esc(x)}</code>`).join(" ") : "—";
+
+    const filas = [
+      ["Fuente", d.source === "homeassistant" ? "Home Assistant" : "Demostración"],
+      ["Periodo", `${d.periodo.start.slice(0, 10)} → ${d.periodo.end.slice(0, 10)}`
+        + (d.periodo.fijado_a_mano ? " (fijado a mano)" : "")],
+      ["Contador", d.sensor_import ? `<code>${esc(d.sensor_import)}</code>` : "sin asignar"],
+      ["Estadísticas en HA", ha.error ? `error: ${esc(ha.error)}`
+        : ha.intentado ? `${ha.horas} horas · ${fmtNum.format(ha.kwh || 0)} kWh`
+        : "no aplica"],
+    ];
+    if (ifx.configurado) {
+      filas.push(
+        ["InfluxDB", `v${ifx.version} · base <code>${esc(ifx.base)}</code>`],
+        ["Medida configurada", `<code>${esc(ifx.measurement_configurada)}</code>`],
+        ["El contador está en", lista(ifx.medidas_del_sensor)],
+        ["Medidas de la base", lista(ifx.medidas)],
+        ["Respaldo", ifx.error_consulta ? `error: ${esc(ifx.error_consulta)}`
+          : ifx.error ? `error: ${esc(ifx.error)}`
+          : `${ifx.horas ?? 0} horas · ${fmtNum.format(ifx.kwh || 0)} kWh`],
+      );
+      if (!ifx.encuentra_el_sensor) {
+        filas.push(["entity_id en la base", lista((ifx.entidades || []).slice(0, 12))]);
+      }
+    } else {
+      filas.push(["InfluxDB", "sin configurar"]);
+    }
+    filas.push(["Resultado", res.error ? `error: ${esc(res.error)}`
+      : `${res.horas} horas · ${fmtNum.format(res.kwh || 0)} kWh`]);
+
+    caja.innerHTML = `
+      <div class="banner ${bien ? "" : "error"}">${esc(d.veredicto)}</div>
+      <div class="list">${filas.map(([k, v]) => `
+        <div class="li"><span class="li-label">${esc(k)}</span>
+          <span class="li-value">${v}</span></div>`).join("")}</div>
+      <div class="li"><button id="diag-fact-btn" class="btn subtle">Volver a comprobar</button></div>`;
+    $("#diag-fact-btn").addEventListener("click", diagnosticoFacturacion);
+  } catch (err) {
+    caja.innerHTML = `<div class="banner error">${esc(err.message)}</div>
+      <div class="li"><button id="diag-fact-btn" class="btn subtle">Reintentar</button></div>`;
+    $("#diag-fact-btn").addEventListener("click", diagnosticoFacturacion);
+  } finally { listo(); }
+}
+
 async function loadDiagnostics() {
   const body = $("#diag-body");
   body.innerHTML = `<p class="li-note">Leyendo los sensores…</p>`;
@@ -607,6 +668,7 @@ $$("#source-seg .seg").forEach((button) =>
     }
   }));
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
+$("#diag-fact-btn").addEventListener("click", diagnosticoFacturacion);
 
 /* La URL y el token de Home Assistant, en la misma página sin barra de guardar.
    Solo se ven fuera del Supervisor, que es donde hacen falta. */

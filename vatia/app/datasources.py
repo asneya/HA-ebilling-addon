@@ -569,3 +569,133 @@ async def get_hourly_consumption(
             "servidas desde InfluxDB.", kind, entity, len(respaldo),
         )
     return respaldo
+
+
+# ---------------------------------------------------------------------------
+# Qué hay de verdad en InfluxDB
+# ---------------------------------------------------------------------------
+# Preguntarle a la base **qué contiene** en vez de adivinarlo. Es lo que hace
+# falta cuando la facturación no trae nada: una consulta que no encuentra la
+# serie no falla, devuelve cero filas, y desde fuera no hay manera de saber si
+# el problema es la medida, el `entity_id` o la base entera.
+
+
+async def influx_inventario(
+    settings: dict[str, Any], entity: str = ""
+) -> dict[str, Any]:
+    """Medidas de la base y `entity_id` presentes, tal y como están escritos."""
+    influx = dict(settings.get("influx") or {})
+    url = (influx.get("url") or "").rstrip("/")
+    if not url:
+        return {"configurado": False}
+    base = influx.get("database") or "homeassistant"
+    fuera: dict[str, Any] = {
+        "configurado": True, "version": int(influx.get("version") or 2),
+        "url": url, "base": base,
+        "measurement_configurada": influx.get("measurement") or "kWh",
+    }
+    try:
+        if fuera["version"] == 1:
+            fuera["medidas"] = await _v1_show(influx, "SHOW MEASUREMENTS")
+            fuera["entidades"] = await _v1_show(
+                influx, 'SHOW TAG VALUES WITH KEY = "entity_id"', columna=1)
+        else:
+            fuera["medidas"] = await _v2_show(influx, _FLUX_MEDIDAS)
+            fuera["entidades"] = await _v2_show(influx, _FLUX_ENTIDADES)
+        if entity:
+            fuera["medidas_del_sensor"] = await influx_medidas_de(settings, entity)
+    except (SourceError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+        fuera["error"] = str(err)
+    return fuera
+
+
+async def influx_medidas_de(settings: dict[str, Any], entity: str) -> list[str]:
+    """En qué medidas aparece este `entity_id`. La pregunta que lo resuelve todo.
+
+    Saber que «kWh» existe en la base no sirve de nada: lo que hace falta saber es
+    si **este contador** está ahí dentro. Si el sensor vive en «Wh» y la medida
+    configurada es «kWh», la consulta no encuentra nada y por separado todo parece
+    correcto. Esto lo dice de una vez.
+    """
+    influx = dict(settings.get("influx") or {})
+    corto, largo = _ids(entity)
+    if int(influx.get("version") or 2) == 1:
+        # `SHOW SERIES` devuelve claves como `kWh,domain=sensor,entity_id=x`.
+        filas = await _v1_show(
+            influx,
+            'SHOW SERIES WHERE "entity_id" = \'' + corto
+            + '\' OR "entity_id" = \'' + largo + '\'')
+        return sorted({f.split(",", 1)[0] for f in filas if f})
+    bucket = influx.get("database") or "homeassistant"
+    flux = (
+        'from(bucket: "' + bucket + '")\n'
+        '  |> range(start: -30d)\n'
+        '  |> filter(fn: (r) => r["entity_id"] == "' + corto + '"'
+        ' or r["entity_id"] == "' + largo + '")\n'
+        '  |> keep(columns: ["_measurement"])\n'
+        '  |> distinct(column: "_measurement")\n'
+    )
+    return await _v2_show(influx, flux)
+
+
+async def _v1_show(influx: dict[str, Any], query: str, columna: int = 0) -> list[str]:
+    url = (influx.get("url") or "").rstrip("/")
+    params = {"db": influx.get("database") or "homeassistant", "q": query}
+    auth = None
+    if influx.get("username"):
+        auth = aiohttp.BasicAuth(influx["username"], influx.get("password") or "")
+    async with aiohttp.ClientSession(auth=auth) as session:
+        async with session.get(
+            f"{url}/query", params=params, timeout=aiohttp.ClientTimeout(total=20)
+        ) as resp:
+            if resp.status != 200:
+                raise SourceError(f"InfluxDB respondió {resp.status}: {await resp.text()}")
+            data = await resp.json()
+    out: list[str] = []
+    for serie in (data.get("results") or [{}])[0].get("series") or []:
+        for fila in serie.get("values") or []:
+            if len(fila) > columna and fila[columna] is not None:
+                out.append(str(fila[columna]))
+    return sorted(set(out))
+
+
+_FLUX_MEDIDAS = """
+import "influxdata/influxdb/schema"
+schema.measurements(bucket: "%s")
+"""
+_FLUX_ENTIDADES = """
+import "influxdata/influxdb/schema"
+schema.tagValues(bucket: "%s", tag: "entity_id")
+"""
+
+
+async def _v2_show(influx: dict[str, Any], plantilla: str) -> list[str]:
+    """`plantilla` lleva un %s con el bucket, o ya viene formada sin ninguno."""
+    url = (influx.get("url") or "").rstrip("/")
+    bucket = influx.get("database") or "homeassistant"
+    headers = {
+        "Authorization": f"Token {influx.get('token') or ''}",
+        "Content-Type": "application/vnd.flux",
+        "Accept": "application/csv",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{url}/api/v2/query", params={"org": influx.get("org") or ""},
+            data=(plantilla % bucket) if "%s" in plantilla else plantilla,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status != 200:
+                raise SourceError(f"InfluxDB respondió {resp.status}: {await resp.text()}")
+            text = await resp.text()
+    out, cols = [], {}
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        celdas = line.split(",")
+        if "_value" in celdas:
+            cols = {n: i for i, n in enumerate(celdas)}
+            continue
+        if cols and len(celdas) > cols["_value"]:
+            out.append(celdas[cols["_value"]].strip())
+    return sorted(set(v for v in out if v))
