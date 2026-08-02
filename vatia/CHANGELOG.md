@@ -2,6 +2,47 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.40.1
+
+### La facturación no traía datos de InfluxDB
+
+Un fallo introducido en la 0.39.0. La integración de InfluxDB de Home Assistant
+guarda la etiqueta `entity_id` **sin el dominio**: `grid_import`, no
+`sensor.grid_import`. La consulta del histórico del consumo ya lo tenía en cuenta
+y le quitaba el prefijo; la de facturación, no.
+
+Hasta la 0.39 eso no se notaba, porque ese `entity_id` se escribía a mano en
+Ajustes → InfluxDB y uno escribe lo que hay en la base. Al unificar la
+configuración, la facturación pasó a leer el sensor de Ajustes → Sensores, que sí
+lleva el dominio, y la consulta dejó de encontrar nada.
+
+Lo que lo hacía indetectable es que **InfluxDB no falla**: contesta correctamente
+que no hay ninguna serie con esa etiqueta. Cero filas y cero error, con la
+conexión establecida y el histórico del consumo funcionando — y el estado que
+muestra la página de InfluxDB sale del histórico, así que decía la verdad y aun
+así despistaba.
+
+Ahora las dos consultas piden **las dos formas** del identificador, así que da
+igual cómo esté escrita la base.
+
+### Y cuando no haya datos, que se diga por qué
+
+El respaldo se tragaba su propio fallo: si InfluxDB no respondía, se devolvía la
+lista vacía de Home Assistant sin más. Un cero en la factura y «no he podido
+leerlo» son cosas muy distintas y se veían igual.
+
+- Si el contador no tiene estadísticas en Home Assistant y en InfluxDB tampoco
+  aparece, el log dice **qué sensor** se buscó, en **qué medida** y en **qué
+  base**, y recuerda que la medida es la unidad del contador (`kWh`, `Wh`…).
+- Si Home Assistant no responde y **no** hay InfluxDB configurado, el error sube a
+  la pantalla en vez de dejar un vacío mudo.
+- Y si Home Assistant no responde pero sí hay InfluxDB, ahora se intenta el
+  respaldo: antes el error de conexión salía disparado y no llegaba a probarse.
+
+Comprobado contra un InfluxDB de mentira que **filtra de verdad** por medida y por
+`entity_id`, y que guarda las series como las guarda Home Assistant. El que había
+contestaba a cualquier consulta, y por eso no cazó esto.
+
 ## 0.40.0
 
 ### El flujo clásico, el que tenía la app
