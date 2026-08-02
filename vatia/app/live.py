@@ -35,6 +35,10 @@ POWER_KEYS = (
     "home",
 )
 ENERGY_KEYS = series_mod.ENERGY_KEYS
+# Partes medidas de otro contador (la carga que puso el sol, lo vertido que
+# puso el sol). Se piden y se reparten con los demás, pero no cuentan en el
+# balance ni tienen sensor de potencia del que deducirlas.
+ENERGY_PARTES = series_mod.ENERGY_PARTES
 # Sensor de potencia del que se puede deducir cada contador si el contador no
 # existe o no tiene estadísticas.
 POWER_FOR_ENERGY = {
@@ -370,7 +374,8 @@ def _states_energy(
 
 
 def _accumulate_flows(
-    buckets: dict[str, dict[str, float]], measured_home: bool
+    buckets: dict[str, dict[str, float]], measured_home: bool,
+    partes: tuple[bool, bool] = (False, False),
 ) -> dict[str, float] | None:
     """Reparte hora a hora y suma los resultados (Wh).
 
@@ -398,6 +403,8 @@ def _accumulate_flows(
             values.get("grid_import_energy", 0.0),
             values.get("battery_discharge_energy", 0.0),
             values.get("home_energy") if measured_home else None,
+            values.get("battery_charge_pv_energy") if partes[0] else None,
+            values.get("grid_export_pv_energy") if partes[1] else None,
         )
         for key in keys:
             acc[key] += split[key]
@@ -429,7 +436,8 @@ async def daily_energy(
     flow_cfg = settings.get("flow_sensors") or {}
     modo = {key: modo_contador(settings, key) for key in ENERGY_KEYS}
     del_dia = {k for k, v in modo.items() if v == "daily"}
-    ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
+    ids = [energy_cfg.get(k) for k in ENERGY_KEYS + ENERGY_PARTES
+           if energy_cfg.get(k)]
     # Respaldo: el contador que no exista —o que no tenga estadísticas— se mide
     # integrando su sensor de potencia, que ya está configurado en el flujo de
     # energía. Sin esto, esa magnitud valdría cero y el reparto se lo achacaría
@@ -496,7 +504,7 @@ async def daily_energy(
     # sensor bidireccional se reparten por signo: su estado (un contador neto)
     # no sirve para ninguna de las dos direcciones.
     by_key: dict[str, dict[str, float]] = {}
-    for key in ENERGY_KEYS:
+    for key in ENERGY_KEYS + ENERGY_PARTES:
         entity = energy_cfg.get(key)
         if entity:
             factor = series_mod._unit_factor(entity, states, "energy", units)
@@ -531,6 +539,12 @@ async def daily_energy(
     # De dónde ha salido cada cifra, para poder enseñarlo en el diagnóstico.
     sources: dict[str, str] = {}
     per_bucket: dict[str, dict[str, float]] = {}
+    # Las partes solo van al reparto: en `out` descuadrarían el balance del
+    # diagnóstico, porque su energía ya está contada en el total del que son
+    # parte.
+    for key in ENERGY_PARTES:
+        for iso, value in (by_key.get(key) or {}).items():
+            per_bucket.setdefault(iso, {})[key] = value
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
         if not entity:
@@ -616,7 +630,14 @@ async def daily_energy(
         out.pop("home_energy")
         sources["home_energy"] = "balance"
 
-    flows = _accumulate_flows(per_bucket, out.get("home_energy") is not None)
+    # Una parte solo se usa si de verdad tiene datos: con ceros mentiría
+    # diciendo «el sol no puso nada de esa carga».
+    partes = tuple(
+        any(v.get(k) for v in per_bucket.values()) for k in ENERGY_PARTES
+    )
+    flows = _accumulate_flows(
+        per_bucket, out.get("home_energy") is not None, partes
+    )
     # Los buckets salen fuera para poder cruzarlos con la ventana en el cierre
     # del día: ya están descargados, así que no cuesta ninguna petición extra.
     value = {"totals": out, "flows": flows, "sources": sources, "buckets": per_bucket}
@@ -1648,6 +1669,7 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
         ("flow", "battery_charge", "Potencia de carga", "power", ("charg", "carga", "bateria", "battery")),
         ("flow", "battery_discharge", "Potencia de descarga", "power", ("discharg", "descarga", "bateria", "battery")),
         ("energy", "battery_charge_energy", "Energía cargada", "energy", ("charg", "carga", "bateria", "battery")),
+        ("energy", "battery_charge_pv_energy", "De la carga, lo que puso el sol", "energy", ("charge from pv", "carga solar", "charge_from_pv")),
         ("energy", "battery_discharge_energy", "Energía descargada", "energy", ("discharg", "descarga", "bateria", "battery")),
     ]},
     {"key": "grid", "name": "Red", "icon": "red", "rows": [
@@ -1655,6 +1677,7 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
         ("flow", "grid_export", "Exportada", "power", ("export", "vertid", "grid", "red")),
         ("energy", "grid_import_energy", "Energía importada", "energy", ("import", "compra", "grid", "red")),
         ("energy", "grid_export_energy", "Energía exportada", "energy", ("export", "vertid", "grid", "red")),
+        ("energy", "grid_export_pv_energy", "De lo exportado, lo que puso el sol", "energy", ("export from pv", "exported_energy_from_pv", "vertido solar")),
     ]},
     {"key": "home", "name": "Casa", "icon": "casa", "rows": [
         ("flow", "home", "Consumo instantáneo", "power", ("casa", "home", "load", "consum")),
@@ -1667,12 +1690,58 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
 # nada**—. Decirlo importa: con el texto genérico «se deduce del balance» en
 # todas, la casilla del estado de carga parecía resuelta y no había motivo para
 # tocarla, cuando en realidad sin ella falta su gráfico.
-OPTIONAL_SLOTS = {"home", "home_energy", "battery_soc"}
+OPTIONAL_SLOTS = {
+    "home", "home_energy", "battery_soc",
+    "battery_charge_pv_energy", "grid_export_pv_energy",
+}
 OPTIONAL_NOTES = {
     "home": "Opcional · se deduce del balance",
     "home_energy": "Opcional · se deduce del balance",
     "battery_soc": "Opcional · sin él no hay gráfico de carga",
+    # Estas dos no arreglan un hueco: **sustituyen una deducción por una
+    # medida**. Vatia sabe repartir sin ellas, pero teniéndolas no tiene que
+    # adivinar cuánto de la carga vino de la red, que es lo que más veces ha
+    # salido mal. Un Sungrow las da; otros inversores, no.
+    "battery_charge_pv_energy":
+        "Opcional · si lo tienes, red→batería se mide en vez de deducirse",
+    "grid_export_pv_energy":
+        "Opcional · si lo tienes, batería→red se mide en vez de deducirse",
 }
+
+# Sensores que **suenan** a lo que pide la casilla y miden otra cosa. Ni se
+# proponen ni se dan por buenos si ya están puestos.
+#
+# El caso que costó tres versiones detectar: en un Sungrow, el registro 13017
+# —«Daily direct energy consumption», que Home Assistant publica como
+# `sensor.daily_direct_energy_consumption`— es lo que la casa toma **del sol**,
+# no su consumo total. Y la casilla del consumo buscaba candidatos con la pista
+# «consum», así que Vatia lo recomendaba: el fallo del resumen empezaba en la
+# propia pantalla de configuración.
+#
+# Es además un sensor traicionero, porque los días sin importar cuadra casi
+# exacto y solo se despega cuando se compra algo. Se avisa aquí, que es donde se
+# elige, y no solo cuando `casa_cuadra()` lo descarta días después.
+TRAMPAS: dict[str, tuple[tuple[str, str], ...]] = {
+    "home_energy": (
+        ("direct_energy_consumption",
+         "Este sensor mide el **autoconsumo** —lo que la casa toma del sol y de "
+         "la batería—, no su consumo total: le falta todo lo que se compra a la "
+         "red. Sungrow no publica ningún contador del consumo total; déjalo "
+         "vacío y Vatia lo deduce del balance, o intégralo de «Load power»."),
+        ("self_consumption",
+         "Esto es el autoconsumo, no el consumo de la casa. Déjalo vacío y "
+         "Vatia deduce el consumo del balance de los otros contadores."),
+    ),
+}
+
+
+def trampa(slot: str, entity: str) -> str:
+    """El aviso de la casilla, si la entidad elegida no mide lo que parece."""
+    texto = entity.lower()
+    for patron, aviso in TRAMPAS.get(slot, ()):
+        if patron in texto:
+            return aviso
+    return ""
 
 
 def _slot_state(
@@ -1697,15 +1766,17 @@ def sensor_status(
            "energy": settings.get("energy_sensors") or {}}
     catalogo = list_entities(states)
 
-    def sugerencias(kind: str, pistas: tuple[str, ...], usados: set[str]) -> list[dict[str, str]]:
+    def sugerencias(slot: str, kind: str, pistas: tuple[str, ...],
+                    usados: set[str]) -> list[dict[str, str]]:
         """Candidatos para una casilla vacía: del tipo correcto y con el nombre
-        a favor, sin repetir los que ya están puestos en otra casilla."""
+        a favor, sin repetir los que ya están puestos en otra casilla y **sin
+        las trampas**, que son justo las que mejor casan con las pistas."""
         out = []
         for item in catalogo.get(kind, []):
             if item["entity_id"] in usados:
                 continue
             texto = f"{item['entity_id']} {item['name']}".lower()
-            if any(p in texto for p in pistas):
+            if any(p in texto for p in pistas) and not trampa(slot, texto):
                 out.append(item)
         return out[:5]
 
@@ -1728,8 +1799,9 @@ def sensor_status(
                 "slot": slot, "group": donde, "label": label, "kind": kind,
                 "entity": entity, "optional": opcional,
                 "note": OPTIONAL_NOTES.get(slot, ""),
+                "warning": trampa(slot, entity) if entity else "",
                 "responds": responde, "value": valor, "unit": unidad,
-                "suggestions": [] if entity else sugerencias(kind, pistas, usados),
+                "suggestions": [] if entity else sugerencias(slot, kind, pistas, usados),
             }
             if donde == "energy":
                 # Qué mide este contador, y si es suyo o heredado del ajuste

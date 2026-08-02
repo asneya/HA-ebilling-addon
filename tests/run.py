@@ -35,6 +35,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -76,6 +78,7 @@ PYTHON = [
     ("sesgo.py", ["sesgo.py"], {}),
     ("plan.py", ["plan.py"], {}),
     ("resumen.py", ["resumen.py"], {"VATIA_BASE": "http://127.0.0.1:8402"}),
+    ("sungrow.py", ["sungrow.py"], {}),
     ("importada.py", ["importada.py"], {"VATIA_BASE": "http://127.0.0.1:8402"}),
     ("unificar.py", ["unificar.py"], {}),
     ("ciclos.py", ["ciclos.py"], {}),
@@ -118,12 +121,33 @@ def responde(puerto: int, espera: float = 0.4) -> bool:
         return False
 
 
-def esperar(puertos, limite: float = 45.0) -> list[int]:
-    """Espera a que todos escuchen. Devuelve los que no lo hicieron."""
+def contesta(puerto: int, ruta: str) -> bool:
+    """¿Contesta de verdad a una petición, y no solo acepta la conexión?
+
+    Para las instancias de la aplicación no basta con que el puerto esté
+    abierto: uvicorn lo abre y luego la aplicación puede no poder hablar con su
+    Home Assistant de mentira. Con la comprobación floja, los bancos arrancaban
+    contra una aplicación que devolvía 502 y fallaban por lo que parecía otra
+    cosa; así el que falla es el arranque, que es donde está el problema.
+    """
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{puerto}{ruta}", timeout=5
+        ) as resp:
+            return resp.status < 500
+    except urllib.error.HTTPError as err:
+        return err.code < 500
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def esperar(puertos, limite: float = 60.0, ruta: str | None = None) -> list[int]:
+    """Espera a que todos respondan. Devuelve los que no lo hicieron."""
+    prueba = (lambda p: contesta(p, ruta)) if ruta else responde
     fin = time.monotonic() + limite
     pendientes = list(puertos)
     while pendientes and time.monotonic() < fin:
-        pendientes = [p for p in pendientes if not responde(p)]
+        pendientes = [p for p in pendientes if not prueba(p)]
         if pendientes:
             time.sleep(0.5)
     return pendientes
@@ -191,11 +215,34 @@ def levantar(trabajo: Path) -> bool:
             LOGS / f"app-{puerto}.log",
         )
 
-    todos = [*FALSOS, PUERTO_FICHEROS, *INSTANCIAS]
-    if caidos := esperar(todos):
-        print(f"No levantaron los puertos {caidos}. Mira {LOGS}/", file=sys.stderr)
+    # Primero los que basta con que escuchen, y después las instancias de la
+    # aplicación, a las que se les pregunta de verdad.
+    if caidos := esperar([*FALSOS, PUERTO_FICHEROS]):
+        print(f"No levantaron los servidores de mentira {caidos}", file=sys.stderr)
+        colas()
+        return False
+    if caidos := esperar(list(INSTANCIAS), ruta="/api/config"):
+        print(f"Las instancias {caidos} escuchan pero no contestan", file=sys.stderr)
+        colas()
         return False
     return True
+
+
+def colas(lineas: int = 25) -> None:
+    """Los últimos renglones de todo lo que se ha levantado.
+
+    Se imprimen en la salida y no solo en los ficheros: en el CI, los ficheros
+    hay que ir a descargarlos y el motivo de un arranque fallido se quiere ver
+    en el mismo sitio donde se ve que ha fallado."""
+    for log in sorted(LOGS.glob("*.log")):
+        if not log.name.startswith(("app-", "falso-", "ficheros-")):
+            continue
+        texto = log.read_text(errors="replace").strip().splitlines()
+        if not texto:
+            continue
+        print(f"\n--- {log.name} ---", file=sys.stderr)
+        for linea in texto[-lineas:]:
+            print("  " + linea, file=sys.stderr)
 
 
 def pasar(nombre, cmd, entorno, carpeta, trabajo, tiempo) -> bool:
@@ -204,12 +251,18 @@ def pasar(nombre, cmd, entorno, carpeta, trabajo, tiempo) -> bool:
     entorno = {k: v.format(trabajo=trabajo) for k, v in entorno.items()}
     binario = [sys.executable] if nombre.endswith(".py") else ["node"]
     try:
+        # `stderr` va al mismo sitio que `stdout`, y no a la basura: un banco que
+        # revienta escribe la traza ahí, y tirándola el registro decía «(sin
+        # salida)» justo cuando más falta hacía saber qué había pasado.
         salida = subprocess.run(
             binario + cmd, cwd=carpeta, env={**os.environ, **entorno},
-            capture_output=True, text=True, timeout=tiempo,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=tiempo,
         ).stdout
     except subprocess.TimeoutExpired as err:
-        salida = (err.stdout or b"").decode() + f"\n(se pasó de {tiempo} s)"
+        crudo = err.stdout or ""
+        salida = (crudo.decode() if isinstance(crudo, bytes) else crudo)
+        salida += f"\n(se pasó de {tiempo} s)"
     log.write_text(salida)
     ultima = (salida.strip().splitlines() or ["(sin salida)"])[-1].strip()
     bien = any(ultima.endswith(v) for v in VEREDICTOS_BUENOS)
