@@ -911,6 +911,25 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
     del desglose y el del contador —que es lo que enseña la leyenda, y con lo
     que el usuario compara— se separan. ``flows`` y ``totals`` en la misma
     unidad.
+
+    **El sol que va a la casa es un solo número.** «A la casa» en la columna de
+    generación y «Desde solar» en la de consumo son la misma energía vista desde
+    los dos lados, y antes cada una se escalaba con su propio factor: la primera
+    con el del contador solar y la segunda con el del contador de la casa. Con
+    los contadores desfasados —que es lo normal— el resumen enseñaba las dos
+    cifras a la vez, distintas, una al lado de la otra.
+
+    Ahora se ajusta en este orden:
+
+    1. la generación, a su contador: ahí `to_home` queda fijo;
+    2. `from_solar` **es** ese `to_home`, sin tocar;
+    3. la batería y la red se reparten lo que falte hasta el contador de la casa.
+
+    La excepción es que la casa mida **menos** que lo que el sol solo le entregó:
+    entonces los contadores se contradicen y no hay reparto coherente posible, así
+    que se escalan los tres a lo medido, que es lo que hacía antes. Es preferible
+    un reparto proporcional a una fila en negativo o a unas filas que no sumen su
+    propio total.
     """
     out = dict(flows)
 
@@ -924,9 +943,32 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
         return total
 
     fit(("to_home", "to_battery", "to_grid"), totals.get("pv_energy"))
-    out["home_total"] = fit(
-        ("from_solar", "from_battery", "from_grid"), totals.get("home_energy")
-    )
+
+    casa = totals.get("home_energy")
+    solar_a_casa = out["to_home"]
+    if casa is not None and casa > 0 and casa >= solar_a_casa:
+        out["from_solar"] = solar_a_casa
+        resto = casa - solar_a_casa
+        if out["from_battery"] + out["from_grid"] > 0:
+            fit(("from_battery", "from_grid"), resto)
+        else:
+            # El contador dice que la casa gastó más de lo que le llegó del sol,
+            # pero el reparto no tiene de dónde: escalar un cero no da nada y las
+            # filas se quedarían por debajo de su propio total. La red es la única
+            # fuente que siempre puede dar, así que la diferencia se le apunta.
+            out["from_grid"] = resto
+        out["home_total"] = casa
+    else:
+        out["home_total"] = fit(
+            ("from_solar", "from_battery", "from_grid"), casa
+        )
+        if casa is None or casa <= 0:
+            # Sin contador de la casa no hay a qué ajustar, pero las dos columnas
+            # tienen que seguir diciendo lo mismo del mismo vatio.
+            out["from_solar"] = solar_a_casa
+            out["home_total"] = (
+                out["from_solar"] + out["from_battery"] + out["from_grid"]
+            )
     return out
 
 
