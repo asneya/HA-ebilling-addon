@@ -9,6 +9,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -492,6 +493,114 @@ async def get_flow_day():
     except Exception as err:  # pragma: no cover - errores de red
         _LOGGER.warning("Error construyendo el flujo del día", exc_info=True)
         raise HTTPException(502, f"No se pudo obtener el flujo del día: {err}") from err
+
+
+@app.get("/api/diagnostics/billing")
+async def diagnostics_billing():
+    """Por qué la facturación trae —o no trae— datos, paso a paso.
+
+    Una consulta que no encuentra su serie **no falla**: devuelve cero filas. Con
+    eso, desde fuera, es imposible distinguir «no has gastado nada» de «estoy
+    mirando donde no es». Esto recorre la cadena entera y dice en qué eslabón se
+    rompe, con lo que la base contiene de verdad.
+    """
+    settings = storage.load()["settings"]
+    tz = _tz(settings)
+    now = datetime.now(tz)
+    start, end, _actual = _resolve_period(settings, now, 0, None, None)
+    energia = settings.get("energy_sensors") or {}
+    entity = (energia.get("grid_import_energy") or "").strip()
+
+    fuera: dict[str, Any] = {
+        "source": settings.get("source") or "demo",
+        "periodo": {"start": start.isoformat(), "end": end.isoformat(),
+                    "fijado_a_mano": bool(settings.get("working_period"))},
+        "sensor_import": entity,
+        "sensor_export": (energia.get("grid_export_energy") or "").strip(),
+    }
+
+    # 1 · Home Assistant: ¿existe la estadística y trae horas?
+    paso: dict[str, Any] = {"intentado": fuera["source"] == "homeassistant"}
+    if paso["intentado"]:
+        try:
+            filas = await datasources.ha_hourly_consumption(settings, start, end, tz, entity)
+            paso.update(horas=len(filas), kwh=round(sum(f["kwh"] for f in filas), 3))
+        except Exception as err:  # noqa: BLE001 - aquí interesa el motivo, sea cual sea
+            paso["error"] = str(err)
+    fuera["home_assistant"] = paso
+
+    # 2 · InfluxDB: qué contiene y qué devuelve para este sensor
+    inv = await datasources.influx_inventario(settings, entity)
+    if inv.get("configurado") and entity:
+        corto, largo = datasources._ids(entity)
+        ents = inv.get("entidades") or []
+        inv["encuentra_el_sensor"] = corto in ents or largo in ents
+        # La pregunta buena no es «¿existe la medida?» sino «¿está mi contador
+        # dentro de ella?». Un `kWh` en la base con el sensor guardado en `Wh` da
+        # las dos respuestas por separado en verde y la consulta vacía.
+        suyas = inv.get("medidas_del_sensor")
+        if suyas is not None:
+            inv["medida_correcta"] = inv["measurement_configurada"] in suyas
+        try:
+            filas = await datasources.influx_hourly_consumption(
+                settings, start, end, tz, entity)
+            inv.update(horas=len(filas), kwh=round(sum(f["kwh"] for f in filas), 3))
+        except Exception as err:  # noqa: BLE001
+            inv["error_consulta"] = str(err)
+    fuera["influxdb"] = inv
+
+    # 3 · Lo que de verdad acaba usando la facturación
+    try:
+        serie = await _consumption(settings, start, end, tz, "import")
+        fuera["resultado"] = {"horas": len(serie),
+                              "kwh": round(sum(float(f["kwh"] or 0) for f in serie), 3)}
+    except Exception as err:  # noqa: BLE001
+        fuera["resultado"] = {"error": str(err)}
+
+    fuera["veredicto"] = _veredicto_facturacion(fuera)
+    return fuera
+
+
+def _veredicto_facturacion(d: dict[str, Any]) -> str:
+    """La conclusión en una frase, que es lo que hay que leer primero."""
+    if d["source"] != "homeassistant":
+        return ("La fuente está en «Demostración»: la facturación usa una casa de "
+                "ejemplo. Cámbiala en Ajustes → Fuente de datos.")
+    if not d["sensor_import"]:
+        return ("No hay contador de energía importada. Elígelo en "
+                "Ajustes → Sensores.")
+    if (d.get("resultado") or {}).get("horas"):
+        return f"Todo correcto: {d['resultado']['horas']} horas con datos."
+
+    ha = d["home_assistant"]
+    ifx = d["influxdb"]
+    if ha.get("error"):
+        pistas = [f"Home Assistant no ha dado las estadísticas: {ha['error']}"]
+    else:
+        pistas = [f"«{d['sensor_import']}» no tiene estadísticas horarias en Home "
+                  "Assistant. Suele faltarle `state_class: total_increasing`, o "
+                  "está excluido del recorder."]
+    if not ifx.get("configurado"):
+        pistas.append("No hay InfluxDB configurado del que sacarlas.")
+    elif ifx.get("error"):
+        pistas.append(f"InfluxDB no responde: {ifx['error']}")
+    elif ifx.get("encuentra_el_sensor") is False:
+        ents = ", ".join((ifx.get("entidades") or [])[:8]) or "ninguna"
+        pistas.append(f"Y en InfluxDB no hay ningún `entity_id` que se le parezca. "
+                      f"Los que hay: {ents}…")
+    elif ifx.get("medida_correcta") is False:
+        suyas = ", ".join(ifx.get("medidas_del_sensor") or []) or "ninguna"
+        pistas.append(f"El sensor sí está en InfluxDB, pero no en la medida "
+                      f"«{ifx['measurement_configurada']}»: está en {suyas}. La "
+                      f"medida es la unidad del contador; pon esa en "
+                      f"Ajustes → InfluxDB.")
+    elif ifx.get("error_consulta"):
+        pistas.append(f"La consulta a InfluxDB ha fallado: {ifx['error_consulta']}")
+    elif not ifx.get("horas"):
+        pistas.append("El sensor y la medida están en InfluxDB, pero no hay filas "
+                      "en el periodo del ciclo. ¿Empieza el ciclo antes de que la "
+                      "base tuviera datos?")
+    return " ".join(pistas)
 
 
 @app.get("/api/diagnostics")

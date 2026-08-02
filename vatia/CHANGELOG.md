@@ -2,6 +2,35 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.40.2
+
+### «¿De dónde salen los datos de facturación?», en Diagnóstico
+
+Un botón que recorre la cadena entera y dice **en qué eslabón se rompe**.
+
+Hacía falta porque el fallo típico aquí es mudo: una consulta que no encuentra su
+serie no falla, devuelve cero filas. Desde fuera no hay manera de distinguir «no
+has gastado nada» de «estoy mirando donde no es», y cada pieza por separado
+parece correcta — la conexión con InfluxDB establecida, el histórico del consumo
+funcionando, y la facturación en blanco.
+
+Lo primero que se enseña es la conclusión en una frase. Debajo, los eslabones,
+para poder comprobarla en vez de creérsela: la fuente, el periodo del ciclo, qué
+contador se está usando, cuántas horas devuelven las estadísticas de Home
+Assistant y —si hay InfluxDB— **qué contiene la base de verdad**.
+
+Eso último es lo que resuelve el caso: en vez de adivinar, se le pregunta.
+
+- **En qué medidas está tu contador.** Saber que «kWh» existe en la base no sirve
+  de nada; lo que hace falta saber es si el contador está ahí dentro. Si vive en
+  «Wh» y la medida configurada es «kWh», por separado todo parece bien y la
+  consulta viene vacía. Ahora lo dice de una vez: «está en Wh, pon esa».
+- **Qué `entity_id` hay escritos**, si el tuyo no aparece. Con la lista delante se
+  ve al momento si es cuestión del prefijo, de un renombrado o de otra cosa.
+- Y las medidas de la base entera, por si el problema es la base equivocada.
+
+Con eso, un «no me salen datos» se contesta sin salir de la app.
+
 ## 0.40.1
 
 ### La facturación no traía datos de InfluxDB
