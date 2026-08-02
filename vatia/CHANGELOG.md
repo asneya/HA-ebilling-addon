@@ -2,6 +2,34 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.43.0
+
+### La ventana enseña la forma del día, y cuenta con la batería
+
+Dos cosas que hacían que la tarjeta de «te sobran X vatios» fuera rara de leer.
+
+**Enseñaba una media y escondía el día.** «Te sobran 2,4 kW durante 6 h» no
+distingue una meseta plana de una punta de veinte minutos, y esa diferencia es
+justo la que decide a qué hora se pone la lavadora. Ahora la tarjeta dibuja el
+día: la previsión del sol, el consumo típico de tu casa hora a hora, y el
+excedente como el área de entre las dos. Los huecos —la hora en que la casa
+gasta más de lo que da el sol— se ven como un corte en el área, no como una
+nota al pie. El mejor momento va marcado con su hora, y el titular lo dice:
+«el mejor rato es sobre las 14:30, con 4,2 kW».
+
+**Prometía energía que la batería se iba a llevar.** El excedente se calculaba
+como sol menos casa, ignorando que un inversor en autoconsumo carga la batería
+con lo que sobra **antes** de exportar. Con la batería a medias, la tarjeta
+ofrecía un par de kW que al enchufar algo no estaban. Ahora se descuenta lo que
+le cabe a la batería —capacidad × lo que le falta de carga— y se dice en voz
+alta: «de lo que da el sol hoy, 4,2 kWh van a llenar la batería antes de que
+sobre nada». Sin capacidad configurada o sin sensor de carga no se descuenta
+nada: es mejor prometer de más que restar una cifra inventada.
+
+La comparación con mañana sigue haciéndose con el excedente bruto, que es la
+misma magnitud los dos días. A mañana no se le descuenta batería porque cómo
+estará por la mañana no se sabe, y suponerlo sería inventar.
+
 ## 0.42.0
 
 ### Cada uno con su Home

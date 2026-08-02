@@ -68,26 +68,53 @@
     .sub { font-size: 15px; line-height: 1.55; margin: 12px 0 0; color: var(--ink-2); }
     .track-card { margin: 18px 0 0; padding: 15px 16px 13px; border-radius: 20px;
                   background: var(--node); border: 1px solid var(--hair); }
-    .track-head { display: flex; justify-content: space-between; align-items: baseline;
+    /* Se permite que el rango baje a su propia línea: «07:36 – 20:24 · 11 h 50
+       min netas» al lado de un título no cabe en un móvil estrecho, y partido
+       por la mitad el título quedaba pisado por la cifra. */
+    .track-head { display: flex; flex-wrap: wrap; column-gap: 10px;
+                  justify-content: space-between; align-items: baseline;
                   margin-bottom: 12px; }
+    .track-head span:first-child { white-space: nowrap; }
     .track-head span:first-child { font-size: 11px; letter-spacing: .07em;
                   text-transform: uppercase; font-weight: 600; color: var(--ink-3); }
     .track-head span:last-child { font-size: 12px; color: var(--ink-3);
                   font-variant-numeric: tabular-nums; }
-    .track { position: relative; height: 52px; }
-    .rail { position: absolute; left: 0; right: 0; top: 18px; height: 16px;
-            border-radius: 8px; overflow: hidden; background: var(--seg-track); }
-    .fill { position: absolute; top: 0; bottom: 0;
-            background: linear-gradient(90deg, var(--free-from), var(--free-to)); }
-    /* La marca de «ahora» va sobre el tramo verde, que es claro en los dos
+    .track { position: relative; height: 132px; }
+    /* El lienzo y lo que va encima de él comparten caja, para poder colocar el
+       pico en porcentaje sin medir nada. */
+    .plot { position: absolute; left: 0; right: 0; top: 0; height: 112px; }
+    .plot svg { display: block; width: 100%; height: 100%; }
+    /* El sol y la casa: dos curvas, y el excedente es el área de entre las dos.
+       Un riel plano decía «de 11:40 a 17:20» y nada más; la forma dice a qué
+       hora sobra de verdad, que es lo que se viene a decidir. */
+    .sol { fill: none; stroke: var(--s-solar); stroke-width: 1.75;
+           stroke-linejoin: round; }
+    .casa { fill: none; stroke: var(--ink-3); stroke-width: 1.4;
+            stroke-dasharray: 3 3; opacity: .8; }
+    .sobra { fill: url(#vw-grad); }
+    /* El mejor momento del día, señalado: es la respuesta corta a «¿cuándo?». */
+    .pico { position: absolute; width: 7px; height: 7px; border-radius: 999px;
+            background: var(--pill-good-ink); border: 1.5px solid var(--node);
+            transform: translate(-50%, -50%); }
+    .pico-l { position: absolute; font-size: 10.5px; font-weight: 700;
+              color: var(--ink); font-variant-numeric: tabular-nums;
+              white-space: nowrap; }
+    /* La marca de «ahora» va sobre el área verde, que es clara en los dos
        temas, así que su tinta es oscura siempre y no sigue al tema. */
-    .now { position: absolute; top: 10px; bottom: 14px; width: 2px; border-radius: 2px;
-           background: var(--pill-good-ink); }
+    .now { stroke: var(--pill-good-ink); stroke-width: 2; stroke-linecap: round; }
     .now-label { position: absolute; top: 0; transform: translateX(-50%);
            font-size: 11px; font-weight: 700; color: var(--ink);
            font-variant-numeric: tabular-nums; white-space: nowrap; }
     .axis { position: absolute; bottom: 0; font-size: 11px; color: var(--ink-3);
             font-variant-numeric: tabular-nums; }
+    .leyenda { display: flex; gap: 14px; margin: 9px 0 0; font-size: 11.5px;
+               color: var(--ink-3); }
+    .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+    .leyenda i { width: 12px; height: 2px; border-radius: 2px; flex: none; }
+    .leyenda .l-sol { background: var(--s-solar); height: 2px; }
+    .leyenda .l-casa { background: var(--ink-3); height: 0;
+                       border-top: 1.5px dashed var(--ink-3); }
+    .leyenda .l-sobra { background: var(--free-to); height: 9px; border-radius: 3px; }
     .note { margin: 12px 0 0; padding: 13px 15px; border-radius: 16px;
             background: var(--node); border: 1px solid var(--hair);
             font-size: 13px; line-height: 1.55; color: var(--ink-2); }
@@ -116,21 +143,37 @@
         ${this._track(d, t)}${say.note}`;
     }
 
+    /* «y el mejor rato es a las 14:30»: la media dice cuánto y el pico dice
+       cuándo, y sin el cuándo la tarjeta obliga a adivinar. Solo se añade si el
+       pico destaca de verdad sobre la media —un día de meseta no tiene «mejor
+       momento»— y si aún no ha pasado, que recomendar una hora que ya fue es
+       peor que no decir nada. */
+    _cuando(t) {
+      if (!t.peak_at || !t.peak_w || !t.surplus_w) return "";
+      if (t.peak_w < t.surplus_w * 1.25) return "";
+      if (new Date(t.peak_at).getTime() < Date.now()) return "";
+      return ` El mejor rato es sobre las ${hhmm(t.peak_at)}, con ${kw(t.peak_w)}.`;
+    }
+
     _words(d, t, m) {
       const abre = m ? `Mañana abre a las ${hhmm(m.start)}` : null;
       if (d.state === "open") {
         // Con el perfil horario la ventana puede tener huecos: si viene uno, lo
         // que hay que decir no es cuándo cierra sino cuándo se corta.
         const corte = (t.gaps || []).find((g) => new Date(g.start) > Date.now());
+        // Lo gastable, no el excedente bruto: si la batería se va a llevar la
+        // mitad, prometer la mitad que no hay es lo que hacía que la tarjeta
+        // no se correspondiera con la realidad al enchufar algo.
+        const cuanto = t.spendable_w ?? t.surplus_w;
         return {
           pill: "ENERGÍA GRATIS AHORA",
-          head: `Te sobran ${kw(t.surplus_w)} durante ${dur(d.hours_left)}.`,
-          sub: corte
+          head: `Te sobran ${kw(cuanto)} durante ${dur(d.hours_left)}.`,
+          sub: (corte
             ? `Es el mejor momento del día para gastar. A las ${hhmm(corte.start)} se corta
                —la casa gasta más de lo que da el sol— y vuelve a las ${hhmm(corte.end)}.`
             : `Es el mejor momento del día para gastar. A partir de las ${
-              hhmm(t.end)} cada kWh lo pagas.`,
-          note: this._note(t, m),
+              hhmm(t.end)} cada kWh lo pagas.`) + this._cuando(t),
+          note: this._bateria(t) + this._note(t, m),
         };
       }
       if (d.state === "pre") {
@@ -145,12 +188,12 @@
           head: vuelve
             ? `Ahora mismo no sobra: vuelve a las ${hhmm(cuando)}.`
             : `Tu ventana abre a las ${hhmm(cuando)}.`,
-          sub: vuelve
+          sub: (vuelve
             ? `La casa gasta ahora más de lo que da el sol. Después quedan ${
               dur(d.hours_left)} con excedente.`
-            : `Faltan ${dur(falta)}. Te sobrarán ${kw(t.surplus_w)} durante ${
-              dur(t.net_hours ?? t.hours)}.`,
-          note: this._note(t, m),
+            : `Faltan ${dur(falta)}. Te sobrarán ${kw(t.spendable_w ?? t.surplus_w)} durante ${
+              dur(t.net_hours ?? t.hours)}.`) + this._cuando(t),
+          note: this._bateria(t) + this._note(t, m),
         };
       }
       if (d.state === "post") {
@@ -171,6 +214,20 @@
           : "Tampoco mañana se espera excedente.",
         note: "",
       };
+    }
+
+    /* Lo que se lleva la batería, dicho en voz alta.
+
+       La cuenta se hace igual se diga o no, así que callarla solo conseguiría
+       que la cifra de arriba pareciese equivocada: el sol da 4 kWh de más y la
+       tarjeta ofrece 1,5. Se dice cuando es un trozo que se nota; por debajo de
+       200 Wh no cambia ninguna decisión y solo sería ruido. */
+    _bateria(t) {
+      const bat = t.battery_kwh || 0;
+      if (bat < 0.2) return "";
+      return `<p class="note">De lo que da el sol hoy, <b>${esc(nf1.format(bat))} kWh</b>
+        van a llenar la batería antes de que sobre nada: lo de arriba es lo que
+        queda de verdad para enchufar algo.</p>`;
     }
 
     // Cómo viene mañana comparado con hoy. Solo se dice cuando hay diferencia:
@@ -201,39 +258,154 @@
       const from = new Date(light.from).getTime();
       const to = new Date(light.to).getTime();
       if (!(to > from)) return "";
-      // Fracción del eje, recortada a [0, 1]: la barra verde se dibuja con los
-      // extremos ya recortados, no con el ancho crudo, para que no se salga del
-      // riel si la ventana asoma por fuera del día de luz.
+      // Fracción del eje, recortada a [0, 1]: se recortan los extremos y no el
+      // ancho crudo, para que nada se salga del dibujo si la ventana asoma por
+      // fuera del día de luz.
       const at = (ms) => Math.max(0, Math.min(1, (ms - from) / (to - from)));
       const pct = (ms) => `${(at(ms) * 100).toFixed(1)}%`;
       const now = Date.now();
       const inside = now >= from && now <= to;
       const mid = new Date((from + to) / 2);
-      // Una barra por tramo: si la ventana tiene un hueco —la hora en la que la
-      // casa gasta más de lo que da el sol— el riel tiene que enseñarlo, que es
-      // el sitio donde se ve de un vistazo.
-      const tramos = (t.spans && t.spans.length ? t.spans : [t]).map((s) => {
-        const a = at(new Date(s.start).getTime());
-        const b = at(new Date(s.end).getTime());
-        return `<div class="fill" style="left:${(a * 100).toFixed(1)}%;
-          width:${(Math.max(0, b - a) * 100).toFixed(1)}%"></div>`;
-      }).join("");
       const cabecera = (t.gaps && t.gaps.length)
         ? `${hhmm(t.start)} – ${hhmm(t.end)} · ${dur(t.net_hours ?? t.hours)} netas`
         : `${hhmm(t.start)} – ${hhmm(t.end)}`;
+      // La hora de «ahora» se calla si el pico cae encima: las dos etiquetas van
+      // arriba y se solaparían, y de las dos la que aporta es la del pico. La
+      // raya vertical sigue marcando dónde estamos.
+      const pico = t.peak_at ? at(new Date(t.peak_at).getTime()) : null;
+      const choca = inside && pico != null && Math.abs(pico - at(now)) < 0.12;
       return `<div class="track-card">
-        <div class="track-head"><span>La ventana de hoy</span>
+        <div class="track-head"><span>La forma de hoy</span>
           <span>${esc(cabecera)}</span></div>
         <div class="track">
-          <div class="rail">${tramos}</div>
-          ${inside ? `<div class="now" style="left:${pct(now)}"></div>
-            <div class="now-label" style="left:${pct(now)}">${
+          ${this._forma(t, at, inside ? at(now) : null)}
+          ${inside && !choca ? `<div class="now-label" style="left:${pct(now)}">${
               esc(hhmm(nowAt(light.from)))}</div>` : ""}
           <span class="axis" style="left:0">${esc(hhmm(light.from))}</span>
           <span class="axis" style="left:50%;transform:translateX(-50%)">${
             esc(hhmm(new Date(mid.getTime() + offsetOf(light.from) * 60000).toISOString()))}</span>
           <span class="axis" style="right:0">${esc(hhmm(light.to))}</span>
         </div>
+        <p class="leyenda">
+          <span><i class="l-sobra"></i>Sobra</span>
+          <span><i class="l-sol"></i>Sol previsto</span>
+          <span><i class="l-casa"></i>Tu casa</span>
+        </p>
+      </div>`;
+    }
+
+    /* El día dibujado: la previsión del sol, el consumo típico de la casa y el
+       excedente como el área de entre las dos.
+
+       Se dibuja en un viewBox de 0-100 × 0-100 con `preserveAspectRatio="none"`
+       para que estire al ancho que haya sin tener que medir el contenedor: el
+       componente se pinta también antes de estar en pantalla, y ahí `clientWidth`
+       es cero. Los trazos llevarían el mismo estiramiento, así que van con
+       `vector-effect` para conservar su grosor.
+
+       El eje vertical no lleva escala escrita a propósito: la tarjeta no es un
+       gráfico que se venga a leer con precisión —para eso está la pantalla de
+       Energía—, es la forma del día para decidir a qué hora enchufar algo. */
+    _forma(t, at, ahora) {
+      const s = t.shape;
+      if (!s || !s.t || s.t.length < 2) return "";
+      const techo = Math.max(...s.sol, ...s.casa, 1);
+      const x = (i) => at(new Date(s.t[i]).getTime()) * 100;
+      // 4 % de aire arriba, para que la punta no toque el borde.
+      const y = (w) => 96 - (Math.max(w, 0) / techo) * 92;
+      const linea = (serie) => serie
+        .map((w, i) => `${i ? "L" : "M"}${x(i).toFixed(2)},${y(w).toFixed(2)}`).join("");
+
+      /* El área de excedente. Se recorre el día y se acumula un polígono por
+         tramo en el que el sol va por encima de la casa; los cortes de entrada
+         y salida se interpolan, que es lo que hace que el área acabe justo
+         donde acaba la ventana y no un punto de muestreo después. */
+      const areas = [];
+      let poly = null;
+      const corte = (i) => {
+        const d0 = s.sol[i] - s.casa[i], d1 = s.sol[i + 1] - s.casa[i + 1];
+        const r = d1 === d0 ? 0 : Math.max(0, Math.min(1, -d0 / (d1 - d0)));
+        return {
+          x: x(i) + (x(i + 1) - x(i)) * r,
+          w: s.casa[i] + (s.casa[i + 1] - s.casa[i]) * r,
+        };
+      };
+      for (let i = 0; i < s.t.length; i++) {
+        const sobra = s.sol[i] > s.casa[i];
+        if (sobra && !poly) {
+          poly = { arriba: [], abajo: [] };
+          if (i > 0) {
+            const c = corte(i - 1);
+            poly.arriba.push([c.x, y(c.w)]);
+            poly.abajo.push([c.x, y(c.w)]);
+          }
+        }
+        if (sobra) {
+          poly.arriba.push([x(i), y(s.sol[i])]);
+          poly.abajo.push([x(i), y(s.casa[i])]);
+        } else if (poly) {
+          const c = corte(i - 1);
+          poly.arriba.push([c.x, y(c.w)]);
+          poly.abajo.push([c.x, y(c.w)]);
+          areas.push(poly);
+          poly = null;
+        }
+      }
+      if (poly) areas.push(poly);
+      const relleno = areas
+        .filter((p) => p.arriba.length > 1)
+        .map((p) => {
+          const ida = p.arriba.map(([px, py], i) =>
+            `${i ? "L" : "M"}${px.toFixed(2)},${py.toFixed(2)}`).join("");
+          const vuelta = [...p.abajo].reverse()
+            .map(([px, py]) => `L${px.toFixed(2)},${py.toFixed(2)}`).join("");
+          return `<path class="sobra" d="${ida}${vuelta}Z"/>`;
+        }).join("");
+
+      /* El pico, con su hora: la respuesta corta a «¿y cuándo?».
+
+         Va en HTML por encima del SVG y no dentro. El lienzo estira sin guardar
+         la proporción —así no hay que medir el contenedor— y eso deforma todo
+         lo que no sea un trazo: el punto saldría ovalado y la hora, ancha. Los
+         trazos se salvan con `vector-effect`; un círculo y un texto, no. */
+      let pico = "";
+      if (t.peak_at && t.peak_w > 0) {
+        const cuando = new Date(t.peak_at).getTime();
+        const px = at(cuando) * 100;
+        const cerca = s.t.reduce((mejor, iso, i) =>
+          Math.abs(new Date(iso).getTime() - cuando)
+            < Math.abs(new Date(s.t[mejor]).getTime() - cuando) ? i : mejor, 0);
+        const py = y(s.sol[cerca]);
+        // La etiqueta se pega al borde si el pico cae en un extremo: centrada
+        // se saldría del dibujo justo los días en que el pico es al amanecer.
+        const empuje = px > 84 ? "translateX(-100%)"
+          : px < 16 ? "translateX(0)" : "translateX(-50%)";
+        // Y se queda dentro del lienzo pase lo que pase: la altura se pide con
+        // un `max()` en vez de decidir arriba o abajo por un umbral en tanto
+        // por ciento. El umbral hay que adivinarlo —depende de lo que mida la
+        // letra— y en un día despejado la punta cae justo en el filo.
+        pico = `<i class="pico" style="left:${px.toFixed(2)}%;top:${py.toFixed(2)}%"></i>
+          <span class="pico-l" style="left:${px.toFixed(2)}%;
+            top:max(0px, calc(${py.toFixed(2)}% - 20px));
+            transform:${empuje}">${esc(hhmm(t.peak_at))}</span>`;
+      }
+
+      return `<div class="plot">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img"
+             aria-label="Previsión de sol y consumo típico de la casa a lo largo del día">
+          <defs>
+            <linearGradient id="vw-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="var(--free-to)" stop-opacity=".55"/>
+              <stop offset="1" stop-color="var(--free-from)" stop-opacity=".22"/>
+            </linearGradient>
+          </defs>
+          ${relleno}
+          <path class="casa" d="${linea(s.casa)}" vector-effect="non-scaling-stroke"/>
+          <path class="sol" d="${linea(s.sol)}" vector-effect="non-scaling-stroke"/>
+          ${ahora != null ? `<line class="now" x1="${(ahora * 100).toFixed(2)}" y1="4"
+             x2="${(ahora * 100).toFixed(2)}" y2="96" vector-effect="non-scaling-stroke"/>` : ""}
+        </svg>
+        ${pico}
       </div>`;
     }
   }
