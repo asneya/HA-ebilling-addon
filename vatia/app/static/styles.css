@@ -1553,6 +1553,51 @@ body.scrolled .scroll-top { opacity: .95; }
 .gal-estado { min-height: 1.2em; margin: 0 0 12px; font-size: 12.5px; color: var(--ink-3); }
 @media (max-width: 359px) { .gal { grid-template-columns: minmax(0, 1fr); } }
 
+/* ---- Las tarjetas de la Home, ordenables ----
+
+   El contenedor es flex en columna para poder reordenar con `order` sin tocar
+   el DOM: mover nodos obligaría a reinicializar los componentes de dentro (el
+   Sankey vuelve a medir, el cierre pierde su estado). Las tarjetas conservan su
+   `margin-bottom` de siempre, que en flex no se colapsa y da la misma
+   separación que había. */
+#home-cards { display: flex; flex-direction: column; }
+/* Ocultada por quien mira. Va con más peso que `.hidden` —que es la que usa la
+   app para «ahora mismo no hay nada que enseñar aquí»— porque son dos cosas
+   distintas y no deben pisarse: al dejar de ocultarla, la tarjeta vuelve al
+   estado que le tocara por sus datos. */
+#home-cards .card-off { display: none; }
+
+/* La lista de Ajustes → Pantalla de inicio. */
+.cards { list-style: none; margin: 0; padding: 0; }
+.cards li + li { border-top: 1px solid var(--sep); }
+.card-row { display: flex; align-items: center; gap: 10px; padding: 11px 2px; }
+.card-ico { width: 30px; height: 30px; border-radius: 9px; flex: none;
+  display: grid; place-items: center; background: var(--ico, #8e8e93); color: #fff; }
+.card-ico .i { width: 17px; height: 17px; }
+.card-txt { min-width: 0; flex: 1; }
+.card-txt b { display: block; font-size: 14.5px; font-weight: 600; letter-spacing: -.2px; }
+.card-txt small { display: block; margin-top: 1px; font-size: 12px; color: var(--ink-3);
+  line-height: 1.35; }
+/* Las dos flechas, pegadas: son un par y se leen como un control, no como dos
+   botones sueltos. Caja de 34 px, que es lo mínimo que se acierta con el dedo. */
+.card-move { display: flex; flex: none; }
+.card-move button { width: 34px; height: 34px; display: grid; place-items: center;
+  padding: 0; border: 1px solid var(--hair-2); background: var(--glass-2);
+  color: var(--ink-2); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.card-move button:first-child { border-radius: 9px 0 0 9px; }
+.card-move button:last-child { border-radius: 0 9px 9px 0; margin-left: -1px; }
+.card-move button:disabled { opacity: .35; cursor: default; }
+.card-move .i { width: 15px; height: 15px; }
+/* El glifo del sprite es un chevron a la derecha: girado −90° apunta arriba y
+   +90°, abajo. Con el par al revés, el botón de subir enseña una flecha hacia
+   abajo y no hay quien lo use. */
+.card-move .up .i { transform: rotate(-90deg); }
+.card-move .down .i { transform: rotate(90deg); }
+/* Una tarjeta oculta se sigue pudiendo mover: se apaga el texto, no la fila,
+   para que no parezca que ha desaparecido de la lista. */
+.cards li[data-off="1"] .card-txt,
+.cards li[data-off="1"] .card-ico { opacity: .45; }
+
 /* El diagnóstico de facturación enseña `entity_id` largos y listas de medidas:
    aquí el valor tiene que poder partirse, no recortarse con puntos suspensivos,
    porque el nombre completo es justo el dato que se viene a comprobar. */

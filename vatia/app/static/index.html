@@ -71,10 +71,23 @@
         </div>
       </header>
 
-      <!-- «Ahora mismo», siempre lo primero. Es la maqueta —el caudal va pegado
-           a la cabecera— y es lo que se viene a mirar: nada de lo que hay debajo
-           puede empujarlo hacia abajo, ni el cierre del día ni la ventana. -->
-      <section class="panel glass tappable" id="flow-panel" role="button" tabindex="0"
+      <!-- Las tarjetas, en el orden que haya elegido quien mira (Ajustes →
+           Pantalla de inicio). Es un contenedor flex para poder reordenarlas
+           con `order` sin mover nodos: los componentes de dentro no se enteran
+           y no se reinicializan al cambiar el orden.
+
+           `data-card` agrupa: el cierre son dos elementos (la tarjeta y la fila
+           para recuperarla) y la ventana también (el excedente y el consejo,
+           que va pegado debajo a propósito: primero cuánto sobra, luego qué
+           hacer con ello). Los dos elementos de un grupo comparten `order`, así
+           que se mueven juntos y en su orden de siempre. -->
+      <div id="home-cards">
+
+      <!-- «Ahora mismo». Primera por defecto: es la maqueta —el caudal va pegado
+           a la cabecera— y es lo que se viene a mirar. Quien quiera otra cosa
+           puede cambiarlo, pero nadie tiene que hacerlo para que esté bien. -->
+      <section class="panel glass tappable" id="flow-panel" data-card="ahora"
+               role="button" tabindex="0"
                aria-label="Ver el flujo de energía del día">
         <div class="band-head">
           <span class="band-live"><i class="pulse" aria-hidden="true"></i>Ahora mismo</span>
@@ -93,13 +106,13 @@
 
       <!-- El cierre del día. Aparece solo al ponerse el sol y sustituye a la
            ventana hasta que se descarta («Ver el día completo»). -->
-      <section class="hidden" id="close-panel">
+      <section class="hidden" id="close-panel" data-card="cierre">
         <vatia-close id="close"></vatia-close>
       </section>
 
       <!-- Tras descartar el cierre queda esta fila, para poder volver a verlo:
            antes se iba hasta la noche siguiente sin manera de recuperarlo. -->
-      <button class="panel glass nav-row hidden" id="reopen-close">
+      <button class="panel glass nav-row hidden" id="reopen-close" data-card="cierre">
         <span class="nav-ico" style="--ico:#c86a48">
           <svg class="i"><use href="#i-calendario"/></svg>
         </span>
@@ -110,7 +123,7 @@
 
       <!-- La ventana de energía gratis: contesta «¿ahora o luego?». Se queda
            vacía —y la tarjeta se esconde— si no hay sensor de previsión solar. -->
-      <section class="panel glass hidden" id="window-panel">
+      <section class="panel glass hidden" id="window-panel" data-card="ventana">
         <vatia-window id="window"></vatia-window>
       </section>
 
@@ -119,7 +132,7 @@
            una respuesta y no una lista: primero cuánto sobra, luego qué hacer
            con ello. En el light DOM y no en un componente porque necesita los
            iconos del sprite, y `<use href="#…">` no cruza el shadow DOM. -->
-      <section class="panel glass hidden" id="advice-panel">
+      <section class="panel glass hidden" id="advice-panel" data-card="ventana">
         <div class="ad-head">
           <span class="ad-title" id="ad-title">Cabe en la ventana</span>
           <span class="ad-aside" id="ad-aside"></span>
@@ -128,7 +141,8 @@
         <p class="ad-note" id="ad-note"></p>
       </section>
 
-      <section class="panel glass tappable" id="summary-panel" role="button" tabindex="0"
+      <section class="panel glass tappable" id="summary-panel" data-card="resumen"
+               role="button" tabindex="0"
                aria-label="Ver el detalle de energía">
         <div class="panel-head">
           <h2>Resumen de energía</h2>
@@ -141,6 +155,15 @@
           Asigna tus sensores de energía diaria en <b>Ajustes → Energía del día</b>.
         </p>
       </section>
+
+      </div><!-- /#home-cards -->
+
+      <!-- Se puede ocultar todo: es tu casa. Pero una pantalla en blanco parece
+           una app rota, así que se dice qué ha pasado y por dónde se deshace. -->
+      <div class="panel glass hidden" id="home-empty">
+        <p class="li-note">Has ocultado todas las tarjetas de esta pantalla.
+          Puedes volver a enseñarlas en <b>Ajustes → Pantalla de inicio</b>.</p>
+      </div>
     </section>
 
     <!-- ============ FLUJO DE ENERGÍA (el día, hora a hora) ============
@@ -566,6 +589,14 @@
           </div>
         </div>
         <div class="panel glass nav-list">
+          <button class="nav-row" data-settings-page="home">
+            <span class="nav-ico" style="--ico:#0a84ff">
+              <svg class="i"><use href="#i-casa"/></svg>
+            </span>
+            <span class="nav-txt"><b>Pantalla de inicio</b>
+              <small id="nav-sub-home">—</small></span>
+            <svg class="i nav-chev"><use href="#i-chevron"/></svg>
+          </button>
           <button class="nav-row" data-settings-page="flows">
             <span class="nav-ico" style="--ico:#5e5ce6">
               <svg class="i"><use href="#i-balance"/></svg>
@@ -675,6 +706,29 @@
          una miniatura de 300 px del Sankey no se lee, y el icono sí dice de un
          vistazo si es un haz de cintas o una casa con satélites. Los rellena
          `pintarGaleria()` a partir del catálogo de `core/flujo.js`. -->
+      <!-- El orden y la visibilidad de las tarjetas de la Home. Lista con
+           flechas y no arrastre: en un móvil, dentro de una página que ya hace
+           scroll vertical, arrastrar pelea con el scroll, hace falta pulsación
+           larga para desambiguar y con teclado o lector de pantalla no hay por
+           dónde cogerlo. Las flechas funcionan en los tres sitios. -->
+      <div class="settings-page" id="sp-home">
+        <header class="nav-head">
+          <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
+          <h1 class="nav-title">Pantalla de inicio</h1>
+          <span class="nav-spacer"></span>
+        </header>
+
+        <div class="panel glass">
+          <p class="li-note" id="home-quien">En qué orden se ven las tarjetas de
+            la pantalla de inicio, y cuáles se ven.</p>
+        </div>
+
+        <p class="gal-estado" id="home-estado"></p>
+        <div class="panel glass">
+          <ul class="cards" id="home-cards-list"></ul>
+        </div>
+      </div>
+
       <div class="settings-page" id="sp-flows">
         <header class="nav-head">
           <button class="icon-btn settings-back" aria-label="Volver a Ajustes">‹</button>
@@ -686,6 +740,7 @@
           <p class="li-note">Qué componente dibuja el caudal en tiempo real, en la
             tarjeta de la pantalla de inicio y en la del día. No son estilos del
             mismo dibujo: cada uno contesta una pregunta distinta.</p>
+          <p class="li-note" id="gal-quien"></p>
         </div>
 
         <p class="gal-estado" id="gal-estado"></p>

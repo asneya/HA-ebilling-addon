@@ -8,6 +8,7 @@ import { on, emit } from "../core/bus.js";
 import { fmtNum } from "../core/format.js";
 import { config, settings, tariffs, reloadConfig } from "../core/config.js";
 import { FLOWS, estiloFlujo } from "../core/flujo.js";
+import { CATALOGO, ordenTarjetas, ocultas } from "../core/tarjetas.js";
 import { showSettingsPage } from "../core/nav.js";
 import { guardando } from "../core/guardando.js";
 import { asegurar, porTipo, opciones, cargadas } from "../core/entidades.js";
@@ -256,6 +257,10 @@ function renderSettingsIndex(s) {
     ? "Desactivado"
     : `Cada ${s.sensor_update_minutes ?? 5} min`;
   $("#nav-sub-flows").textContent = estiloFlujo(s).name;
+  const off = ocultas(s).size;
+  $("#nav-sub-home").textContent = off
+    ? `${CATALOGO.length - off} de ${CATALOGO.length} tarjetas · orden a tu gusto`
+    : "El orden de las tarjetas, a tu gusto";
   const version = config()?.version;
   $("#nav-sub-about").textContent = version ? `Versión ${version}` : "Versión del add-on";
   // «13 de 13 asignados»: el índice tiene que decir si está bien sin entrar.
@@ -474,7 +479,104 @@ const GAL_ART = {
     </svg>`,
 };
 
+/* ---------------- las tarjetas de la Home ---------------- */
+
+/* La lista de Ajustes → Pantalla de inicio: una fila por tarjeta, en su orden,
+   con las flechas para moverla y el interruptor para verla o no. */
+/* Si estas preferencias son solo tuyas o las va a ver toda la casa. Hay que
+   decirlo: cambiar el orden creyendo que es tuyo y descolocárselo a los demás
+   es exactamente el tipo de sorpresa que no se perdona. */
+function quienMira() {
+  const u = config()?.user;
+  const texto = u && u.identificado
+    ? (u.name
+      ? `Solo para ti, ${u.name}: cada persona de Home Assistant tiene lo suyo, y
+         a los demás no les cambia nada.`
+      : `Solo para ti: cada persona de Home Assistant tiene lo suyo, y a los
+         demás no les cambia nada.`)
+    : `Compartido: has entrado sin pasar por Home Assistant, así que no se sabe
+       quién eres y esto lo verá todo el que entre igual. Desde la barra lateral
+       de Home Assistant, es tuyo y de nadie más.`;
+  return texto.replace(/\s+/g, " ").trim();
+}
+
+function pintarTarjetas() {
+  $("#home-quien").textContent = quienMira();
+  const orden = ordenTarjetas(settings());
+  const off = ocultas(settings());
+  const total = orden.length;
+  $("#home-cards-list").innerHTML = orden.map((id, i) => {
+    const t = CATALOGO.find((c) => c.id === id);
+    const oculta = off.has(id);
+    return `<li data-card-row="${esc(id)}" data-off="${oculta ? 1 : 0}">
+      <div class="card-row">
+        <span class="card-ico" style="--ico:${esc(t.color)}">
+          <svg class="i"><use href="#${esc(t.icon)}"/></svg></span>
+        <span class="card-txt"><b>${esc(t.name)}</b><small>${esc(t.claim)}</small></span>
+        <span class="card-move">
+          <button class="up" data-mover="-1" ${i === 0 ? "disabled" : ""}
+                  aria-label="Subir ${esc(t.name)}">
+            <svg class="i"><use href="#i-chevron"/></svg></button>
+          <button class="down" data-mover="1" ${i === total - 1 ? "disabled" : ""}
+                  aria-label="Bajar ${esc(t.name)}">
+            <svg class="i"><use href="#i-chevron"/></svg></button>
+        </span>
+        <input type="checkbox" class="ios-switch" data-card-ver
+               ${oculta ? "" : "checked"}
+               aria-label="Ver ${esc(t.name)} en la pantalla de inicio">
+      </div>
+    </li>`;
+  }).join("");
+}
+
+/* Guarda el orden y lo oculto, y lo aplica sin esperar al servidor: mover una
+   tarjeta tiene que sentirse inmediato. Si el guardado falla se vuelve atrás y
+   se dice por qué, que es lo que hace la galería de flujos. */
+async function guardarTarjetas(orden, off, mensaje) {
+  const s = settings();
+  const antes = { orden: s.home_order, off: s.home_hidden };
+  s.home_order = orden;
+  s.home_hidden = [...off];
+  pintarTarjetas();
+  emit("config", config());
+  $("#home-estado").textContent = "Guardando…";
+  try {
+    await api("settings", {
+      method: "PUT",
+      body: JSON.stringify({ home_order: orden, home_hidden: [...off] }),
+    });
+    await reloadConfig();
+    pintarTarjetas();
+    $("#home-estado").textContent = mensaje;
+  } catch (err) {
+    s.home_order = antes.orden;
+    s.home_hidden = antes.off;
+    pintarTarjetas();
+    emit("config", config());
+    $("#home-estado").textContent = `No se ha podido guardar: ${err.message}`;
+  }
+}
+
+function moverTarjeta(id, paso) {
+  const orden = ordenTarjetas(settings());
+  const i = orden.indexOf(id);
+  const j = i + paso;
+  if (i < 0 || j < 0 || j >= orden.length) return;
+  orden.splice(j, 0, ...orden.splice(i, 1));
+  const t = CATALOGO.find((c) => c.id === id);
+  guardarTarjetas(orden, ocultas(settings()), `Guardado · «${t.name}» en la posición ${j + 1}.`);
+}
+
+function verTarjeta(id, ver) {
+  const off = ocultas(settings());
+  if (ver) off.delete(id); else off.add(id);
+  const t = CATALOGO.find((c) => c.id === id);
+  guardarTarjetas(ordenTarjetas(settings()), off,
+    ver ? `Guardado · «${t.name}» se ve.` : `Guardado · «${t.name}» oculta.`);
+}
+
 function pintarGaleria() {
+  $("#gal-quien").textContent = quienMira();
   const actual = estiloFlujo(settings()).id;
   $("#flow-gallery").innerHTML = FLOWS.map((f) => `
     <button class="gal-tile" role="radio" data-flow-style="${esc(f.id)}"
@@ -753,6 +855,19 @@ $("#flow-gallery").addEventListener("click", (ev) => {
   if (tile) elegirFlujo(tile.dataset.flowStyle);
 });
 
+/* Y lo mismo con la lista de tarjetas, que también se repinta entera. */
+$("#home-cards-list").addEventListener("click", (ev) => {
+  const boton = ev.target.closest("[data-mover]");
+  if (!boton) return;
+  const fila = boton.closest("[data-card-row]");
+  moverTarjeta(fila.dataset.cardRow, Number(boton.dataset.mover));
+});
+$("#home-cards-list").addEventListener("change", (ev) => {
+  const sw = ev.target.closest("[data-card-ver]");
+  if (!sw) return;
+  verTarjeta(sw.closest("[data-card-row]").dataset.cardRow, sw.checked);
+});
+
 /* La capacidad de la batería está en la misma página sin barra de guardar, así
    que se guarda al salir del campo, como el desplegable de abajo. */
 $("#s-battery-kwh").addEventListener("change", async (ev) => {
@@ -808,6 +923,7 @@ on("pagina-ajustes", ({ page }) => {
   if (page === "diagnostics") loadDiagnostics();
   if (page === "influx") renderInfluxState();
   if (page === "flows") { pintarGaleria(); $("#gal-estado").textContent = ""; }
+  if (page === "home") { pintarTarjetas(); $("#home-estado").textContent = ""; }
   // Los sensores se asignan tocando su fila, no rellenando un formulario: la
   // barra de guardar no aplica y cada cambio se guarda solo.
   if (page === "sensors") loadSensors();

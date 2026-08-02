@@ -188,10 +188,31 @@ def _unmask(patch: dict, current: dict) -> None:
                 influx[secret] = current.get("influx", {}).get(secret, "")
 
 
+def _usuario(request: Request) -> str:
+    """Quién está mirando, según Home Assistant.
+
+    El Supervisor añade `X-Remote-User-Id` a todo lo que pasa por Ingress. Se
+    usa el id y no el nombre porque el nombre **no está garantizado**: con un
+    proveedor de autenticación que no sea el de Home Assistant puede no llegar.
+
+    Cadena vacía cuando no hay cabecera —se ha entrado al puerto directamente,
+    o se está desarrollando fuera del Supervisor—: entonces se comparte un
+    único juego de preferencias, que es lo que había antes de esto.
+
+    No sirve como identificación de verdad: el add-on no tiene autenticación
+    propia y la cabecera la puede escribir cualquiera que llegue al puerto. Por
+    eso solo decide gustos, nunca permisos ni acceso a datos.
+    """
+    return request.headers.get("X-Remote-User-Id") or ""
+
+
 @app.get("/api/config")
-async def get_config():
+async def get_config(request: Request):
     config = storage.load()
-    settings = dict(config["settings"])
+    # Los ajustes que ve **esta** persona: los de la casa con sus preferencias
+    # encima. El frontend no tiene que saber cuáles son de quién: lee
+    # `settings.flow_style` como siempre y le llega el suyo.
+    settings = storage.settings_para(config, _usuario(request))
     # No exponer secretos completos al frontend.
     if settings.get("ha_token"):
         settings["ha_token"] = MASKED
@@ -205,13 +226,33 @@ async def get_config():
         "appliances": config["appliances"],
         "supervisor": bool(os.environ.get("SUPERVISOR_TOKEN")),
         "version": _version(),
+        # Quién está mirando, para poder decir en Ajustes si lo que se cambia
+        # ahí es solo suyo o lo va a ver toda la casa. `identificado` en falso
+        # significa que no se ha entrado por Ingress: entonces las preferencias
+        # se comparten y hay que avisar, no fingir que son personales.
+        "user": _ficha_usuario(request),
+    }
+
+
+def _ficha_usuario(request: Request) -> dict[str, Any]:
+    """Cómo llamar a quien mira. El nombre es un adorno; el id es lo que manda.
+
+    Se prefiere el nombre para enseñar (`X-Remote-User-Display-Name`) y se cae al
+    de la cuenta, pero ninguno de los dos está garantizado: con un proveedor de
+    autenticación que no sea el de Home Assistant puede llegar solo el id.
+    """
+    uid = _usuario(request)
+    return {
+        "identificado": bool(uid),
+        "name": (request.headers.get("X-Remote-User-Display-Name")
+                 or request.headers.get("X-Remote-User-Name") or ""),
     }
 
 
 @app.put("/api/settings")
-async def put_settings(patch: dict = Body(...)):
+async def put_settings(request: Request, patch: dict = Body(...)):
     _unmask(patch, storage.load()["settings"])
-    settings = storage.update_settings(patch)
+    settings = storage.update_settings(patch, _usuario(request))
     _cache.clear()
     return {"ok": True, "settings": settings}
 
@@ -233,6 +274,10 @@ async def export_config():
         "settings": config["settings"],
         "tariffs": config["tariffs"],
         "appliances": config["appliances"],
+        # Las preferencias de cada usuario de Home Assistant. Van en la copia
+        # porque restaurar sin ellas devolvería a todo el mundo a la Home por
+        # defecto, y los ids son los mismos si se restaura en el mismo HA.
+        "users": config.get("users") or {},
     }
     return Response(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -260,11 +305,13 @@ async def import_config(payload: dict = Body(...)):
             "se esperaba un objeto con «settings» o «tariffs».",
         )
 
-    resumen = {"settings": 0, "tariffs": 0, "appliances": 0}
+    resumen = {"settings": 0, "tariffs": 0, "appliances": 0, "users": 0}
     if isinstance(settings, dict):
         patch = dict(settings)
         _unmask(patch, storage.load()["settings"])
-        storage.update_settings(patch)
+        # `None`: lo que trae la copia son los ajustes de la casa, incluidos los
+        # valores compartidos de lo que luego cada uno puede personalizar.
+        storage.update_settings(patch, None)
         resumen["settings"] = len(patch)
     if isinstance(tariffs, list):
         # `normalize_tariff` es deliberadamente tolerante (rellena lo que falta
@@ -313,6 +360,15 @@ async def import_config(payload: dict = Body(...)):
         config["appliances"] = buenos
         storage.save(config)
         resumen["appliances"] = len(buenos)
+    usuarios = payload.get("users")
+    if isinstance(usuarios, dict):
+        # Las preferencias de cada uno. `load()` ya criba las claves que no son
+        # de usuario, así que un fichero manipulado no cuela un ajuste de la
+        # casa por aquí.
+        config = storage.load()
+        config["users"] = usuarios
+        storage.save(config)
+        resumen["users"] = len(storage.load().get("users") or {})
     _cache.clear()
     return {"ok": True, "imported": resumen}
 

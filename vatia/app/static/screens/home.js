@@ -9,6 +9,7 @@ import { fmtNum, fmtTemp, fmtEUR } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
 import { estado, titular, montarFlujo } from "../core/flujo.js";
+import { aplicarTarjetas } from "../core/tarjetas.js";
 import { settings } from "../core/config.js";
 
 /* Lo último que ha contado el servidor. Vive aquí y no en un estado global: no
@@ -347,3 +348,11 @@ on("vista", ({ name }) => { if (name === "home") loadLive(); });
 on("datos", () => loadLive());
 // El caudal es un SVG con los colores en atributos: `var()` no llega ahí.
 on("tema", () => { if (live) renderFlow(live); });
+/* El orden de las tarjetas y el componente del caudal son de quien mira, y
+   llegan en la configuración: al recargarla —al entrar, y cada vez que se
+   guarda algo en Ajustes— la Home se recoloca. El caudal se vuelve a montar
+   porque puede haber cambiado de componente. */
+on("config", (cfg) => {
+  aplicarTarjetas(cfg && cfg.settings);
+  if (live) renderFlow(live);
+});

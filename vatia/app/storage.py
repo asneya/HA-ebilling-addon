@@ -49,6 +49,23 @@ _lock = threading.Lock()
 NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power",
                    "energy_counter_kinds")
 
+# Ajustes que son de **quien mira**, no de la casa.
+#
+# Home Assistant dice quién es a través de Ingress (la cabecera
+# `X-Remote-User-Id`), así que dos personas de la misma casa pueden tener la
+# Home en distinto orden y ver el caudal con distinto componente sin pisarse.
+# Todo lo demás —los sensores, las tarifas, InfluxDB— es de la instalación y
+# sigue siendo uno para todos: son datos de la casa, no gustos de nadie.
+#
+# El valor de `DEFAULT_SETTINGS` hace de valor compartido: es lo que ve quien
+# no ha tocado nada, y lo que hereda un usuario nuevo. Así una instalación que
+# venía de antes no nota el cambio.
+#
+# **Esto no es un permiso.** La cabecera solo llega por Ingress y es
+# falsificable por quien alcance el puerto, que por eso no debe exponerse. Vale
+# para personalizar; nunca para decidir quién puede qué.
+PREFS_USUARIO = ("home_order", "home_hidden", "flow_style")
+
 DEFAULT_SETTINGS: dict[str, Any] = {
     # De dónde salen los datos de **toda** la app: la Home, Energía, el flujo y
     # la facturación. Los sensores concretos se eligen en Ajustes → Sensores,
@@ -141,6 +158,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     #   cruz   → <vatia-cross>, el clásico que tenía la app: nodos y cables
     #   orbita → <vatia-orbit>, la casa en el centro y las fuentes alrededor
     "flow_style": "sankey",
+    # Las tarjetas de la pantalla de inicio, en el orden en que se pintan. Es
+    # una preferencia de quien mira (ver `PREFS_USUARIO`), y esto es el orden
+    # que ve quien no la ha tocado: el caudal primero, que es a lo que se
+    # entra; el cierre del día cuando toca; la ventana con su consejo pegado
+    # debajo —primero cuánto sobra, luego qué hacer con ello—; y el resumen.
+    # Las claves que no estén en la lista se pintan detrás, en este mismo
+    # orden, para que una tarjeta nueva no desaparezca de las Homes ya
+    # ordenadas a mano.
+    "home_order": ["ahora", "cierre", "ventana", "resumen"],
+    # Tarjetas que quien mira ha decidido no ver. Ocultar no es apagar: lo que
+    # hay detrás se sigue calculando, porque otras pantallas lo usan.
+    "home_hidden": [],
     # La tarifa contratada («la mía»): el id de una de las tarifas guardadas.
     # La comparativa sigue tratándolas a todas igual; esta solo añade lo que
     # ninguna comparación puede dar, el ahorro del día en euros.
@@ -237,6 +266,10 @@ def _default_config() -> dict[str, Any]:
         "settings": json.loads(json.dumps(DEFAULT_SETTINGS)),
         "tariffs": json.loads(json.dumps(DEFAULT_TARIFFS)),
         "appliances": json.loads(json.dumps(DEFAULT_APPLIANCES)),
+        # Preferencias por usuario de Home Assistant, indexadas por el id que
+        # trae Ingress. Solo lleva las claves que alguien ha tocado: lo que no
+        # está sale de `settings`, que hace de valor compartido.
+        "users": {},
     }
 
 
@@ -289,6 +322,25 @@ def _normalize_tariffs(raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
         except tariffs_mod.TariffError:
             _LOGGER.warning("Tarifa inválida ignorada: %s", raw.get("name"), exc_info=True)
     return normalized
+
+
+def _normalize_users(raw: Any) -> dict[str, dict[str, Any]]:
+    """Las preferencias por usuario, con solo las claves que son de usuario.
+
+    Se criba al leer y no al escribir: un fichero editado a mano —que se puede,
+    vive en `/addon_configs/` para eso— no debe poder colar un ajuste de la
+    casa dentro del cajón de una persona, donde nadie lo encontraría después.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for uid, prefs in raw.items():
+        if not isinstance(prefs, dict):
+            continue
+        limpio = {k: v for k, v in prefs.items() if k in PREFS_USUARIO}
+        if limpio:
+            out[str(uid)] = limpio
+    return out
 
 
 def _read(path: str) -> dict[str, Any] | None:
@@ -348,6 +400,7 @@ def load() -> dict[str, Any]:
             "settings": settings,
             "tariffs": _normalize_tariffs(config.get("tariffs", defaults["tariffs"])),
             "appliances": _normalize_appliances(config.get("appliances", [])),
+            "users": _normalize_users(config.get("users")),
         }
         if path != CONFIG_PATH:
             # Se ha adoptado de otro sitio: se guarda ya en el suyo para no
@@ -412,16 +465,49 @@ def save(config: dict[str, Any]) -> None:
         _write(config)
 
 
-def update_settings(patch: dict[str, Any]) -> dict[str, Any]:
+def settings_para(config: dict[str, Any], usuario: str) -> dict[str, Any]:
+    """Los ajustes tal y como los ve `usuario`: los de la casa, con lo suyo encima.
+
+    Devuelve una copia. Quien no haya tocado nada —o quien entre sin Ingress, y
+    entonces `usuario` es la cadena vacía— ve exactamente los de la casa, que es
+    lo que se veía antes de que esto existiera.
+    """
+    settings = dict(config["settings"])
+    settings.update((config.get("users") or {}).get(usuario) or {})
+    return settings
+
+
+def update_settings(patch: dict[str, Any], usuario: str | None = "") -> dict[str, Any]:
+    """Guarda el parche y devuelve los ajustes como los ve `usuario`.
+
+    El parche se parte en dos: lo que es de quien mira va a su cajón y lo demás
+    a los ajustes de la casa. Así el frontend guarda igual que siempre, sin
+    saber de quién es cada clave, y no hay dos maneras de guardar un ajuste.
+
+    ``usuario=None`` lo manda todo a los ajustes de la casa, sin partir. Es lo
+    que necesita restaurar una copia de seguridad: lo que trae el fichero son
+    los valores compartidos, y meterlos en el cajón de nadie los dejaría fuera
+    del alcance de quien sí entra identificado.
+    """
     config = load()
     settings = config["settings"]
+    prefs = (
+        {} if usuario is None
+        else config.setdefault("users", {}).setdefault(usuario, {})
+    )
     for key, value in patch.items():
-        if key in NESTED_SETTINGS and isinstance(value, dict):
+        if usuario is not None and key in PREFS_USUARIO:
+            prefs[key] = value
+        elif key in NESTED_SETTINGS and isinstance(value, dict):
             settings.setdefault(key, {}).update(value)
         else:
             settings[key] = value
+    if usuario is not None and not prefs:
+        # Sin nada dentro no se deja el cajón vacío: ensucia el fichero y
+        # confunde a quien lo abre a mano.
+        config["users"].pop(usuario, None)
     save(config)
-    return settings
+    return settings_para(config, usuario or "")
 
 
 def add_tariff(tariff: dict[str, Any]) -> dict[str, Any]:
