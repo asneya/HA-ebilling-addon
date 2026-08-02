@@ -182,6 +182,19 @@ async def _ha_live_tail(
 # ---------------------------------------------------------------------------
 
 
+def _ids(entity: str) -> tuple[str, str]:
+    """Las dos formas del `entity_id`, porque InfluxDB guarda una y HA usa otra.
+
+    La integración de InfluxDB de Home Assistant escribe la etiqueta `entity_id`
+    con el **object_id pelado**: `grid_import`, no `sensor.grid_import`. Una
+    consulta que pregunte por el id completo no encuentra nada — ni un error, ni
+    una fila: nada. Se piden las dos y así vale igual si alguien tiene la base
+    escrita de otra manera.
+    """
+    corto = entity.split(".", 1)[1] if "." in entity else entity
+    return corto, entity
+
+
 async def influx_hourly_consumption(
     settings: dict[str, Any], start: datetime, end: datetime, tz, entity: str
 ) -> list[dict[str, Any]]:
@@ -208,7 +221,8 @@ async def _influx_v1_hourly(
         f"WHERE time >= '{start.isoformat()}' AND time < '{end.isoformat()}'"
     )
     if entity:
-        query += f" AND \"entity_id\" = '{entity}'"
+        corto, largo = _ids(entity)
+        query += f" AND (\"entity_id\" = '{corto}' OR \"entity_id\" = '{largo}')"
     query += " GROUP BY time(1h) fill(previous)"
 
     params = {"db": influx.get("database") or "homeassistant", "q": query}
@@ -238,8 +252,10 @@ async def _influx_v2_hourly(
     bucket = influx.get("database") or "homeassistant"
     measurement = influx.get("measurement") or "kWh"
     entity = influx.get("entity_id") or ""
+    corto, largo = _ids(entity)
     entity_filter = (
-        f' and r["entity_id"] == "{entity}"' if entity else ""
+        f' and (r["entity_id"] == "{corto}" or r["entity_id"] == "{largo}")'
+        if entity else ""
     )
     flux = f"""
 from(bucket: "{bucket}")
@@ -483,18 +499,73 @@ async def get_hourly_consumption(
     energia = settings.get("energy_sensors") or {}
     clave = "grid_export_energy" if kind == "export" else "grid_import_energy"
     entity = (energia.get(clave) or "").strip()
-    if kind == "export" and not entity:
-        return []
+    if not entity:
+        if kind == "export":
+            return []
+        raise SourceError(
+            "Falta el contador de energía importada de la red: "
+            "elígelo en Ajustes → Sensores."
+        )
 
-    serie = await ha_hourly_consumption(settings, start, end, tz, entity)
-    if serie or not (settings.get("influx") or {}).get("url"):
-        return serie
-    # Las estadísticas horarias de Home Assistant no se purgan, así que lo
-    # normal es que respondan. Vacío significa que el contador nunca las generó
-    # —le falta `state_class`, o se excluyó del recorder—, y entonces el mismo
-    # `entity_id` en InfluxDB sí tiene la serie: es de donde venían los datos de
-    # quien tenía InfluxDB como fuente antes de unificarla.
+    # Si Home Assistant no contesta, esto **no** es el final del camino: puede
+    # haber un InfluxDB con la misma serie. Antes el error salía disparado de
+    # aquí y el respaldo no llegaba a intentarse.
+    serie: list[dict[str, Any]] = []
+    fallo_ha: Exception | None = None
     try:
-        return await influx_hourly_consumption(settings, start, end, tz, entity)
-    except SourceError:
+        serie = await ha_hourly_consumption(settings, start, end, tz, entity)
+    except (SourceError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+        fallo_ha = err
+    if serie:
         return serie
+
+    # Las estadísticas horarias de Home Assistant no se purgan, así que lo normal
+    # es que respondan. Vacío significa que el contador nunca las generó —le falta
+    # `state_class`, o se excluyó del recorder—, y entonces el mismo `entity_id`
+    # en InfluxDB sí tiene la serie.
+    influx = settings.get("influx") or {}
+    if not (influx.get("url") or "").strip():
+        if fallo_ha is not None:
+            # Sin respaldo y con HA caído, la causa es esa y hay que decirla: un
+            # cero en la factura y un error son cosas muy distintas.
+            raise SourceError(f"Home Assistant no ha dado los datos: {fallo_ha}")
+        _LOGGER.warning(
+            "Sin datos de facturación (%s): «%s» no tiene estadísticas horarias en "
+            "Home Assistant y no hay InfluxDB configurado de donde sacarlas. "
+            "Comprueba que el sensor tenga `state_class: total` o "
+            "`total_increasing`, o configura InfluxDB en Ajustes.",
+            kind, entity,
+        )
+        return serie
+    try:
+        respaldo = await influx_hourly_consumption(settings, start, end, tz, entity)
+    except SourceError as err:
+        # Que no se quede en un vacío mudo: es lo que hacía imposible saber por
+        # qué la facturación no traía nada teniendo la conexión establecida.
+        _LOGGER.warning(
+            "Sin datos de facturación (%s): «%s» no tiene estadísticas en Home "
+            "Assistant y el respaldo de InfluxDB ha fallado: %s",
+            kind, entity, err,
+        )
+        return serie
+    if not respaldo and fallo_ha is not None:
+        raise SourceError(
+            f"Home Assistant no ha dado los datos ({fallo_ha}) y en InfluxDB no hay "
+            f"ninguna fila para «{entity}» en la medida "
+            f"«{influx.get('measurement') or 'kWh'}»."
+        )
+    if not respaldo:
+        _LOGGER.warning(
+            "Sin datos de facturación (%s): «%s» no tiene estadísticas en Home "
+            "Assistant, y en InfluxDB no hay ninguna fila con ese entity_id en la "
+            "medida «%s» de la base «%s». Revisa que la medida sea la **unidad** "
+            "del contador (kWh, Wh…) en Ajustes → InfluxDB.",
+            kind, entity, influx.get("measurement") or "kWh",
+            influx.get("database") or "homeassistant",
+        )
+    else:
+        _LOGGER.info(
+            "Facturación (%s): «%s» sin estadísticas en Home Assistant, %d horas "
+            "servidas desde InfluxDB.", kind, entity, len(respaldo),
+        )
+    return respaldo
