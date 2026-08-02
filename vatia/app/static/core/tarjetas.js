@@ -39,6 +39,13 @@ export const CATALOGO = [
     color: "#30d158",
   },
   {
+    id: "plan",
+    name: "El plan de hoy",
+    claim: "A qué hora sale más barato cada electrodoméstico",
+    icon: "i-reloj",
+    color: "#5e5ce6",
+  },
+  {
     id: "resumen",
     name: "Resumen de energía",
     claim: "Lo generado y lo consumido hoy, por origen y destino",
