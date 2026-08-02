@@ -17,6 +17,9 @@ import { $ } from "./core/dom.js";
 import { reloadConfig } from "./core/config.js";
 import { currentView } from "./core/nav.js";
 import "./core/theme.js";
+// Acuse de recibo instantáneo al pulsar una pestaña. Va aquí, suelto: se
+// engancha al documento y ninguna pantalla tiene que saber de él.
+import "./core/pulsado.js";
 
 import { loadLive } from "./screens/home.js";
 import "./screens/flow.js";

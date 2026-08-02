@@ -12,13 +12,12 @@
  * la lógica de reparto y el diagrama no cambian». Y no cambian: el reparto de
  * cada muestra lo hace el servidor con la misma función que la tarjeta de la Home.
  *
- * Dos cosas que el prototipo no podía tener y la realidad exige:
- *   · una pastilla «Ahora», porque con datos de verdad hay un presente al que
- *     volver, y perderlo tras arrastrar era quedarse sin la lectura principal;
- *   · reproducir da la vuelta al llegar a *ahora* y no a las 24 h: del futuro no
- *     hay medidas, y animar una pantalla vacía no cuenta nada.
+ * Lo único que el prototipo no podía tener y la realidad exige es el camino de
+ * vuelta: con datos de verdad hay un presente al que volver, y perderlo tras
+ * arrastrar era quedarse sin la lectura principal. De ahí el botón «Volver a
+ * ahora», que además, apagándose, dice sin más etiquetas dónde está la lectura.
  */
-import { $, $$ } from "../core/dom.js";
+import { $ } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on } from "../core/bus.js";
 import { nf4 } from "../core/format.js";
@@ -30,10 +29,7 @@ import {
 import { settings } from "../core/config.js";
 
 /* El día servido por /api/flowday y dónde está puesta la lectura. */
-const st = { dia: null, i: 0, tocando: false, reloj: null, cargando: false };
-
-const PASO_H = 0.14;        // lo que avanza cada tic, como el diseño
-const TIC_MS = 45;
+const st = { dia: null, i: 0, tocando: false, cargando: false };
 
 /* ------------- carga ------------- */
 
@@ -94,7 +90,10 @@ function pintar() {
   const precio = d.price[i];
   const precioExc = d.surplus_price[i];
 
-  $("#f-clock").textContent = `Ahora · ${d.x[i].slice(11, 16)}`;
+  // «Ahora» solo cuando de verdad lo es: arrastrado a las nueve de la mañana,
+  // el reloj decía «Ahora · 09:00» y contradecía a la pantalla entera.
+  const presente = i === indiceAhora();
+  $("#f-clock").textContent = `${presente ? "Ahora" : "Hoy"} · ${d.x[i].slice(11, 16)}`;
   $("#f-hour").value = String(horaDe(i).toFixed(1));
   // Antes de cualquier salida: las pastillas marcan *dónde está la lectura*, y
   // en una hora sin medidas hay que marcarla igual. Con esto al final, arrastrar
@@ -241,56 +240,25 @@ function dibujarFranja() {
 
 /* ------------- controles ------------- */
 
+/* El botón de volver: se apaga cuando ya se está en el presente, que además es
+   la manera de decir «estás mirando ahora mismo» sin una etiqueta más. */
 function chips() {
-  const ahora = indiceAhora();
-  $$(".f-chip").forEach((b) => {
-    const cerca = b.dataset.hour === "now"
-      ? st.i === ahora
-      : Math.abs(horaDe(st.i) - Number(b.dataset.hour)) < 0.35;
-    b.classList.toggle("active", cerca);
-  });
+  $("#f-now").disabled = st.i === indiceAhora();
 }
 
 function irA(i) {
-  parar();
   st.i = Math.min(st.dia.x.length - 1, Math.max(0, i));
   pintar();
 }
 
-function parar() {
-  if (st.reloj) { clearInterval(st.reloj); st.reloj = null; }
-  $("#f-play").classList.remove("playing");
-  $("#f-play-txt").textContent = "Ver el día entero";
-  $("#f-play").querySelector(".f-play-ico").textContent = "▶";
-}
-
-function reproducir() {
-  if (st.reloj) { parar(); return; }
-  const hasta = indiceAhora();
-  const porHora = 60 / (st.dia.step_min || 5);
-  const salto = Math.max(1, Math.round(PASO_H * porHora));
-  // Empieza por el principio del día si ya estamos en el presente: si no,
-  // reproducir desde «ahora» daría media vuelta vacía antes de contar nada.
-  if (st.i >= hasta) st.i = 0;
-  $("#f-play").classList.add("playing");
-  $("#f-play-txt").textContent = "Pausar el día";
-  $("#f-play").querySelector(".f-play-ico").textContent = "❚❚";
-  st.reloj = setInterval(() => {
-    st.i = st.i + salto > hasta ? 0 : st.i + salto;
-    pintar();
-  }, TIC_MS);
-}
-
 $("#flow-back").addEventListener("click", () => showView("home"));
-$("#f-play").addEventListener("click", reproducir);
 $("#f-hour").addEventListener("input", (e) => {
   if (!st.dia) return;
   irA(indiceDe(parseFloat(e.target.value)));
 });
-$$(".f-chip").forEach((b) => b.addEventListener("click", () => {
-  if (!st.dia) return;
-  irA(b.dataset.hour === "now" ? indiceAhora() : indiceDe(Number(b.dataset.hour)));
-}));
+$("#f-now").addEventListener("click", () => {
+  if (st.dia) irA(indiceAhora());
+});
 
 /* Arrastre directo sobre la franja del día, que es lo que se intenta hacer al
    verla: el diseño lo pide para producción y no solo el deslizador. */
@@ -312,12 +280,7 @@ $("#f-daystrip").addEventListener("pointercancel", () => { st.tocando = false; }
 
 /* ------------- lo que esta pantalla escucha ------------- */
 
-on("vista", ({ name }) => {
-  if (name === "flow") { cargar(); return; }
-  // Al salir se para el reloj: un intervalo animando una pantalla que no se ve
-  // es trabajo tirado, y en el móvil se nota en la batería.
-  parar();
-});
+on("vista", ({ name }) => { if (name === "flow") cargar(); });
 on("datos", () => { if (st.dia) st.dia = null; });
 on("tema", () => { if (st.dia) pintar(); });
 

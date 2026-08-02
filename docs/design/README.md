@@ -18,3 +18,9 @@ para leerlos, se leen.
 Implementado en la 0.37.0. Las desviaciones deliberadas respecto a la maqueta
 están anotadas en el `CHANGELOG.md` de esa versión y en los comentarios de
 `vatia/app/static/components/vatia-flow.js`.
+
+En la **0.46.0** se retiraron dos controles que la maqueta sí trae: los chips de
+hora (`Amanecer`, `Mediodía`, `Tarde`, `Noche`) y el botón `Ver el día entero`
+que animaba la jornada. Con datos reales el deslizador los deja sin oficio: las
+franjas caen en horas arbitrarias y la animación se mira una vez. Del bloque
+queda solo el camino de vuelta, `Volver a ahora`, dentro de la tarjeta del día.
