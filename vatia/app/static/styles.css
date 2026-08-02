@@ -1126,6 +1126,12 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .srow.down .srow-dot { background: var(--bad); }
 .srow.empty .srow-dot { background: var(--warn); }
 .srow.optional.empty .srow-dot { background: var(--ink-3); opacity: .5; }
+/* Un sensor que responde y mide otra cosa. Va en ámbar y no en rojo: no está
+   roto —ése es justo el problema—, está mal elegido. Gana a la regla de
+   «opcional», que si no lo dejaría gris apagado. */
+.srow.mal-elegido .srow-dot,
+.srow.optional.mal-elegido .srow-dot { background: var(--warn); opacity: 1; }
+.srow-warn { margin: -4px 0 10px; padding-left: 18px; color: var(--warn); }
 /* La fila sin asignar se tiñe, para que no pase por configurada. */
 .srow.empty:not(.optional) { background: var(--warn-chip); }
 

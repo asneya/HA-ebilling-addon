@@ -2,6 +2,42 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.47.0
+
+### Sungrow: dejar de deducir lo que el inversor ya mide
+
+Leyendo el protocolo Modbus de los híbridos residenciales de Sungrow salen dos
+cosas, y las dos tocan de lleno los fallos del resumen de este mes.
+
+**La trampa, y que Vatia la recomendaba.** Sungrow no publica ningún contador
+del consumo total de la casa en kWh: solo `Load power`, en vatios. Lo que sí
+publica es el registro 13017, «Daily direct energy consumption», que suena a
+consumo y es el **autoconsumo**: lo que la casa toma del sol, sin nada de lo
+comprado. Ése es el sensor que costó tres versiones detectar.
+
+Y no era mala suerte: la casilla del consumo buscaba candidatos con la pista
+«consum», que casa con `daily_direct_energy_consumption`, así que **la aplicación
+lo proponía**. El fallo del resumen empezaba en la propia pantalla de
+configuración. Ya no se propone, y si está puesto la fila sale marcada en ámbar
+explicando qué mide en realidad y qué hacer en su lugar.
+
+**Lo que se puede aprovechar.** El inversor mide, además de los totales, la
+parte de cada uno que puso el sol: cuánto de la carga de la batería (13012) y
+cuánto de lo vertido (13005). Con esas dos cifras, las dos que a Vatia más le
+ha costado deducir salen de una resta entre medidas:
+
+    red → batería  = lo cargado − lo cargado por el sol
+    batería → red  = lo vertido − lo vertido por el sol
+
+Hay dos casillas nuevas y opcionales para ellas, en Batería y en Red. No
+arreglan ningún hueco —sin ellas todo sigue igual—: **sustituyen una deducción
+por una medida**, justo en la parte del reparto que más veces ha estado mal. Se
+siguen aplicando los topes de la 0.46.1, así que un sensor mal elegido no puede
+inventarse generación.
+
+En `DOCS.md` hay ahora una tabla con la correspondencia completa entre las
+casillas de Vatia y las entidades de la integración Modbus de Sungrow.
+
 ## 0.46.3
 
 ### El arreglo de la barra lateral, esta vez de verdad

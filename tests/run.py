@@ -65,6 +65,18 @@ INSTANCIAS = {
     8412: "roles",
 }
 
+# Instancias a las que **no** se les piden datos al arrancar, cada una por su
+# motivo:
+#
+#  · 8321 (`captura`) está solo para servir `/static` a las páginas de los
+#    bancos de componentes; su fixture no apunta a ningún Home Assistant.
+#  · 8408 (`sesgo`) la necesita virgen: `sesgoapi.py` borra el histórico
+#    aprendido y comprueba que la aplicación lo vuelve a construir, y esa
+#    anotación va limitada a una vez cada media hora. Si alguien pide
+#    `/api/live` antes que el banco, la anotación ya se ha gastado y el
+#    histórico se queda borrado.
+SIN_SONDA_DE_DATOS = {8321, 8408}
+
 # El servidor de ficheros de los bancos que cargan una página propia.
 PUERTO_FICHEROS = 8320
 
@@ -221,8 +233,18 @@ def levantar(trabajo: Path) -> bool:
         print(f"No levantaron los servidores de mentira {caidos}", file=sys.stderr)
         colas()
         return False
-    if caidos := esperar(list(INSTANCIAS), ruta="/api/config"):
-        print(f"Las instancias {caidos} escuchan pero no contestan", file=sys.stderr)
+    # `/api/live` y no `/api/config`: la configuración se sirve de un fichero
+    # y contesta aunque la aplicación no pueda hablar con su Home Assistant
+    # de mentira. Es el camino de los datos el que hay que probar, que es el
+    # que usan casi todos los bancos.
+    con_datos = [p for p in INSTANCIAS if p not in SIN_SONDA_DE_DATOS]
+    if caidos := esperar(con_datos, ruta="/api/live"):
+        print(f"Las instancias {caidos} escuchan pero no sirven datos",
+              file=sys.stderr)
+        colas()
+        return False
+    if caidos := esperar(sorted(SIN_SONDA_DE_DATOS), ruta="/api/config"):
+        print(f"Las instancias {caidos} no contestan", file=sys.stderr)
         colas()
         return False
     return True
@@ -306,6 +328,7 @@ def main() -> int:
         shutil.rmtree(trabajo, ignore_errors=True)
 
     if rojos:
+        colas(12)
         print(f"{len(rojos)} en rojo: {', '.join(rojos)}")
         return 1
     print("REGRESIÓN EN VERDE")

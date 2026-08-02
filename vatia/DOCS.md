@@ -216,6 +216,52 @@ medido, los orígenes (solar, batería, red) se reparten hasta cubrir exactament
 ese total, así que los porcentajes siempre suman 100 %. Es el mismo cálculo en la
 Home y en la pantalla de Energía.
 
+### Si tienes un Sungrow
+
+Los híbridos residenciales de Sungrow, con la
+[integración Modbus de mkaiser](https://github.com/mkaiser/Sungrow-SHx-Inverter-Modbus-Home-Assistant),
+publican todo lo que Vatia necesita. La correspondencia:
+
+| Casilla de Vatia | Entidad | Registro |
+|---|---|---|
+| Solar · energía del día | `sensor.daily_pv_generation` | 13002 |
+| Red · energía importada | `sensor.daily_imported_energy` | 13036 |
+| Red · energía exportada | `sensor.daily_exported_energy` | 13045 |
+| Batería · energía cargada | `sensor.daily_battery_charge` | 13040 |
+| Batería · energía descargada | `sensor.daily_battery_discharge` | 13026 |
+| Casa · consumo instantáneo | `sensor.load_power` | 13008 |
+| Batería · estado de carga | `sensor.battery_level` | 13023 |
+
+Y dos opcionales que **sustituyen una deducción por una medida**:
+
+| Casilla de Vatia | Entidad | Registro |
+|---|---|---|
+| De la carga, lo que puso el sol | `sensor.daily_battery_charge_from_pv` | 13012 |
+| De lo exportado, lo que puso el sol | `sensor.daily_exported_energy_from_pv` | 13005 |
+
+Con esas dos, «cuánto de la carga de la batería vino de la red» y «cuánto de lo
+vertido salió de la batería» dejan de deducirse: salen de restar dos medidas del
+propio inversor. Es justo la parte del reparto que más veces ha estado mal, así
+que si las tienes, ponlas.
+
+#### Ojo con el «consumo directo»
+
+**Sungrow no publica ningún contador del consumo total de la casa en kWh.** Solo
+da `Load power` en vatios. Lo que sí publica es
+`sensor.daily_direct_energy_consumption` (registro 13017), que suena a consumo y
+**no lo es**: es el *autoconsumo*, lo que la casa toma del sol, sin nada de lo
+que se compra a la red.
+
+Es un sensor traicionero porque los días sin importar cuadra casi exacto y solo
+se despega cuando compras algo. Puesto en la casilla del consumo de la casa,
+hace que el resumen atribuya a la batería toda la importación que ese sensor no
+ve. Vatia ya no lo propone y avisa si lo encuentra puesto, pero conviene saberlo.
+
+Deja la casilla del consumo **vacía** —Vatia lo deduce del balance de los otros
+cinco contadores— o crea un contador de verdad integrando `Load power` con el
+[helper de suma de Riemann](https://www.home-assistant.io/integrations/integration/)
+de Home Assistant.
+
 ## Pantalla «Energía»
 
 Se abre pulsando el **resumen de energía** de la Home.

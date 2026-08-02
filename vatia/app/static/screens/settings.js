@@ -86,6 +86,9 @@ function sensorRow(r) {
   if (!r.entity) clases.push("empty");
   else if (!r.responds) clases.push("down");
   if (r.optional) clases.push("optional");
+  // Un sensor que responde perfectamente y mide otra cosa. Se marca aparte de
+  // «caído» porque el problema es el contrario: funciona, y por eso engaña.
+  if (r.warning) clases.push("mal-elegido");
 
   // Segunda línea: la entidad y su lectura, que es lo que permite comprobar de
   // un vistazo que la casilla tiene el sensor correcto y no otro parecido.
@@ -114,7 +117,15 @@ function sensorRow(r) {
       <span class="srow-txt"><b>${esc(r.label)}</b><small>${esc(sub)}</small></span>
       ${r.entity ? `<svg class="i nav-chev"><use href="#i-chevron"/></svg>`
                  : `<button type="button" class="srow-assign">Asignar</button>`}
-    </div>`;
+    </div>
+    ${r.warning ? `<p class="li-note srow-warn">${negrita(r.warning)}</p>` : ""}`;
+}
+
+/* Los avisos del servidor traen **negritas** para señalar la palabra que
+   importa. Se convierten aquí, escapando primero: el texto es nuestro, pero
+   lleva dentro el `entity_id` que ha elegido el usuario. */
+function negrita(texto) {
+  return esc(texto).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
 }
 
 /* Hoja de asignación: primero los candidatos y detrás la lista entera, por si
