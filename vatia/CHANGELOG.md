@@ -2,6 +2,30 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.44.1
+
+### Vatia en la barra lateral de todos, no solo de los administradores
+
+Por defecto, el Supervisor solo enseña el panel de un add-on a los usuarios
+administradores (`panel_admin: true`). Vatia cuenta lo que gasta la casa y a qué
+hora conviene poner la lavadora: eso le sirve a quien vive en ella, tenga o no
+permisos para administrar Home Assistant. Y desde la 0.42 cada persona tiene su
+propio orden de tarjetas y su propio diagrama de caudal, que solo tiene sentido
+si puede entrar.
+
+Nada más cambia: la app habla con Home Assistant por el token del Supervisor, no
+por el de quien mira, así que un usuario sin permisos ve exactamente los mismos
+datos y con la misma frescura.
+
+**Lo que hay que saber antes de actualizar.** El add-on no tiene autenticación
+propia: dentro está todo el mundo por igual. Con el panel abierto a todos,
+cualquier usuario de Home Assistant puede además **cambiar los ajustes de la
+casa** —los sensores, las tarifas, la conexión a InfluxDB— y **descargar la copia
+de seguridad**, que lleva las credenciales de InfluxDB en claro (y el token de
+Home Assistant, si se ha configurado uno a mano para usar la app fuera del
+Supervisor). Con esto puesto, el panel es para gente de confianza. Si en tu casa
+hay cuentas que no deberían tocar nada, dilo y se añade un modo de solo lectura.
+
 ## 0.44.0
 
 ### El plan de hoy: a qué hora poner cada cosa
