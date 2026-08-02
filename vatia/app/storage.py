@@ -12,6 +12,7 @@ import logging
 import os
 import threading
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import tariffs as tariffs_mod
@@ -61,10 +62,49 @@ NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power
 # no ha tocado nada, y lo que hereda un usuario nuevo. Así una instalación que
 # venía de antes no nota el cambio.
 #
-# **Esto no es un permiso.** La cabecera solo llega por Ingress y es
-# falsificable por quien alcance el puerto, que por eso no debe exponerse. Vale
-# para personalizar; nunca para decidir quién puede qué.
-PREFS_USUARIO = ("home_order", "home_hidden", "flow_style")
+# Esta lista es además **la frontera de los permisos**: quien no es
+# administrador puede escribir esto y nada más. La apariencia entró aquí por
+# eso: el tema era de la casa, y dejar que lo tocara quien no administra —que es
+# lo razonable, es su pantalla— se lo habría cambiado a todo el mundo. Así la
+# regla cabe en una frase: **puedes escribir lo tuyo y nada más**.
+#
+# Y lo de siempre sobre de dónde sale la identidad: la cabecera solo llega por
+# Ingress, donde la pone Home Assistant, pero la puede escribir cualquiera que
+# alcance el puerto directamente. Los roles valen dentro de Ingress; el puerto
+# sigue sin poder exponerse.
+PREFS_USUARIO = ("home_order", "home_hidden", "flow_style",
+                 "theme", "dynamic_background")
+
+# Lo que se sabe de cada persona que ha entrado. No son gustos: es el registro
+# de quién es quién, y por eso lo edita un administrador y no el propio
+# interesado.
+FICHA_USUARIO = ("role", "name", "first_seen", "last_seen")
+CLAVES_USUARIO = PREFS_USUARIO + FICHA_USUARIO
+
+# `admin` toca los ajustes de la casa; `viewer` solo mira y se configura lo
+# suyo. No hay más: tres roles serían dos más de los que una casa necesita.
+ROLES = ("admin", "viewer")
+ROL_POR_DEFECTO = "viewer"
+
+# Con qué rol se reconoce a quien entra por primera vez. Se elige en las
+# opciones del add-on, en la pestaña de Configuración de Home Assistant, porque
+# ahí solo llega un administrador de Home Assistant: es el único sitio desde el
+# que se puede arrancar el sistema de permisos sin que sea el propio permiso lo
+# que haga falta para llegar.
+#
+#   primero → el primero que entra es administrador y el resto, no. Lo normal.
+#   admin   → todo el que entra es administrador (una casa de plena confianza,
+#             o para repartir permisos deprisa y volver a «primero» después).
+#   viewer  → nadie es administrador por entrar. Para cerrar la puerta cuando
+#             ya están repartidos los permisos.
+ARRANQUES = ("primero", "admin", "viewer")
+
+
+def arranque() -> str:
+    """El rol de bienvenida configurado en las opciones del add-on."""
+    valor = (os.environ.get("VATIA_FIRST_USER_ROLE") or "").strip().lower()
+    return valor if valor in ARRANQUES else "primero"
+
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     # De dónde salen los datos de **toda** la app: la Home, Energía, el flujo y
@@ -337,7 +377,12 @@ def _normalize_users(raw: Any) -> dict[str, dict[str, Any]]:
     for uid, prefs in raw.items():
         if not isinstance(prefs, dict):
             continue
-        limpio = {k: v for k, v in prefs.items() if k in PREFS_USUARIO}
+        limpio = {k: v for k, v in prefs.items() if k in CLAVES_USUARIO}
+        # Un rol que no existe es un rol que no vale. El fichero se puede editar
+        # a mano y `role: "superadmin"` no puede acabar dando permisos por no
+        # ser ninguno de los dos que hay.
+        if limpio.get("role") not in ROLES:
+            limpio.pop("role", None)
         if limpio:
             out[str(uid)] = limpio
     return out
@@ -368,6 +413,16 @@ def _read(path: str) -> dict[str, Any] | None:
 
 def load() -> dict[str, Any]:
     with _lock:
+        return _cargar()
+
+
+def _cargar() -> dict[str, Any]:
+    """`load()` sin tomar el candado, para poder usarlo desde dentro.
+
+    `_lock` es un `threading.Lock` y no es reentrante: llamar a `load()` desde
+    una función que ya lo tiene cogido se queda ahí colgado para siempre.
+    """
+    if True:
         config = None
         for candidate in (CONFIG_PATH, *LEGACY_PATHS):
             config = _read(candidate)
@@ -475,6 +530,157 @@ def settings_para(config: dict[str, Any], usuario: str) -> dict[str, Any]:
     settings = dict(config["settings"])
     settings.update((config.get("users") or {}).get(usuario) or {})
     return settings
+
+
+# Cada cuánto se refresca en disco la última visita. La Home pide `/api/live`
+# cada veinte segundos: sin esto, «quién ha entrado» costaría una escritura del
+# fichero de configuración cada veinte segundos y por persona.
+_REFRESCO_VISITA_S = 300
+
+
+def _hace_un_rato() -> str:
+    return (datetime.now(timezone.utc)
+            - timedelta(seconds=_REFRESCO_VISITA_S)).replace(microsecond=0).isoformat()
+
+
+def hay_admin(config: dict[str, Any]) -> bool:
+    return any(
+        (ficha or {}).get("role") == "admin"
+        for ficha in (config.get("users") or {}).values()
+    )
+
+
+def rol_de(config: dict[str, Any], usuario: str) -> str:
+    """El rol de quien mira. Sin identificar, `viewer`.
+
+    Quien entra por el puerto directamente —sin Ingress, y entonces `usuario` es
+    la cadena vacía— no es nadie, así que no manda: si no, saltarse los permisos
+    sería tan fácil como no mandar la cabecera.
+    """
+    if not usuario:
+        return ROL_POR_DEFECTO
+    ficha = (config.get("users") or {}).get(usuario) or {}
+    return ficha.get("role") or ROL_POR_DEFECTO
+
+
+def visto(usuario: str, nombre: str = "") -> dict[str, Any]:
+    """Apunta que esta persona ha entrado y devuelve su ficha.
+
+    Es donde se reparte el rol de bienvenida, una sola vez por persona: en
+    cuanto tiene uno, no se vuelve a tocar aquí —cambiarlo es cosa de un
+    administrador desde Ajustes—.
+
+    **Nunca se puede quedar la casa sin administrador.** Si no hay ninguno, el
+    siguiente que entre lo es, diga lo que diga el arranque configurado. Es la
+    red de seguridad que hace imposible el bloqueo: sin ella, poner el arranque
+    en «viewer» antes de nombrar a nadie dejaría la sección de usuarios
+    inalcanzable para siempre, y con ella la única salida sería reinstalar.
+    """
+    if not usuario:
+        return {"role": ROL_POR_DEFECTO}
+    ahora = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    with _lock:
+        config = _cargar()
+        usuarios = config.setdefault("users", {})
+        ficha = usuarios.setdefault(usuario, {})
+        nuevo = "role" not in ficha
+        # Se llama en cada petición para que el alta ocurra al primer contacto,
+        # sea cual sea: si solo se hiciera en `/api/config`, quien empezara por
+        # otra ruta se encontraría sin rol y sin manera de tenerlo. Pero
+        # escribir el fichero en cada petición sería absurdo, así que solo se
+        # guarda cuando hay algo nuevo que guardar.
+        fresco = (ficha.get("last_seen") or "") > _hace_un_rato()
+        if not nuevo and fresco and (not nombre or ficha.get("name") == nombre):
+            ficha["last_seen"] = ahora
+            return dict(ficha)
+        if nuevo:
+            ficha["first_seen"] = ahora
+            modo = arranque()
+            if modo == "admin" or not hay_admin(config):
+                ficha["role"] = "admin"
+            elif modo == "primero":
+                # «El primero» ya se ha cumplido: había admin, así que este no.
+                ficha["role"] = "viewer"
+            else:
+                ficha["role"] = "viewer"
+        # El nombre se refresca: en Home Assistant se puede cambiar, y la lista
+        # de Ajustes tiene que enseñar el de ahora y no el del primer día.
+        if nombre:
+            ficha["name"] = nombre
+        ficha["last_seen"] = ahora
+        _write(config)
+        if nuevo:
+            _LOGGER.info(
+                "Nuevo usuario en Vatia: %s (%s) entra como «%s»",
+                nombre or "sin nombre", usuario[:8], ficha["role"],
+            )
+        return dict(ficha)
+
+
+def lista_usuarios(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Quién ha entrado, el que más recientemente primero."""
+    filas = [
+        {"id": uid, "name": (ficha.get("name") or "").strip(),
+         "role": ficha.get("role") or ROL_POR_DEFECTO,
+         "first_seen": ficha.get("first_seen"), "last_seen": ficha.get("last_seen")}
+        for uid, ficha in (config.get("users") or {}).items()
+        # Quien solo tiene preferencias guardadas y ninguna visita apuntada
+        # viene de antes de que esto existiera: se enseña igual, que también
+        # es alguien que ha entrado.
+        if ficha
+    ]
+    filas.sort(key=lambda f: (f["last_seen"] or "", f["name"]), reverse=True)
+    return filas
+
+
+class UltimoAdmin(Exception):
+    """Se ha intentado dejar la casa sin ningún administrador."""
+
+
+def poner_rol(usuario: str, rol: str) -> dict[str, Any]:
+    """Cambia el rol de alguien. No deja quitar el último administrador."""
+    if rol not in ROLES:
+        raise ValueError(f"Rol desconocido: {rol}")
+    with _lock:
+        config = _cargar()
+        usuarios = config.setdefault("users", {})
+        ficha = usuarios.setdefault(usuario, {})
+        if ficha.get("role") == "admin" and rol != "admin":
+            otros = [
+                uid for uid, f in usuarios.items()
+                if uid != usuario and (f or {}).get("role") == "admin"
+            ]
+            if not otros:
+                raise UltimoAdmin(
+                    "No se puede quitar el último administrador: alguien tiene "
+                    "que poder entrar aquí. Nombra antes a otro."
+                )
+        ficha["role"] = rol
+        _write(config)
+        return dict(ficha)
+
+
+def olvidar_usuario(usuario: str) -> bool:
+    """Borra a alguien del registro. Vuelve a entrar como nuevo si aparece.
+
+    Con la misma protección: el último administrador no se borra, que sería
+    quedarse fuera por otra puerta.
+    """
+    with _lock:
+        config = _cargar()
+        usuarios = config.get("users") or {}
+        if usuario not in usuarios:
+            return False
+        if (usuarios[usuario] or {}).get("role") == "admin" and not any(
+            uid != usuario and (f or {}).get("role") == "admin"
+            for uid, f in usuarios.items()
+        ):
+            raise UltimoAdmin(
+                "No se puede borrar el último administrador: nombra antes a otro."
+            )
+        del usuarios[usuario]
+        _write(config)
+        return True
 
 
 def update_settings(patch: dict[str, Any], usuario: str | None = "") -> dict[str, Any]:

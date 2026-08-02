@@ -261,6 +261,12 @@ function renderSettingsIndex(s) {
   $("#nav-sub-home").textContent = off
     ? `${CATALOGO.length - off} de ${CATALOGO.length} tarjetas · orden a tu gusto`
     : "El orden de las tarjetas, a tu gusto";
+  const gente = usersState.data?.users;
+  $("#nav-sub-users").textContent = gente
+    ? `${gente.length} ${gente.length === 1 ? "persona" : "personas"} · ` +
+      `${gente.filter((u) => u.role === "admin").length} con permisos`
+    : "Quién ha entrado y quién puede configurar";
+  aplicarPermisos();
   const version = config()?.version;
   $("#nav-sub-about").textContent = version ? `Versión ${version}` : "Versión del add-on";
   // «13 de 13 asignados»: el índice tiene que decir si está bien sin entrar.
@@ -478,6 +484,116 @@ const GAL_ART = {
       <circle cx="110" cy="70" r="8" fill="var(--solid)" stroke="var(--s-batt)" stroke-width="2"/>
     </svg>`,
 };
+
+/* ---------------- usuarios y permisos ---------------- */
+
+const usersState = { data: null };
+
+/* ¿Manda quien mira? Lo dice el servidor en `/api/config`; aquí solo se usa
+   para esconder lo que no va a poder tocar. **No es la defensa**: el servidor
+   rechaza por su cuenta cualquier escritura que no sea de administrador, y
+   esconder botones solo evita el chasco de pulsarlos. */
+function esAdmin() {
+  return !!(config()?.user?.admin);
+}
+
+/* Esconde del índice lo que es de administrador. Los rótulos de grupo van
+   marcados igual que sus paneles, para que no se quede un título suelto encima
+   de nada. */
+function aplicarPermisos() {
+  const admin = esAdmin();
+  $$("#sp-root [data-admin]").forEach((el) => el.classList.toggle("hidden", !admin));
+  $("#ajustes-mirador").classList.toggle("hidden", admin);
+  // El subtítulo enumeraba justo lo que quien no administra no puede ver.
+  $("#ajustes-sub").textContent = admin
+    ? "Datos, sensores, facturación e integración"
+    : "Tu apariencia y tu pantalla de inicio";
+}
+
+const ARRANQUES = {
+  primero: "el primero que entre será administrador y el resto, no",
+  admin: "todo el que entre será administrador",
+  viewer: "nadie será administrador por entrar",
+};
+
+/* Cuándo se vio a alguien, en corto: «hoy a las 14:20», «ayer», «hace 3 días».
+   La fecha exacta no aporta —lo que se quiere saber es si sigue usándolo— y en
+   una fila estrecha ocupa el sitio del nombre. */
+function visto(iso) {
+  if (!iso) return "todavía no ha entrado";
+  const t = new Date(iso), ahora = new Date();
+  const dias = Math.floor((ahora - t) / 86400000);
+  const hhmm = t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  if (t.toDateString() === ahora.toDateString()) return `hoy a las ${hhmm}`;
+  if (dias <= 1) return "ayer";
+  if (dias < 30) return `hace ${dias} días`;
+  return t.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" });
+}
+
+async function cargarUsuarios() {
+  const caja = $("#users-list");
+  $("#users-estado").textContent = "";
+  let datos;
+  try {
+    datos = await api("users");
+  } catch (err) {
+    caja.innerHTML = `<li><p class="li-note">${esc(err.message)}</p></li>`;
+    return;
+  }
+  $("#users-welcome").textContent =
+    `De momento, ${ARRANQUES[datos.welcome] || ARRANQUES.primero}. Se cambia en ` +
+    `las opciones del add-on, en Ajustes de Home Assistant → Complementos → ` +
+    `Vatia → Configuración.`;
+  usersState.data = datos;
+  pintarUsuarios();
+}
+
+function pintarUsuarios() {
+  const datos = usersState.data;
+  if (!datos) return;
+  const yo = config()?.user || {};
+  const admins = datos.users.filter((u) => u.role === "admin").length;
+  $("#users-list").innerHTML = datos.users.map((u) => {
+    const admin = u.role === "admin";
+    // El último administrador no se puede degradar ni borrar: se apaga el
+    // control y se dice por qué, en vez de dejar pulsar y dar un error.
+    const ultimo = admin && admins === 1;
+    const nombre = u.name || "Sin nombre";
+    const sub = ultimo
+      ? "el único administrador · nombra a otro para poder cambiarlo"
+      : `${admin ? "Administrador" : "Solo mira"} · ${visto(u.last_seen)}`;
+    return `<li data-user="${esc(u.id)}">
+      <div class="card-row">
+        <span class="card-ico" style="--ico:${admin ? "#ff375f" : "#8e8e93"}">
+          <svg class="i"><use href="#i-${admin ? "ajustes" : "vista-general"}"/></svg></span>
+        <span class="card-txt">
+          <b>${esc(nombre)}${u.id === yo.id ? " · tú" : ""}</b>
+          <small>${esc(sub)}</small></span>
+        <input type="checkbox" class="ios-switch" data-user-admin
+               ${admin ? "checked" : ""} ${ultimo ? "disabled" : ""}
+               aria-label="${esc(nombre)} es administrador">
+      </div>
+    </li>`;
+  }).join("") || `<li><p class="li-note">Todavía no ha entrado nadie más.</p></li>`;
+}
+
+async function cambiarRol(id, admin) {
+  $("#users-estado").textContent = "Guardando…";
+  try {
+    await api(`users/${encodeURIComponent(id)}/role`, {
+      method: "PUT", body: JSON.stringify({ role: admin ? "admin" : "viewer" }),
+    });
+    await cargarUsuarios();
+    // Si me he degradado a mí mismo, la interfaz tiene que reaccionar: se
+    // recarga la configuración y el índice se queda con lo que ya puedo ver.
+    await reloadConfig();
+    aplicarPermisos();
+    $("#users-estado").textContent = "Guardado.";
+  } catch (err) {
+    $("#users-estado").textContent = err.message;
+    pintarUsuarios();          // devuelve el interruptor a donde estaba
+  }
+}
 
 /* ---------------- las tarjetas de la Home ---------------- */
 
@@ -868,6 +984,12 @@ $("#home-cards-list").addEventListener("change", (ev) => {
   verTarjeta(sw.closest("[data-card-row]").dataset.cardRow, sw.checked);
 });
 
+$("#users-list").addEventListener("change", (ev) => {
+  const sw = ev.target.closest("[data-user-admin]");
+  if (!sw) return;
+  cambiarRol(sw.closest("[data-user]").dataset.user, sw.checked);
+});
+
 /* La capacidad de la batería está en la misma página sin barra de guardar, así
    que se guarda al salir del campo, como el desplegable de abajo. */
 $("#s-battery-kwh").addEventListener("change", async (ev) => {
@@ -924,6 +1046,7 @@ on("pagina-ajustes", ({ page }) => {
   if (page === "influx") renderInfluxState();
   if (page === "flows") { pintarGaleria(); $("#gal-estado").textContent = ""; }
   if (page === "home") { pintarTarjetas(); $("#home-estado").textContent = ""; }
+  if (page === "users") cargarUsuarios();
   // Los sensores se asignan tocando su fila, no rellenando un formulario: la
   // barra de guardar no aplica y cada cambio se guarda solo.
   if (page === "sensors") loadSensors();
