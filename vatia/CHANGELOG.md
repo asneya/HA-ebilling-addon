@@ -2,6 +2,69 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.46.1
+
+### La energía importada ya no puede desaparecer del resumen
+
+El resumen decía «Desde la red: 0,3 kWh» con 6,2 kWh en el contador de la
+compañía, casi todos de noche, con la curva de consumo y la de importación
+gemelas. No era un problema de reparto entre filas: era una **fuga**.
+
+El reparto calculaba, en cada intervalo:
+
+```
+grid_to_battery = max(carga − lo_que_el_sol_explica, 0)     ← sin techo
+grid_home       = max(importado − grid_to_battery, 0)
+```
+
+`grid_to_battery` no estaba acotado por lo importado. Basta un intervalo con el
+contador de exportación por delante del solar —entonces «lo que el sol explica»
+es cero y *toda* la carga de la batería parece venir de la red— para que la
+segunda línea reste una cifra inventada de lo importado, y el `max(…, 0)` borre
+el resto. La importación de ese intervalo no cambiaba de fila: **desaparecía**.
+Repetido a lo largo de un día con nubes, 6,2 kWh comprados salían como 0,3.
+
+Se añaden los dos topes que faltaban, que no son un ajuste sino física:
+
+- la red no puede haber cargado la batería con más de lo que la red entregó;
+- la batería no puede haber vertido más de lo que se descargó.
+
+Con ellos, lo importado se reparte **entero** entre la casa y la batería, y lo
+descargado entre la casa y la red. La atribución puede seguir siendo discutible
+—no hay ningún sensor que mida «red→batería», se deduce—, pero la energía ya no
+puede dejar de existir por el camino.
+
+Lo mismo en el diagrama de flujo en tiempo real, que tenía la misma cuenta.
+
+### Y el reparto se hace por horas, no cada cinco minutos
+
+Los seis contadores son estadísticas de sensores distintos, con cadencias
+distintas: el mismo vatio-hora de sol cae en el bucket de las 12:05 en un
+contador y en el de las 12:10 en otro. Repartiendo cada cinco minutos, ese
+desfase se leía como carga que el sol no explica.
+
+Una hora es más larga que cualquier desfase entre contadores y sigue siendo lo
+bastante corta para lo que el reparto por intervalos existe: distinguir una
+carga de red de madrugada del sol del mediodía. Es además el grano que ya usaban
+las vistas de semana y mes, así que ahora las tres dan la misma cifra. En un día
+de nubes de prueba, esto solo recupera 1,5 kWh que se estaban atribuyendo mal.
+
+Las curvas del gráfico y del diagrama del día siguen a cinco minutos: ahí esa
+resolución es justo lo que se quiere ver.
+
+### El diagnóstico enseña a dónde fue cada cosa
+
+En **Ajustes → Diagnóstico**, debajo del balance, hay ahora un bloque nuevo: lo
+importado, partido entre lo que consumió la casa y lo que cargó la batería, y lo
+descargado, partido entre la casa y lo vertido. Cada par se enseña al lado del
+contador del que sale, y si no suman, la cifra medida se marca en ámbar.
+
+Es la parte del resumen que no mide ningún sensor y la que más veces ha estado
+mal. Ahora se puede mirar el reparto y el contador a la vez en lugar de tener
+que deducir el fallo desde la tarjeta de la Home. Sale del **mismo** cálculo que
+el resumen, no de una cuenta paralela: si las dos pantallas pudieran discrepar,
+esta no serviría para comprobar aquella.
+
 ## 0.46.0
 
 ### El botón responde antes de que lleguen los datos

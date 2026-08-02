@@ -902,7 +902,46 @@ async function loadDiagnostics() {
     ${lado("entra", "Entra", d.entra)}
     ${lado("sale", "Sale", d.sale)}
     <p class="li-note diag-verdict ${d.cuadra ? "ok" : "warn"}">${veredicto}</p>
+    ${repartoTexto(d.reparto)}
     ${perfilTexto(d.profile)}`;
+}
+
+/* A dónde fue lo que entró por la red y lo que salió de la batería.
+
+   No lo mide ningún sensor: no hay contador «red→batería». Se deduce hora a
+   hora, y es la parte del resumen que más veces ha estado mal, así que aquí se
+   enseña **al lado del contador del que sale**: si las dos columnas de un mismo
+   origen no suman su contador, el fallo está en el reparto y no en los
+   sensores, y se ve sin tener que deducirlo de la tarjeta de la Home. */
+function repartoTexto(r) {
+  if (!r) return "";
+  const par = (titulo, casa, otro, etiquetaOtro, suma, contador) => {
+    const cuadra = Math.abs(suma - contador) <= 0.05;
+    return `
+      <div class="diag-side">
+        <div class="diag-head"><span>${titulo}</span>
+          <b class="${cuadra ? "" : "warn"}">${fmtNum.format(contador)} kWh</b></div>
+        <div class="li diag-row">
+          <span class="diag-txt"><b>A la casa</b></span>
+          <span class="diag-kwh">${fmtNum.format(casa)} kWh</span>
+        </div>
+        <div class="li diag-row">
+          <span class="diag-txt"><b>${etiquetaOtro}</b></span>
+          <span class="diag-kwh">${fmtNum.format(otro)} kWh</span>
+        </div>
+        ${cuadra ? "" : `<p class="li-note warn">Las dos partes suman
+           ${fmtNum.format(suma)} kWh y el contador dice ${fmtNum.format(contador)}.
+           El reparto no cuadra con la medida.</p>`}
+      </div>`;
+  };
+  return `
+    <p class="li-note">Y a dónde fue cada cosa. Esto <b>no lo mide ningún
+      sensor</b> —no existe un contador «red→batería»—: se deduce hora a hora, y
+      cada par tiene que sumar su contador.</p>
+    ${par("Importada de la red", r.grid_home, r.grid_battery,
+          "A cargar la batería", r.grid_total, r.grid_meter)}
+    ${par("Descarga de la batería", r.battery_home, r.battery_grid,
+          "Vertida a la red", r.battery_total, r.battery_meter)}`;
 }
 
 /* De dónde sale el consumo típico con el que se calcula la ventana de energía

@@ -143,19 +143,24 @@ def _weather(states: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _energy_summary(
-    energy: dict[str, float], flows: dict[str, float] | None = None
-) -> dict[str, Any]:
-    """Resumen del día: generación y consumo de la casa, por destino/origen.
+def reparto_del_dia(
+    energy: dict[str, float], flows: dict[str, float] | None
+) -> dict[str, float]:
+    """El reparto definitivo del día, en Wh: el que se enseña.
 
-    ``energy`` son los totales del día en Wh y ``flows`` el reparto ya sumado
-    bucket a bucket (lo normal). Si no hay reparto por buckets se calcula sobre
-    los totales, que es menos preciso cuando la batería se carga de la red a
-    horas en las que también hay sol.
+    Una sola función porque lo miran dos pantallas —el resumen de la Home y el
+    diagnóstico de Ajustes— y en cuanto cada una hiciera su cuenta darían
+    cifras distintas del mismo día, que es exactamente la clase de
+    contradicción que este resumen ya ha tenido bastante.
+
+    ``energy`` son los totales del día y ``flows`` el reparto sumado intervalo a
+    intervalo (lo normal). Sin reparto por intervalos se calcula sobre los
+    totales, que es menos preciso cuando la batería se carga de la red a horas
+    en las que también hay sol.
     """
     gen_total = max(energy.get("pv_energy") or 0.0, 0.0)
     if flows is None:
-        flows = series_mod.split_flows(
+        return series_mod.split_flows(
             gen_total,
             energy.get("battery_charge_energy") or 0.0,
             energy.get("grid_export_energy") or 0.0,
@@ -163,21 +168,28 @@ def _energy_summary(
             energy.get("battery_discharge_energy") or 0.0,
             energy.get("home_energy"),
         )
-    else:
-        # El reparto por buckets suma lo mismo que el total del día salvo los
-        # últimos minutos (el estado del sensor va por delante de las
-        # estadísticas). Se reescala para que cada columna cuadre exactamente
-        # con su contador, que es con lo que el usuario compara.
-        #
-        # Si los buckets se quedan muy por debajo del total (estadísticas
-        # incompletas o inexistentes para algún sensor), reescalar daría una
-        # falsa precisión: se vuelve al reparto sobre los totales.
-        bucket_gen = flows["to_home"] + flows["to_battery"] + flows["to_grid"]
-        if gen_total > 0 and bucket_gen < gen_total * 0.5:
-            return _energy_summary(energy, None)
-        # El mismo ajuste que aplica la pantalla de Energía, compartido para
-        # que las dos den la misma cifra.
-        flows = series_mod.rescale_flows(flows, energy)
+    # El reparto por intervalos suma lo mismo que el total del día salvo los
+    # últimos minutos (el estado del sensor va por delante de las estadísticas).
+    # Se reescala para que cada columna cuadre exactamente con su contador, que
+    # es con lo que el usuario compara.
+    #
+    # Si los intervalos se quedan muy por debajo del total (estadísticas
+    # incompletas o inexistentes para algún sensor), reescalar daría una falsa
+    # precisión: se vuelve al reparto sobre los totales.
+    bucket_gen = flows["to_home"] + flows["to_battery"] + flows["to_grid"]
+    if gen_total > 0 and bucket_gen < gen_total * 0.5:
+        return reparto_del_dia(energy, None)
+    # El mismo ajuste que aplica la pantalla de Energía, compartido para que las
+    # dos den la misma cifra.
+    return series_mod.rescale_flows(flows, energy)
+
+
+def _energy_summary(
+    energy: dict[str, float], flows: dict[str, float] | None = None
+) -> dict[str, Any]:
+    """Resumen del día: generación y consumo de la casa, por destino/origen."""
+    flows = reparto_del_dia(energy, flows)
+    gen_total = max(energy.get("pv_energy") or 0.0, 0.0)
     to_load = flows["to_home"]
     to_battery = flows["to_battery"]
     to_grid = flows["to_grid"]
@@ -192,7 +204,7 @@ def _energy_summary(
         return round(max(energy.get(key) or 0.0, 0.0) / 1000.0, 2)
 
     meters = {
-        "pv": round(gen_total / 1000.0, 2),
+        "pv": _kwh("pv_energy"),
         "grid_import": _kwh("grid_import_energy"),
         "grid_export": _kwh("grid_export_energy"),
         "battery_charge": _kwh("battery_charge_energy"),
@@ -360,20 +372,25 @@ def _states_energy(
 def _accumulate_flows(
     buckets: dict[str, dict[str, float]], measured_home: bool
 ) -> dict[str, float] | None:
-    """Reparte cada bucket por separado y suma los resultados (Wh).
+    """Reparte hora a hora y suma los resultados (Wh).
 
     Hacer el reparto una sola vez sobre el total del día pierde la correlación
     temporal: si la batería se carga de la red de madrugada y hay sol al
-    mediodía, sobre los totales esa carga parece solar. Bucket a bucket (5
-    minutos) las dos cosas no se solapan y el reparto sale bien. Los datos ya
-    vienen descargados, así que no cuesta ninguna petición extra.
+    mediodía, sobre los totales esa carga parece solar. Repartir por intervalos
+    las separa. Los datos ya vienen descargados, así que no cuesta ninguna
+    petición extra.
+
+    Los intervalos son de **una hora** y no de cinco minutos, que es como
+    llegan: seis contadores distintos no publican a la vez, y a cinco minutos
+    ese desfase se leía como carga que el sol no explica. Los buckets finos
+    siguen saliendo enteros de ``daily_energy`` para el cierre del día.
     """
     if not buckets:
         return None
     keys = ("to_home", "to_battery", "to_grid", "from_solar", "from_battery",
             "from_grid", "home_total", "grid_to_battery", "battery_to_grid")
     acc = dict.fromkeys(keys, 0.0)
-    for values in buckets.values():
+    for values in series_mod.por_horas(buckets).values():
         split = series_mod.split_flows(
             values.get("pv_energy", 0.0),
             values.get("battery_charge_energy", 0.0),
@@ -674,12 +691,38 @@ async def diagnostics(
     # no en la tarjeta: la pregunta «¿está usando mi InfluxDB?» es de esta
     # pantalla, y la tarjeta tiene que decir horas, no procedencias.
     perfil = await _house_profile(settings, states, tz, now)
+    # A dónde fue lo que entró por la red y lo que salió de la batería. No lo
+    # mide ningún sensor —no existe un contador «red→batería»—, se deduce hora a
+    # hora, y es la parte del resumen que más veces ha estado mal. Enseñarla
+    # aquí, junto a los contadores de los que sale, es lo que permite mirar el
+    # reparto y el contador a la vez en lugar de sospechar de la cifra final.
+    # El **mismo** reparto que enseña el resumen de la Home, no una cuenta
+    # paralela: si aquí saliera otra cifra, el diagnóstico dejaría de servir
+    # para diagnosticar el resumen.
+    flows = reparto_del_dia(totals, daily.get("flows")) if totals else {}
+
+    def _kwh(clave: str) -> float:
+        return round((flows.get(clave) or 0.0) / 1000.0, 2)
+
+    reparto = {
+        "grid_home": _kwh("from_grid"),
+        "grid_battery": _kwh("grid_to_battery"),
+        "grid_total": round(_kwh("from_grid") + _kwh("grid_to_battery"), 2),
+        "grid_meter": round((totals.get("grid_import_energy") or 0.0) / 1000.0, 2),
+        "battery_home": _kwh("from_battery"),
+        "battery_grid": _kwh("battery_to_grid"),
+        "battery_total": round(_kwh("from_battery") + _kwh("battery_to_grid"), 2),
+        "battery_meter": round(
+            (totals.get("battery_discharge_energy") or 0.0) / 1000.0, 2
+        ),
+    } if flows else None
     return {
         "rows": rows,
         "entra": round(entra, 2),
         "sale": round(sale, 2),
         "diferencia": round(diff, 2),
         "cuadra": cuadra,
+        "reparto": reparto,
         "profile": perfil.payload() if perfil else None,
         "generated_at": now.isoformat(),
     }
