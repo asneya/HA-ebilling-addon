@@ -47,6 +47,25 @@ ENERGY_KEYS = (
     "home_energy",
 )
 
+# Contadores que no son un flujo más sino **una parte de otro**: de lo que se
+# cargó la batería, lo que puso el sol; y de lo vertido, lo que puso el sol. Un
+# Sungrow los publica (registros 13012 y 13005) y con ellos las dos cifras que
+# más ha costado deducir —red→batería y batería→red— salen de una resta entre
+# medidas en vez de del reparto por intervalos.
+#
+# Van aparte de `ENERGY_KEYS` a propósito: ahí dentro descuadrarían el balance
+# del diagnóstico, porque su energía ya está contada en el total del que son
+# parte. Son opcionales; sin ellos todo funciona como antes.
+ENERGY_PARTES = (
+    "battery_charge_pv_energy",
+    "grid_export_pv_energy",
+)
+# De qué contador es parte cada uno, para no poder pasarse de él.
+PARTE_DE = {
+    "battery_charge_pv_energy": "battery_charge_energy",
+    "grid_export_pv_energy": "grid_export_energy",
+}
+
 COLORS = {
     "solar": "#f5a524",
     "home": "#c9c443",
@@ -949,12 +968,28 @@ def split_flows(
     imported: float,
     discharge: float,
     home_measured: float | None = None,
+    charge_pv: float | None = None,
+    export_pv: float | None = None,
 ) -> dict[str, float]:
     """Reparte la energía de un periodo entre destinos y orígenes.
 
     Modelo de las apps de inversores: de la generación se atribuye primero lo
     vertido y lo que carga la batería, y el resto va a la casa; lo que carga la
     batería por encima de lo generado viene de la red.
+
+    **Y si el inversor ya lo mide, no se deduce.** ``charge_pv`` es la parte de
+    la carga que puso el sol y ``export_pv`` la parte de lo vertido que puso el
+    sol. Un Sungrow las publica (registros 13012 y 13005) junto a sus totales
+    (13040 y 13045), y con las cuatro cifras las dos que a Vatia le cuesta
+    deducir salen de una resta entre medidas:
+
+        red → batería  = carga − carga_del_sol
+        batería → red  = vertido − vertido_del_sol
+
+    Eso las libera del reparto por intervalos y del desfase entre contadores,
+    que es de donde salieron los fallos de la 0.41 y la 0.46.1. Se siguen
+    aplicando los topes de siempre —un sensor que dice un disparate no se cree a
+    ciegas—, y si no están, todo funciona como antes.
 
     Si hay una **medida directa del consumo de la casa** (``home_measured``) se
     usa como total y los orígenes se reparten hasta cubrirlo, de modo que las
@@ -977,8 +1012,19 @@ def split_flows(
     imported = max(imported or 0.0, 0.0)
     discharge = max(discharge or 0.0, 0.0)
 
-    to_grid = min(export, pv)
-    to_battery = min(charge, max(pv - to_grid, 0.0))
+    # Lo medido manda sobre lo deducido, pero acotado: la parte solar de algo no
+    # puede pasarse ni de ese algo ni de lo que el sol generó. Un sensor mal
+    # elegido —o un desfase de contadores— no debe poder inventar generación.
+    if charge_pv is not None:
+        to_battery = min(max(charge_pv, 0.0), charge, pv)
+        to_grid = min(export, max(pv - to_battery, 0.0))
+        if export_pv is not None:
+            to_grid = min(max(export_pv, 0.0), export, max(pv - to_battery, 0.0))
+    else:
+        to_grid = min(export, pv)
+        if export_pv is not None:
+            to_grid = min(max(export_pv, 0.0), export, pv)
+        to_battery = min(charge, max(pv - to_grid, 0.0))
     to_home = max(pv - to_grid - to_battery, 0.0)
 
     # Los dos topes que faltaban, y que no son un ajuste sino física: **la red no
@@ -1367,7 +1413,8 @@ async def _build_power(
     # ser el del contador, no la integral de la potencia (que es una
     # aproximación y no coincidiría con el sensor ni con los demás rangos).
     energy_cfg = settings.get("energy_sensors") or {}
-    energy_keys = ENERGY_KEYS
+    # Las partes van con los contadores: se piden igual y se reparten igual.
+    energy_keys = ENERGY_KEYS + ENERGY_PARTES
     energy_ids = [energy_cfg.get(k) for k in energy_keys if energy_cfg.get(k)]
     energy_index = None
     yesterday_index = None
@@ -1517,12 +1564,18 @@ async def _build_power(
         # consumo se deduce por balance en todos los intervalos, no en unos sí y
         # en otros no: mezclar las dos cosas descuadraba el total.
         measured = sum((by_key.get("home_energy") or {}).values()) > 0
+        # Una parte solo se usa si tiene datos en el periodo: con la clave
+        # vacía, `get(...)` daría `None` y se volvería a deducir, que es lo
+        # correcto, pero con ceros mentiría diciendo «el sol no puso nada».
+        partes = [sum((by_key.get(k) or {}).values()) > 0 for k in ENERGY_PARTES]
         parts = [
             split_flows(
                 v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
                 v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
                 v.get("battery_discharge_energy", 0.0),
                 v.get("home_energy") if measured else None,
+                v.get("battery_charge_pv_energy") if partes[0] else None,
+                v.get("grid_export_pv_energy") if partes[1] else None,
             )
             for v in per_bucket.values()
         ]
@@ -1753,6 +1806,8 @@ async def _build_energy(
                     v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
                     v.get("battery_discharge_energy", 0.0),
                     v.get("home_energy") if measured else None,
+                    v.get("battery_charge_pv_energy"),
+                    v.get("grid_export_pv_energy"),
                 )
                 for iso, v in by_moment.items()
             }

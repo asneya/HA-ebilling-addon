@@ -61,10 +61,26 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH: ""
         run: python3 tests/run.py
 
+      # Los registros, en la propia salida y no solo como artefacto: un
+      # artefacto hay que ir a descargarlo, y lo que se quiere es leer el motivo
+      # en el mismo sitio donde se ve que ha fallado.
+      - name: Enseñar los registros de lo que ha fallado
+        if: failure()
+        run: |
+          for log in tests/.reg/*.log; do
+            [ -s "$log" ] || continue
+            echo "::group::$log"
+            tail -n 80 "$log"
+            echo "::endgroup::"
+          done
+
       - name: Guardar los registros si algo falla
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: registros-regresion
           path: tests/.reg/
+          # `.reg` empieza por punto y sin esto no se sube nada: la primera
+          # ejecución en rojo se quedó sin artefacto justo por eso.
+          include-hidden-files: true
           retention-days: 7
