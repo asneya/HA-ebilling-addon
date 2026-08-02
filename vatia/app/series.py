@@ -854,6 +854,42 @@ def clamp_buckets(data: dict[str, dict[str, float]]) -> None:
         data[key] = {k: (v if v > 0 else 0.0) for k, v in buckets.items()}
 
 
+def por_horas(
+    per_bucket: dict[str, dict[str, float]],
+) -> dict[str, dict[str, float]]:
+    """Junta buckets de cinco minutos en buckets de una hora.
+
+    Entra y sale ``{iso_del_bucket: {clave_de_contador: valor}}``.
+
+    Para **repartir** flujos, cinco minutos es demasiado fino. Los seis
+    contadores son estadísticas distintas, de sensores que no publican a la vez:
+    el mismo vatio-hora de sol cae en el bucket de las 12:05 en un contador y en
+    el de las 12:10 en otro. Al repartir intervalo a intervalo, ese desfase de
+    minutos se lee como si la carga de la batería no la explicara el sol, y la
+    atribuye a la red.
+
+    Una hora es más larga que cualquier desfase entre contadores y sigue siendo
+    lo bastante corta para lo que el reparto por buckets existe: distinguir una
+    carga de red de madrugada del sol del mediodía. Es además el grano que ya
+    usan las vistas de semana y mes, así que las tres dan la misma cifra.
+
+    Las curvas del gráfico y del diagrama del día **no** pasan por aquí: ahí
+    los cinco minutos sí son la resolución que se quiere ver.
+    """
+    out: dict[str, dict[str, float]] = {}
+    for iso, valores in per_bucket.items():
+        try:
+            hora = datetime.fromisoformat(iso).replace(
+                minute=0, second=0, microsecond=0
+            ).isoformat()
+        except ValueError:
+            hora = iso
+        destino = out.setdefault(hora, {})
+        for clave, valor in valores.items():
+            destino[clave] = destino.get(clave, 0.0) + valor
+    return out
+
+
 def split_signed_values(values: dict[str, float], cfg: dict[str, str], pairs) -> None:
     """Igual que ``split_signed_buckets`` pero con un único valor por clave."""
     for pos, neg in pairs:
@@ -890,8 +926,12 @@ def power_flows(power: dict[str, float]) -> dict[str, float]:
     solar_battery = min(bc, rest)
     rest -= solar_battery
     solar_home = rest
-    grid_battery = max(bc - solar_battery, 0.0)
-    grid_home = max(gi - grid_battery, 0.0)
+    # Con el mismo techo que el reparto de energía: la red no carga la batería
+    # con más de lo que la red está entregando. Sin él, un instante con el
+    # sensor de exportación por delante del solar dejaba `grid_home` en cero y
+    # el diagrama enseñaba la casa alimentada por nadie.
+    grid_battery = min(max(bc - solar_battery, 0.0), gi)
+    grid_home = gi - grid_battery
     return {
         "solar_home": solar_home,
         "solar_grid": solar_grid,
@@ -940,13 +980,31 @@ def split_flows(
     to_grid = min(export, pv)
     to_battery = min(charge, max(pv - to_grid, 0.0))
     to_home = max(pv - to_grid - to_battery, 0.0)
-    grid_to_battery = max(charge - to_battery, 0.0)
-    battery_to_grid = max(export - to_grid, 0.0)
 
-    # Lo que cada origen entregó a la casa, por eliminación: lo que salió de ese
-    # punto y no fue a ningún otro sitio medido.
-    grid_home = max(imported - grid_to_battery, 0.0)
-    battery_home = max(discharge - battery_to_grid, 0.0)
+    # Los dos topes que faltaban, y que no son un ajuste sino física: **la red no
+    # puede haber cargado la batería con más de lo que la red entregó**, y la
+    # batería no puede haber vertido más de lo que se descargó.
+    #
+    # Sin ellos, «la carga que el sol no explica» se atribuía entera a la red
+    # aunque en ese intervalo no se hubiera comprado un vatio. Y el invento no se
+    # quedaba quieto: `grid_home` lo restaba de lo importado y el `max(…, 0)`
+    # borraba el resto, así que la importación real desaparecía del resumen en
+    # vez de cambiarse de fila. Basta un intervalo con el contador de exportación
+    # por delante del solar —entonces `pv - to_grid` es cero y *toda* la carga
+    # parece de red— para perder lo comprado en ese intervalo; repetido a lo
+    # largo de un día con nubes, 6,2 kWh comprados salían como 0,3.
+    #
+    # Cinco contadores distintos, con cadencias distintas, no caen en el mismo
+    # bucket de cinco minutos. Que no caigan puede cambiar el reparto; no puede
+    # hacer que la energía deje de existir.
+    grid_to_battery = min(max(charge - to_battery, 0.0), imported)
+    battery_to_grid = min(max(export - to_grid, 0.0), discharge)
+
+    # Y ahora lo que cada origen entregó a la casa es una resta exacta, no un
+    # recorte: lo importado se reparte entre la casa y la batería sin fugas, y
+    # lo descargado entre la casa y la red.
+    grid_home = imported - grid_to_battery
+    battery_home = discharge - battery_to_grid
 
     if home_measured is not None and home_measured >= 0:
         home_total = home_measured
@@ -1073,6 +1131,10 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
     lo vea otro contador.
     """
     out = dict(flows)
+    # Un reparto sin estas dos claves es un reparto sin batería de por medio;
+    # ponerlas a cero deja que el resto de la función no tenga que preguntar.
+    out.setdefault("grid_to_battery", 0.0)
+    out.setdefault("battery_to_grid", 0.0)
 
     def fit(parts: tuple[str, ...], target: float | None) -> float:
         total = sum(out[key] for key in parts)
@@ -1084,24 +1146,35 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
         return total
 
     fit(("to_home", "to_battery", "to_grid"), totals.get("pv_energy"))
+    # Lo importado se reparte entre la casa y la batería, y lo descargado entre
+    # la casa y la red: son particiones completas, así que se escalan a su
+    # contador **juntas**. Es la misma cuenta que el reparto por horas ya hace
+    # sin fugas, llevada del total de los buckets al total del día.
+    #
+    # Es también lo que faltaba para que la leyenda y el desglose digan lo
+    # mismo: «Importada 6,2 kWh» arriba y «Desde la red» abajo salen ahora del
+    # mismo número, y su diferencia es exactamente lo que cargó la batería.
+    fit(("from_grid", "grid_to_battery"), totals.get("grid_import_energy"))
+    fit(("from_battery", "battery_to_grid"), totals.get("battery_discharge_energy"))
 
     casa = totals.get("home_energy")
     solar_a_casa = out["to_home"]
     if casa is not None and casa > 0:
+        # `from_grid` ya es «lo importado que no cargó la batería», cuadrado con
+        # el contador de la compañía. Solo puede recortarlo el propio consumo.
         red = min(out["from_grid"], casa)
-        # «Entera» no es «más que el contador»: los buckets van por detrás del
-        # contador de importación y a veces por delante. Lo que entró a la casa
-        # desde la red no puede pasar de lo importado menos lo que las curvas
-        # vieron cargando la batería.
-        importado = totals.get("grid_import_energy")
-        if importado is not None:
-            red = min(red, max(importado - out.get("grid_to_battery", 0.0), 0.0))
+        # Y lo que se le recorta **no se tira**: si el contador de la casa dice
+        # que no absorbió toda la importación, esa importación entró igual y el
+        # único sitio al que puede haber ido es la batería. Se apunta ahí. Antes
+        # se perdía en la resta, que es la otra manera —más callada— de que la
+        # importación no cuadrara con la leyenda.
+        sobrante = out["from_grid"] - red
         sol = min(solar_a_casa, casa - red)
         bateria = casa - red - sol
-        # La batería no puede haber dado más de lo que descargó. El techo es su
-        # contador —menos lo que las curvas atribuyeron a la red—, no la
-        # estimación por buckets: la estimación arrastra la misma deriva de
-        # cinco minutos que motiva todo este ajuste.
+        # La batería no puede haber dado más de lo que descargó. El techo sale
+        # de su contador —menos lo que se vertió— y no de la estimación por
+        # buckets, que va por detrás del contador los últimos minutos. Con los
+        # dos disponibles coinciden, porque acaban de escalarse juntos.
         descarga = totals.get("battery_discharge_energy")
         tope_bateria = (
             max(descarga - out.get("battery_to_grid", 0.0), 0.0)
@@ -1109,8 +1182,17 @@ def rescale_flows(flows: dict[str, float], totals: dict[str, float]) -> dict[str
             else out["from_battery"]
         )
         if bateria > tope_bateria:
-            red += bateria - tope_bateria
+            # Falta energía para llegar al consumo medido. Se coge primero de la
+            # importación que se había apartado a la batería —era una atribución,
+            # no una medida— y solo lo que ni así se cubre se apunta a la red por
+            # encima de su contador, que es la contradicción entre sensores que
+            # el resumen no puede resolver y prefiere enseñar.
+            falta = bateria - tope_bateria
+            devuelto = min(falta, sobrante)
+            sobrante -= devuelto
+            red += falta
             bateria = tope_bateria
+        out["grid_to_battery"] = out.get("grid_to_battery", 0.0) + sobrante
         out["from_grid"] = red
         out["from_solar"] = sol
         out["from_battery"] = bateria
@@ -1419,11 +1501,17 @@ async def _build_power(
         return out
 
     def flows_from(by_key: dict[str, dict[str, float]]) -> dict[str, float] | None:
-        """Reparto sumado a partir de los incrementos por bucket."""
-        per_bucket: dict[str, dict[str, float]] = {}
+        """Reparto sumado a partir de los incrementos por bucket.
+
+        Se reparte **por horas**: los buckets de cinco minutos de seis
+        contadores distintos no están en fase, y ese desfase se leía como
+        energía que el sol no explica.
+        """
+        crudo: dict[str, dict[str, float]] = {}
         for key, buckets in by_key.items():
             for iso, value in buckets.items():
-                per_bucket.setdefault(iso, {})[key] = value
+                crudo.setdefault(iso, {})[key] = value
+        per_bucket = por_horas(crudo)
         # El contador de la casa sirve si suma algo en el periodo. Si no (no está
         # configurado, o el sensor está invertido y se ha recortado a cero), el
         # consumo se deduce por balance en todos los intervalos, no en unos sí y

@@ -895,6 +895,9 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .diag-kwh.muted { color: var(--ink-3); font-weight: 600; }
 .diag-verdict.ok { color: var(--ink-2); }
 .diag-verdict.warn b { color: var(--warn); }
+/* Un reparto que no suma su contador: la cifra medida se marca, porque es la
+   que manda y la que delata que el reparto está mal. */
+.diag-head b.warn, .li-note.warn { color: var(--warn); }
 
 /* Valor de sólo lectura (versión del add-on y similares). */
 .li-value { margin-left: auto; color: var(--ink); font-size: 15px; font-weight: 650;
