@@ -2,6 +2,51 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.46.2
+
+### Vatia sale de verdad en la barra lateral de quien no es administrador
+
+Desde la 0.44.1 el `config.yaml` lleva `panel_admin: false`, que es lo que hace
+que el panel salga en la barra lateral de todo el mundo. Estaba bien puesto y no
+tenía ningún efecto.
+
+Home Assistant apunta si un panel es solo para administradores **cuando el
+add-on se instala**, y el Supervisor no vuelve a decírselo al actualizar: solo
+empuja el panel a Core al restaurar una copia, al desinstalar, y cuando alguien
+mueve el interruptor «Mostrar en la barra lateral». Su función `update()` no lo
+hace. Así que Core se quedaba con el «solo administradores» de la instalación
+original, por muchas versiones que pasaran por encima. La única salida era
+reiniciar Home Assistant Core o mover ese interruptor a mano — ninguna de las
+dos es algo que se le pueda pedir a quien solo ha pulsado «actualizar».
+
+Ahora Vatia se lo pide ella al arrancar, con exactamente la misma llamada que
+hace ese interruptor: lee su estado actual y lo reenvía. Al Supervisor le basta
+con que la clave venga en la petición para reinscribir el panel, y Core lo
+vuelve a registrar leyendo el ajuste de ahora. **Basta con reiniciar el add-on
+una vez.**
+
+Se reenvía el valor que ya había, no un «visible» a la fuerza: si escondiste
+Vatia de la barra lateral a propósito, sigue escondida. Y si el Supervisor no
+contesta, se anota en el registro y la aplicación arranca igual.
+
+En `DOCS.md` hay ahora una sección **«Quién ve Vatia y quién puede
+configurarla»** con los dos roles, la opción `first_user_role` —que faltaba en
+la tabla de opciones— y qué hacer si aun así no aparece.
+
+### El diagnóstico dice qué parte no coloca ningún sensor
+
+Ajuste del bloque que estrenó la 0.46.1. Daba por hecho que las dos partes de
+cada origen tienen que sumar su contador y marcaba en ámbar el que no. Para lo
+importado es cierto y el reparto lo garantiza; para la descarga de la batería no
+tiene por qué serlo: si el contador de la casa dice que consumió menos de lo que
+la batería asegura haberle dado, hay una parte de la descarga que **ningún
+sensor coloca**, y eso no es un fallo del reparto sino un descuadre entre
+sensores.
+
+Ahora esa parte sale en su propia fila, **«Sin colocar»**, con una explicación de
+lo que significa, y solo cuando pasa de 50 Wh: por debajo es la deriva normal
+entre contadores y avisar sería ruido.
+
 ## 0.46.1
 
 ### La energía importada ya no puede desaparecer del resumen

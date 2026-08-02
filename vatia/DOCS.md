@@ -575,11 +575,60 @@ detalle por día/hora deja ver exactamente dónde.
   minuto) sobre él. Sobrevive a recargas y reinicios. Pulsa **Volver al ciclo**
   para regresar al ciclo de facturación automático.
 
+## Quién ve Vatia y quién puede configurarla
+
+Vatia sale en la barra lateral de **todos** los usuarios de Home Assistant, no
+solo de los administradores: lo que cuenta —lo que gasta la casa, a qué hora
+sale barato poner la lavadora— le sirve a quien vive en ella tenga o no permisos
+para administrar el sistema.
+
+Dentro hay dos roles, que son de Vatia y no de Home Assistant:
+
+- **Administrador** — configura la casa: sensores, tarifas, InfluxDB, copia de
+  seguridad. Y nombra a otros administradores en **Ajustes → Usuarios**.
+- **El resto** — ve todos los datos, con la misma frescura, y configura **lo
+  suyo**: el tema, el orden de las tarjetas de inicio y el diagrama del caudal.
+
+Con qué rol se recibe a quien entra por primera vez se decide en las opciones
+del add-on (`first_user_role`, abajo). Si en algún momento no queda ningún
+administrador, el siguiente que entre lo será: no hay manera de quedarse fuera.
+
+### Si no te sale en la barra lateral
+
+Si actualizaste desde una versión anterior a la 0.44.1 y a los usuarios que no
+son administradores les sigue sin aparecer, es un detalle de cómo funciona el
+Supervisor, no de la configuración.
+
+Home Assistant apunta si un panel es solo para administradores **cuando el
+add-on se instala**, y el Supervisor no vuelve a decírselo al actualizar: solo
+lo hace al restaurar una copia, al desinstalar y cuando alguien mueve el
+interruptor «Mostrar en la barra lateral». Así que el ajuste cambia y Core sigue
+con el de antes.
+
+Desde la 0.46.2 Vatia se lo pide al Supervisor **al arrancar**, así que basta
+con reiniciar el add-on una vez. Si aun así no aparece, cualquiera de estas dos
+cosas hace lo mismo a mano:
+
+- **Ajustes → Sistema → Reiniciar → Reiniciar Home Assistant Core.**
+- En la página del add-on, apagar y volver a encender **«Mostrar en la barra
+  lateral»**.
+
+Ten en cuenta lo que implica que lo vea todo el mundo: Vatia **no tiene
+contraseña propia** y por Ingress entra cualquier usuario de Home Assistant. Los
+roles limitan lo que se puede tocar dentro, pero el panel es para gente de
+confianza, y su puerto no debe exponerse fuera de casa.
+
 ## Opciones del add-on
 
 | Opción | Descripción |
 |---|---|
 | `log_level` | `debug`, `info`, `warning` o `error` |
+| `first_user_role` | Con qué rol se recibe a quien entra por primera vez: `primero` (el primero es administrador y el resto no), `admin` (todo el que entre lo es) o `viewer` (nadie lo es por entrar) |
+
+Está aquí, en las opciones del add-on, y no dentro de la aplicación, porque a
+esta pantalla solo llega un administrador de Home Assistant: es el único sitio
+desde el que se puede arrancar el reparto de permisos sin necesitar ya un
+permiso para llegar. Cambiarlo no toca a quien ya tiene rol.
 
 Toda la configuración funcional (fuente, tarifas, contrato) se gestiona desde
 la propia interfaz y se guarda en `/data/vatia.json`.

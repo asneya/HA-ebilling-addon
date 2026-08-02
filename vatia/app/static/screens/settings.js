@@ -915,33 +915,33 @@ async function loadDiagnostics() {
    sensores, y se ve sin tener que deducirlo de la tarjeta de la Home. */
 function repartoTexto(r) {
   if (!r) return "";
-  const par = (titulo, casa, otro, etiquetaOtro, suma, contador) => {
-    const cuadra = Math.abs(suma - contador) <= 0.05;
-    return `
-      <div class="diag-side">
-        <div class="diag-head"><span>${titulo}</span>
-          <b class="${cuadra ? "" : "warn"}">${fmtNum.format(contador)} kWh</b></div>
-        <div class="li diag-row">
-          <span class="diag-txt"><b>A la casa</b></span>
-          <span class="diag-kwh">${fmtNum.format(casa)} kWh</span>
-        </div>
-        <div class="li diag-row">
-          <span class="diag-txt"><b>${etiquetaOtro}</b></span>
-          <span class="diag-kwh">${fmtNum.format(otro)} kWh</span>
-        </div>
-        ${cuadra ? "" : `<p class="li-note warn">Las dos partes suman
-           ${fmtNum.format(suma)} kWh y el contador dice ${fmtNum.format(contador)}.
-           El reparto no cuadra con la medida.</p>`}
-      </div>`;
-  };
+  const fila = (etiqueta, kwh, clase = "") => `
+    <div class="li diag-row">
+      <span class="diag-txt ${clase}"><b>${etiqueta}</b></span>
+      <span class="diag-kwh ${clase}">${fmtNum.format(kwh)} kWh</span>
+    </div>`;
+  // Lo que ningún sensor coloca se enseña en su propia fila, con el mismo
+  // umbral que las notas de la Home. Un descuadre de 20 Wh es la deriva normal
+  // entre contadores y avisar de eso sería ruido.
+  const par = (titulo, p, etiquetaOtro) => `
+    <div class="diag-side">
+      <div class="diag-head"><span>${titulo}</span>
+        <b>${fmtNum.format(p.meter)} kWh</b></div>
+      ${fila("A la casa", p.home)}
+      ${fila(etiquetaOtro, p.other)}
+      ${p.unplaced >= 0.05 ? fila("Sin colocar", p.unplaced, "warn") : ""}`
+    + (p.unplaced >= 0.05
+      ? `<p class="li-note">Esa parte salió del contador y ningún otro sensor la
+         recoge: el consumo de la casa dice que no le llegó y tampoco se
+         exportó. Es un descuadre entre sensores, no del reparto.</p>`
+      : "")
+    + `</div>`;
   return `
     <p class="li-note">Y a dónde fue cada cosa. Esto <b>no lo mide ningún
-      sensor</b> —no existe un contador «red→batería»—: se deduce hora a hora, y
-      cada par tiene que sumar su contador.</p>
-    ${par("Importada de la red", r.grid_home, r.grid_battery,
-          "A cargar la batería", r.grid_total, r.grid_meter)}
-    ${par("Descarga de la batería", r.battery_home, r.battery_grid,
-          "Vertida a la red", r.battery_total, r.battery_meter)}`;
+      sensor</b> —no existe un contador «red→batería»—: se deduce hora a hora a
+      partir de los seis contadores de arriba.</p>
+    ${par("Importada de la red", r.grid, "A cargar la batería")}
+    ${par("Descarga de la batería", r.battery, "Vertida a la red")}`;
 }
 
 /* De dónde sale el consumo típico con el que se calcula la ventana de energía

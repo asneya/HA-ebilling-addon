@@ -704,17 +704,30 @@ async def diagnostics(
     def _kwh(clave: str) -> float:
         return round((flows.get(clave) or 0.0) / 1000.0, 2)
 
+    def _par(casa: str, otro: str, contador: str) -> dict[str, float]:
+        """Un origen partido entre sus dos destinos, y lo que no llega a cuadrar.
+
+        Lo importado siempre suma su contador: el reparto lo garantiza. Lo
+        descargado no siempre, y no por un fallo: si el contador de la casa dice
+        que consumió menos de lo que la batería asegura haberle dado, hay una
+        parte de la descarga que **ningún sensor coloca**. Se enseña tal cual, en
+        su propia fila, en vez de callarla o de acusar al reparto de no cuadrar:
+        el descuadre es entre sensores, y esta pantalla está para verlo.
+        """
+        medido = round(max(totals.get(contador) or 0.0, 0.0) / 1000.0, 2)
+        a, b = _kwh(casa), _kwh(otro)
+        return {
+            "home": a,
+            "other": b,
+            "placed": round(a + b, 2),
+            "meter": medido,
+            "unplaced": round(max(medido - a - b, 0.0), 2),
+        }
+
     reparto = {
-        "grid_home": _kwh("from_grid"),
-        "grid_battery": _kwh("grid_to_battery"),
-        "grid_total": round(_kwh("from_grid") + _kwh("grid_to_battery"), 2),
-        "grid_meter": round((totals.get("grid_import_energy") or 0.0) / 1000.0, 2),
-        "battery_home": _kwh("from_battery"),
-        "battery_grid": _kwh("battery_to_grid"),
-        "battery_total": round(_kwh("from_battery") + _kwh("battery_to_grid"), 2),
-        "battery_meter": round(
-            (totals.get("battery_discharge_energy") or 0.0) / 1000.0, 2
-        ),
+        "grid": _par("from_grid", "grid_to_battery", "grid_import_energy"),
+        "battery": _par("from_battery", "battery_to_grid",
+                        "battery_discharge_energy"),
     } if flows else None
     return {
         "rows": rows,

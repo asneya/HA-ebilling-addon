@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 import billing
 import datasources
 import live
+import panel
 import pvpc
 import sensors
 import series
@@ -38,9 +39,13 @@ CACHE_TTL = 60  # segundos (refresco casi en tiempo real)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Sin `await`: si el Supervisor tarda en contestar, que tarde él y no el
+    # arranque del servidor. La barra lateral puede esperar un segundo.
+    panel_task = asyncio.create_task(panel.reinscribir())
     task = asyncio.create_task(_sensor_publisher_loop())
     yield
     task.cancel()
+    panel_task.cancel()
 
 
 app = FastAPI(title="Vatia", docs_url=None, redoc_url=None, lifespan=lifespan)
