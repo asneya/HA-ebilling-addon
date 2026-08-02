@@ -107,14 +107,29 @@ ok(abs(filas - r["home_total"]) < 1e-9,
    f"y el total es la suma de las filas ({filas:.1f} = {r['home_total']:.1f})")
 
 print("\n7-8 · la casa gastó más de lo que hay entre todos")
+# Sin contador de importación, la red puede cubrir el hueco: no hay ninguna
+# medida que la desmienta.
 solo_sol = reparto(to_home=1000, to_battery=0, to_grid=0,
                    from_solar=1000, home_total=1000)
 r = rescale_flows(solo_sol, {"pv_energy": 1000, "home_energy": 1400})
-filas = r["from_solar"] + r["from_battery"] + r["from_grid"]
+filas = (r["from_solar"] + r["from_battery"] + r["from_grid"]
+         + r.get("unexplained", 0.0))
 ok(abs(filas - 1400) < 1e-9, f"las filas siguen sumando el total ({filas:.1f} = 1400)")
 ok(abs(r["from_grid"] - 400) < 1e-9,
-   f"el hueco se apunta a la red ({r['from_grid']:.1f})")
+   f"sin contador de red, el hueco se le apunta a ella ({r['from_grid']:.1f})")
 ok(r["from_battery"] == 0, "y no a una batería que no descargó nada")
+
+# Con contador de importación, ya no: la red se queda en lo que marca y el resto
+# se declara. Enseñar «Desde la red: 400» con un contador que dice 100 es poner
+# en pantalla dos cifras que se contradicen, y eso ya pasó una vez.
+r = rescale_flows(solo_sol, {"pv_energy": 1000, "home_energy": 1400,
+                             "grid_import_energy": 100})
+ok(abs(r["from_grid"] - 100) < 1e-9,
+   f"con contador, la red no se pasa de él ({r['from_grid']:.1f} = 100)")
+ok(abs(r["unexplained"] - 300) < 1e-9,
+   f"y los otros 300 Wh se declaran sin explicar ({r['unexplained']:.1f})")
+filas = (r["from_solar"] + r["from_battery"] + r["from_grid"] + r["unexplained"])
+ok(abs(filas - 1400) < 1e-9, f"las cuatro filas suman el total ({filas:.1f} = 1400)")
 
 print("\n10 · el sensor de «casa» que en realidad es el autoconsumo (Sungrow)")
 # El día real del 2 ago 2026: sol 5, carga 2,6 (de sol), descarga 2,7,
