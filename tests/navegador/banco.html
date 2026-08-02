@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Los cuatro flujos</title>
+  <link rel="stylesheet" href="http://127.0.0.1:8321/static/styles.css">
+  <script>
+    /* El mismo arranque de tema que index.html: sin esto el banco se pinta
+       siempre en claro y la captura «oscura» sale igual que la clara. */
+    document.documentElement.dataset.theme =
+      window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "light";
+  </script>
+</head>
+<body style="background:var(--page)">
+  <main id="marco" style="max-width:420px;margin:0 auto;padding:14px">
+    <div class="panel glass" id="caja">
+      <div class="band-head">
+        <span class="band-live"><i class="pulse"></i>Ahora mismo</span>
+        <span class="state-pill" data-estado="exporta" id="pill">Vendiendo a la red</span>
+      </div>
+      <p class="flow-head" id="titular"></p>
+      <div class="flow" id="host"></div>
+    </div>
+  </main>
+
+  <script src="http://127.0.0.1:8321/static/components/vatia-flow.js"></script>
+  <script src="http://127.0.0.1:8321/static/components/vatia-cross.js"></script>
+  <script src="http://127.0.0.1:8321/static/components/vatia-orbit.js"></script>
+  <script>
+    /* Un mediodía de verdad, con las seis corrientes que puede haber: el sol
+       cubre la casa, carga la batería y todavía sobra para la red. Es el momento
+       en que un diagrama de flujo tiene algo que contar; a las once de la noche
+       solo hay una raya y no se puede juzgar un dibujo con eso. */
+    const ESCENAS = {
+      mediodia: {
+        titular: "El sol cubre la casa, llena la batería y aún sobra: 1,4 kW a la red.",
+        flows: { solar_home: 2180, solar_battery: 1250, solar_grid: 1400,
+                 grid_home: 0, grid_battery: 0, battery_home: 0 },
+        soc: 74,
+      },
+      tarde: {
+        titular: "La batería remata lo que el sol ya no da.",
+        flows: { solar_home: 900, solar_battery: 0, solar_grid: 0,
+                 grid_home: 260, grid_battery: 0, battery_home: 1150 },
+        soc: 52,
+      },
+      noche: {
+        titular: "Sin nada de sol, la batería lleva la casa sola con 320 W.",
+        flows: { solar_home: 0, solar_battery: 0, solar_grid: 0,
+                 grid_home: 0, grid_battery: 0, battery_home: 320 },
+        soc: 46,
+      },
+      fino: {
+        titular: "Poca cosa: la nevera y poco más.",
+        flows: { solar_home: 40, solar_battery: 0, solar_grid: 0,
+                 grid_home: 95, grid_battery: 0, battery_home: 30 },
+        soc: 12,
+      },
+    };
+    const APARATOS = [
+      { id: "l", name: "Lavadora", color: "#4a4ee0", watts: 720 },
+      { id: "h", name: "Horno", color: "#8a5a2b", watts: 1100 },
+    ];
+    const METERS = { home: 15.47, pv: 37.08, grid_import: 5.13, grid_export: 11.6,
+                     battery_discharge: 2.27, battery_charge: 17.4 };
+    const HOME_ROWS = [
+      { key: "from_solar", label: "Del sol", kwh: 11.2, pct: 72 },
+      { key: "from_battery", label: "De la batería", kwh: 2.27, pct: 15 },
+      { key: "from_grid", label: "De la red", kwh: 2.0, pct: 13 },
+    ];
+
+    function payload(escena) {
+      const f = escena.flows;
+      return {
+        flows: f,
+        power: {
+          pv: f.solar_home + f.solar_battery + f.solar_grid,
+          home: f.solar_home + f.grid_home + f.battery_home,
+          battery_soc: escena.soc,
+        },
+        energy: {
+          meters: METERS,
+          generation: { total: METERS.pv, rows: [] },
+          home: { total: METERS.home, rows: HOME_ROWS },
+        },
+      };
+    }
+
+    const p = new URLSearchParams(location.search);
+    const tag = p.get("tag") || "vatia-flow";
+    const escena = ESCENAS[p.get("escena") || "mediodia"];
+    const conAparatos = p.get("aparatos") === "1";
+    const conMeters = p.get("meters") !== "0";
+    if (p.get("ancho")) document.getElementById("marco").style.maxWidth = p.get("ancho") + "px";
+
+    document.getElementById("titular").textContent = escena.titular;
+    document.getElementById("pill").textContent =
+      escena.flows.solar_grid > 20 ? "Vendiendo a la red"
+        : escena.flows.grid_home > 20 ? "Comprando de la red" : "Independiente";
+    document.getElementById("pill").dataset.estado =
+      escena.flows.solar_grid > 20 ? "exporta"
+        : escena.flows.grid_home > 20 ? "importa" : "aislada";
+
+    const n = document.createElement(tag);
+    n.meters = conMeters;
+    document.getElementById("host").appendChild(n);
+    if (conAparatos) n.split = APARATOS;
+    n.data = payload(escena);
+    window.__nodo = n;
+  </script>
+</body>
+</html>

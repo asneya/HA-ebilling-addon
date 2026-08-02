@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>La ventana</title>
+  <link rel="stylesheet" href="http://127.0.0.1:8402/static/styles.css">
+  <script>
+    document.documentElement.dataset.theme =
+      window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "light";
+  </script>
+</head>
+<body style="background:var(--page)">
+  <main style="max-width:420px;margin:0 auto;padding:14px">
+    <div class="panel glass" id="caja">
+      <vatia-window id="w"></vatia-window>
+    </div>
+  </main>
+  <script src="http://127.0.0.1:8402/static/components/vatia-window.js"></script>
+  <script>
+    /* Un día de agosto con la punta a las 14 y el horno de 13 a 14, que parte
+       la ventana en dos. Es el caso que hace falta para juzgar el dibujo: con
+       una campana limpia no se ve si el hueco se pinta. */
+    /* El día se construye **alrededor de ahora**, en la zona del navegador.
+       Con una fecha fija y un desfase de +02:00 escritos a mano, el banco
+       dependía de la hora a la que se corriera: la tarjeta compara el pico con
+       `Date.now()` para decidir si calla la etiqueta de «ahora», y el mismo
+       fichero pasaba por la mañana y fallaba por la tarde.
+
+       `pico` coloca la punta del sol respecto de ahora, en horas: `0` la pone
+       encima —las dos etiquetas chocan y una tiene que callarse— y un valor
+       grande la aleja. Así los dos casos se piden a propósito en vez de
+       depender de qué hora sea. */
+    const p0 = new URLSearchParams(location.search);
+    const AHORA = new Date();
+    const desplaza = Number(p0.get("pico") ?? 0);
+    // «Mediodía» del día de mentira: la hora en la que estará la punta.
+    const CENTRO = AHORA.getHours() + AHORA.getMinutes() / 60 + desplaza;
+    const iso = (h) => {
+      // h se da en el reloj del día de mentira, cuyo mediodía es CENTRO − 14.
+      const d = new Date(AHORA);
+      d.setHours(0, 0, 0, 0);
+      d.setMinutes(Math.round((h + CENTRO - 14) * 60));
+      const off = -d.getTimezoneOffset();
+      const sg = off < 0 ? "-" : "+";
+      const p2 = (n) => String(Math.floor(Math.abs(n))).padStart(2, "0");
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}` +
+        `T${p2(d.getHours())}:${p2(d.getMinutes())}:00${sg}${p2(off / 60)}:${p2(off % 60)}`;
+    };
+    const sol = (h) => (h < 7 || h > 21) ? 0
+      : Math.max(0, 4500 * (1 - ((h - 14) / 7) ** 2));
+    /* El horno a 5,2 kW: por encima de lo que da el sol a esa hora (≈4,4 kW),
+       que es lo que hace que la ventana se parta de verdad. Con 2,6 kW el sol
+       todavía cubría y el área salía entera, sin nada que enseñar. */
+    const casa = (h) => (h >= 13 && h < 14) ? 5200 : 320;
+
+    const t = [], s = [], c = [];
+    for (let h = 6.5; h <= 21.5; h += 0.5) { t.push(iso(h)); s.push(sol(h)); c.push(casa(h)); }
+
+    // Los dos tramos, con el hueco del horno en medio.
+    const spans = [
+      { start: iso(7.6), end: iso(13.0), hours: 5.4, kwh: 11.2 },
+      { start: iso(14.0), end: iso(20.4), hours: 6.4, kwh: 17.4 },
+    ];
+    const p = p0;
+    const bateria = Number(p.get("bat") ?? 4.2);
+    const estado = p.get("estado") || "open";
+    const hoy = {
+      start: spans[0].start, end: spans[1].end, hours: 12.8, net_hours: 11.8,
+      kwh: 28.6, surplus_w: 2420, peak_w: 4180, peak_at: iso(14.5),
+      battery_kwh: bateria, spendable_kwh: 28.6 - bateria,
+      spendable_w: Math.round(2420 * (28.6 - bateria) / 28.6),
+      spans, gaps: [{ start: iso(13.0), end: iso(14.0), hours: 1.0 }],
+      shape: { t, sol: s, casa: c },
+    };
+    const manana = { ...hoy, kwh: 12.0, hours: 8.2, surplus_w: 1400,
+                     start: iso(9.2), end: iso(17.4), shape: undefined };
+
+    document.getElementById("w").data = {
+      baseline_w: 320, today: hoy, tomorrow: manana,
+      daylight: { from: iso(7.0), to: iso(21.0) },
+      state: estado, hours_left: 6.4, reopens_at: null,
+      battery_room_kwh: bateria,
+      bias: p.get("sesgo") === "0" ? { horas: 0, dias: 0, peor: null, factores: {} }
+        : { horas: 3, dias: 11, peor: { hora: 9, factor: 0.58 },
+            factores: { 9: 0.58, 10: 0.81, 19: 1.14 } },
+    };
+  </script>
+</body>
+</html>
