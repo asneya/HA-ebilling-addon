@@ -2,6 +2,34 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.40.3
+
+### El diagnóstico mira primero si el sensor existe
+
+Faltaba la pregunta más obvia. «No tiene estadísticas horarias» puede querer
+decir dos cosas muy distintas: que al contador le falta `state_class` —lo normal
+en un ayudante o una plantilla— o que **la entidad no existe**, que se arregla en
+otro sitio. Ahora se consulta su ficha en Home Assistant antes que nada y el
+veredicto empieza por ahí:
+
+- si no existe, o está en `unknown` / `unavailable`, lo dice y manda a
+  Ajustes → Sensores;
+- si existe pero no tiene `state_class`, lo dice con su estado y su unidad, que
+  es la pista para arreglarlo;
+- y si lo tiene, lo nombra, para no acusar en falso.
+
+### Un resto de la reorganización de Sensores
+
+La barra de «Guardar ajustes» seguía recogiendo los catorce sensores de unos
+elementos `[data-flow]` y `[data-energy]` que **ya no existen**: la pantalla de
+Sensores dejó de ser un formulario de desplegables y pasó a ser una lista de
+filas que se guardan una a una al asignarlas.
+
+No rompía nada —el servidor fusiona por claves, y fusionar con vacío no cambia
+nada—, pero mandaba `flow_sensors: {}` y `energy_sensors: {}` en cada guardado, y
+el día que un PUT reemplazase en vez de fusionar se llevaba por delante los
+catorce sensores de una vez. Fuera.
+
 ## 0.40.2
 
 ### «¿De dónde salen los datos de facturación?», en Diagnóstico
