@@ -14,6 +14,14 @@ fakeha.py
 vatia.json
 pvpc_cache.json
 data-*/
+# Excepción: las configuraciones de partida del banco. Son de mentira —tokens de
+# adorno y URLs de 127.0.0.1— y hacen falta versionadas: sin ellas el CI arranca
+# la aplicación sin configuración y todo devuelve 502. Costó cinco ejecuciones
+# en rojo averiguarlo, porque en local los ficheros están en disco y la regla no
+# se nota. `tests/python/fixtures.py` vigila que no se vuelva a repetir, y que
+# aquí dentro no acabe un secreto de verdad.
+!tests/fixtures/**/vatia.json
+!tests/fixtures/**/pvpc_cache.json
 
 # Capturas de las pruebas con navegador. Los bancos las escriben con una ruta
 # relativa, así que aterrizan donde estuviera el directorio de trabajo: la raíz

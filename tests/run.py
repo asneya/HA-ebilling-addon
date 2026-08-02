@@ -85,6 +85,7 @@ PUERTO_FICHEROS = 8320
 PYTHON = [
     ("addon.py", ["addon.py"], {}),
     ("modulos.py", ["modulos.py"], {}),
+    ("fixtures.py", ["fixtures.py"], {}),
     ("barra.py", ["barra.py"], {}),
     ("forma.py", ["forma.py"], {}),
     ("sesgo.py", ["sesgo.py"], {}),

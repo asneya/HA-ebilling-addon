@@ -1,0 +1,192 @@
+{
+  "settings": {
+    "source": "homeassistant",
+    "ha_entity": "",
+    "ha_entity_export": "",
+    "ha_url": "http://127.0.0.1:8131",
+    "ha_token": "x",
+    "influx": {
+      "version": 2,
+      "url": "http://a0d7b954-influxdb:8086",
+      "database": "homeassistant",
+      "org": "",
+      "token": "",
+      "username": "",
+      "password": "",
+      "measurement": "kWh",
+      "entity_id": "",
+      "entity_id_export": ""
+    },
+    "contracted_power": {
+      "p1": 4.6,
+      "p2": 4.6
+    },
+    "billing_day": 1,
+    "timezone": "Europe/Madrid",
+    "holidays": [
+      "01-01",
+      "01-06",
+      "05-01",
+      "08-15",
+      "10-12",
+      "11-01",
+      "12-06",
+      "12-08",
+      "12-25"
+    ],
+    "export_sensors": false,
+    "sensor_update_minutes": 5,
+    "flow_sensors": {
+      "pv": "sensor.pv_power",
+      "grid_import": "sensor.grid_import_power",
+      "grid_export": "sensor.grid_export_power",
+      "battery_charge": "sensor.batt_charge_power",
+      "battery_discharge": "sensor.batt_discharge_power",
+      "home": "sensor.home_power",
+      "battery_soc": "sensor.batt_soc"
+    },
+    "energy_sensors": {
+      "pv_energy": "sensor.pv_hoy",
+      "grid_import_energy": "sensor.grid_import_hoy",
+      "grid_export_energy": "sensor.grid_export_hoy",
+      "battery_charge_energy": "sensor.batt_charge_hoy",
+      "battery_discharge_energy": "sensor.batt_discharge_hoy",
+      "home_energy": "sensor.home_hoy"
+    },
+    "energy_counters": "daily",
+    "condition_sensor": "",
+    "temperature_sensor": "",
+    "solar_forecast_sensor": "",
+    "theme": "light",
+    "my_tariff_id": "",
+    "working_period": null
+  },
+  "tariffs": [
+    {
+      "id": "iberdrola-plan-estable",
+      "name": "Plan Estable",
+      "company": "Iberdrola",
+      "color": "#00a443",
+      "energy": {
+        "type": "schedule",
+        "preset": "td3",
+        "periods": [
+          {
+            "name": "Punta",
+            "price": 0.203912,
+            "schedule": "L-V 10-14,18-22"
+          },
+          {
+            "name": "Llano",
+            "price": 0.161451,
+            "schedule": "L-V 8-10,14-18,22-24"
+          },
+          {
+            "name": "Valle",
+            "price": 0.129779,
+            "schedule": ""
+          }
+        ],
+        "pvpc_margin": 0.0
+      },
+      "surplus": {
+        "type": "none",
+        "price": 0.0,
+        "periods": [],
+        "virtual_wallet": false
+      },
+      "power_prices": {
+        "p1": 0.091074,
+        "p2": 0.013483
+      },
+      "fixed_daily": [
+        {
+          "name": "Financiación bono social",
+          "price": 0.019121
+        }
+      ],
+      "meter_rental_daily": 0.02663,
+      "services_monthly": [
+        {
+          "name": "Asistente Smart",
+          "price": 1.04
+        }
+      ],
+      "electricity_tax_pct": 0.5,
+      "vat_energy_pct": 10.0,
+      "vat_services_pct": 21.0
+    },
+    {
+      "id": "ejemplo-tarifa-plana",
+      "name": "Tarifa plana + excedentes (ejemplo)",
+      "company": "Competencia",
+      "color": "#4a6cf7",
+      "energy": {
+        "type": "schedule",
+        "preset": null,
+        "periods": [
+          {
+            "name": "Único",
+            "price": 0.149,
+            "schedule": ""
+          }
+        ],
+        "pvpc_margin": 0.0
+      },
+      "surplus": {
+        "type": "flat",
+        "price": 0.06,
+        "periods": [],
+        "virtual_wallet": false
+      },
+      "power_prices": {
+        "p1": 0.0838,
+        "p2": 0.0838
+      },
+      "fixed_daily": [
+        {
+          "name": "Financiación bono social",
+          "price": 0.019121
+        }
+      ],
+      "meter_rental_daily": 0.02663,
+      "services_monthly": [],
+      "electricity_tax_pct": 0.5,
+      "vat_energy_pct": 10.0,
+      "vat_services_pct": 21.0
+    },
+    {
+      "id": "ejemplo-pvpc",
+      "name": "PVPC (regulada)",
+      "company": "Mercado regulado",
+      "color": "#f59f00",
+      "energy": {
+        "type": "pvpc",
+        "preset": null,
+        "periods": [],
+        "pvpc_margin": 0.0
+      },
+      "surplus": {
+        "type": "none",
+        "price": 0.0,
+        "periods": [],
+        "virtual_wallet": false
+      },
+      "power_prices": {
+        "p1": 0.083775,
+        "p2": 0.013027
+      },
+      "fixed_daily": [
+        {
+          "name": "Financiación bono social",
+          "price": 0.019121
+        }
+      ],
+      "meter_rental_daily": 0.02663,
+      "services_monthly": [],
+      "electricity_tax_pct": 0.5,
+      "vat_energy_pct": 10.0,
+      "vat_services_pct": 21.0
+    }
+  ]
+}
