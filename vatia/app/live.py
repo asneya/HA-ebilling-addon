@@ -281,14 +281,39 @@ def _prefer_power(totals: dict[str, float], power_totals: dict[str, float]) -> N
             totals[key] = integral
 
 
+MODOS_CONTADOR = ("auto", "daily", "lifetime")
+
+
+def modo_contador(settings: dict[str, Any], key: str) -> str:
+    """Qué mide **este** contador: `auto`, `daily` o `lifetime`.
+
+    Antes era un único ajuste para los seis, y una instalación normal los tiene
+    mezclados: el de la red viene totalizado desde que se instaló y los de la
+    batería son del día. Con un solo interruptor, la mitad se leía mal y no
+    había manera de arreglarlo sin estropear la otra mitad.
+
+    `energy_counter_kinds` guarda la excepción de cada casilla; lo que no tenga
+    excepción sigue al ajuste general, que es lo que ya había configurado.
+    """
+    propio = (settings.get("energy_counter_kinds") or {}).get(key)
+    if propio in MODOS_CONTADOR:
+        return propio
+    general = settings.get("energy_counters")
+    return general if general in MODOS_CONTADOR else "auto"
+
+
 def _states_energy(
-    energy_cfg: dict[str, str], states: dict[str, Any]
+    energy_cfg: dict[str, str], states: dict[str, Any], solo: set[str] | None = None
 ) -> dict[str, float]:
-    """Energía (Wh) leyendo el estado de cada contador tal cual."""
+    """Energía (Wh) leyendo el estado de cada contador tal cual.
+
+    `solo` acota a las casillas que de verdad son del día: en la caché rápida
+    solo esas pueden refrescarse con el estado.
+    """
     out: dict[str, float] = {}
     for key in ENERGY_KEYS:
         entity = energy_cfg.get(key)
-        if not entity:
+        if not entity or (solo is not None and key not in solo):
             continue
         value = _convert(states.get(entity), "energy")
         if value is not None:
@@ -349,7 +374,8 @@ async def daily_energy(
     """
     energy_cfg = settings.get("energy_sensors") or {}
     flow_cfg = settings.get("flow_sensors") or {}
-    mode = settings.get("energy_counters") or "auto"
+    modo = {key: modo_contador(settings, key) for key in ENERGY_KEYS}
+    del_dia = {k for k, v in modo.items() if v == "daily"}
     ids = [energy_cfg.get(k) for k in ENERGY_KEYS if energy_cfg.get(k)]
     # Respaldo: el contador que no exista —o que no tenga estadísticas— se mide
     # integrando su sensor de potencia, que ya está configurado en el flujo de
@@ -363,7 +389,8 @@ async def daily_energy(
         return {"totals": {}, "flows": None, "sources": {}, "buckets": {}}
 
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    cache_key = f"{mode}|{start.isoformat()}|{','.join(ids)}|{','.join(power_ids)}"
+    firma_modo = ",".join(f"{k}={modo[k]}" for k in ENERGY_KEYS)
+    cache_key = f"{firma_modo}|{start.isoformat()}|{','.join(ids)}|{','.join(power_ids)}"
     if (
         _daily_cache["key"] == cache_key
         and time.monotonic() - _daily_cache["at"] < _DAILY_TTL
@@ -372,10 +399,10 @@ async def daily_energy(
                   "flows": _daily_cache["value"]["flows"],
                   "sources": dict(_daily_cache["value"].get("sources") or {}),
                   "buckets": _daily_cache["value"].get("buckets") or {}}
-        if mode == "daily":
+        if del_dia:
             # El estado va al segundo; el reparto viene cacheado. El estado
             # tampoco manda si marca cero y la potencia dice otra cosa.
-            cached["totals"].update(_states_energy(energy_cfg, states))
+            cached["totals"].update(_states_energy(energy_cfg, states, del_dia))
             _prefer_power(cached["totals"], _daily_cache["value"].get("power") or {})
         return cached
 
@@ -460,7 +487,7 @@ async def daily_energy(
                 sources[key] = "estadisticas"
             continue
         state_value = _convert(states.get(entity), "energy")
-        if mode == "daily":
+        if modo[key] == "daily":
             if state_value is not None:
                 out[key] = state_value
                 sources[key] = "estado"
@@ -477,7 +504,7 @@ async def daily_energy(
         # En automático, si el estado coincide con el incremento del día es que
         # el sensor ya mide el día en curso: se usa su estado, más fresco que
         # las estadísticas (que van con hasta 5 minutos de retraso).
-        if mode == "auto" and state_value is not None and _same_day_total(state_value, computed):
+        if modo[key] == "auto" and state_value is not None and _same_day_total(state_value, computed):
             out[key] = state_value
             sources[key] = "estado"
         else:
@@ -1426,13 +1453,21 @@ def sensor_status(
                 # casilla admite varias entidades separadas por comas.
                 primera = entity.split(",")[0].strip()
                 responde, valor, unidad = _slot_state(primera, states, kind)
-            filas.append({
+            fila = {
                 "slot": slot, "group": donde, "label": label, "kind": kind,
                 "entity": entity, "optional": opcional,
                 "note": OPTIONAL_NOTES.get(slot, ""),
                 "responds": responde, "value": valor, "unit": unidad,
                 "suggestions": [] if entity else sugerencias(kind, pistas, usados),
-            })
+            }
+            if donde == "energy":
+                # Qué mide este contador, y si es suyo o heredado del ajuste
+                # general. Lo segundo importa para la interfaz: no es lo mismo
+                # «lo has puesto tú» que «te ha tocado por defecto».
+                propio = (settings.get("energy_counter_kinds") or {}).get(slot)
+                fila["counter"] = modo_contador(settings, slot)
+                fila["counter_own"] = propio in MODOS_CONTADOR
+            filas.append(fila)
         grupos.append({"key": grupo["key"], "name": grupo["name"],
                        "icon": grupo["icon"], "rows": filas})
     # Los que faltan y no son opcionales: es lo que decide si la configuración

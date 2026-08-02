@@ -2,6 +2,27 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.41.0
+
+### Qué mide cada contador, uno por uno
+
+«Qué miden los contadores» era **un solo ajuste para los seis**: o todos del día,
+o todos totalizados, o todos automáticos. Y una instalación normal los tiene
+mezclados —el de la red viene totalizado desde que se instaló y los de la batería
+son del día—, así que arreglar la mitad estropeaba la otra, y no había manera de
+salir de ahí.
+
+Ahora cada contador puede llevar la contraria. Se elige **en la misma hoja donde
+se elige el sensor**, que es donde tiene sentido: al ponerlo ya sabes lo que mide.
+
+- **Automático** — se detecta comparando su estado con lo que ha subido hoy.
+- **Del día** — se pone a cero cada noche: se lee su valor tal cual.
+- **Total** — sube desde que se instaló: se resta el valor de medianoche.
+
+Lo que no toques sigue al ajuste general, así que lo que ya tenías configurado
+queda igual. Y la fila de Sensores lo dice sin entrar: leer un total como si fuera
+del día no da un error, da una cifra absurda, y así se ve de un vistazo.
+
 ## 0.40.4
 
 ### Tras actualizar, la app se quedaba a medias

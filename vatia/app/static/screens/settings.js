@@ -14,6 +14,19 @@ import { asegurar, porTipo, opciones, cargadas } from "../core/entidades.js";
 
 const sensorState = { data: null, picking: null };
 
+/* Los tres modos de un contador de energía, con el nombre que se entiende sin
+   saber lo que es un `state_class`. */
+const MODOS_CONTADOR = [
+  ["auto", "Automático"],
+  ["daily", "Del día"],
+  ["lifetime", "Total"],
+];
+const NOTA_CONTADOR = {
+  auto: "Se detecta comparando su estado con lo que ha subido hoy.",
+  daily: "Se pone a cero cada noche: se lee su valor tal cual.",
+  lifetime: "Sube desde que se instaló: se resta el valor de medianoche.",
+};
+
 /* ---------------- Sensores, por función ----------------
 
    El diseño cambia catorce desplegables ciegos por catorce filas que dicen qué
@@ -87,8 +100,12 @@ function sensorRow(r) {
       : `Sin asignar${sug}`;
   } else {
     const corto = r.entity.replace(/^sensor\./, "").split(",")[0];
-    sub = r.responds ? `${corto} · ${fmtNum.format(r.value ?? 0)} ${r.unit}`
-                     : `${corto} · no disponible`;
+    // El tipo de contador va en la fila: leer mal un total como si fuera del día
+    // no da error, da una cifra absurda, y así se ve sin entrar.
+    const tipo = r.counter && r.counter !== "auto"
+      ? ` · ${r.counter === "daily" ? "del día" : "total"}` : "";
+    sub = r.responds ? `${corto} · ${fmtNum.format(r.value ?? 0)} ${r.unit}${tipo}`
+                     : `${corto} · no disponible${tipo}`;
   }
   return `
     <div class="${clases.join(" ")}" data-slot="${esc(r.slot)}" role="button" tabindex="0">
@@ -122,7 +139,28 @@ async function openSensorPicker(slot) {
         </button>`).join("")}</div>`
     : "";
 
+  /* «¿Qué mide este contador?», y por contador.
+
+     Antes era un solo interruptor para los seis, y una instalación normal los
+     tiene mezclados: el de la red viene totalizado desde que se instaló y los
+     de la batería son del día. Con uno solo, arreglar la mitad estropeaba la
+     otra. Va aquí y no en una pantalla aparte porque es la misma decisión que
+     elegir la entidad: al ponerla ya sabes lo que mide. */
+  const tipoContador = fila.group !== "energy" ? "" : `
+    <div class="li col">
+      <span class="li-txt"><b>¿Qué mide?</b>
+        <small id="pick-kind-note">${esc(NOTA_CONTADOR[fila.counter] || "")}</small></span>
+      <div class="segmented glass-soft" id="pick-kind" role="group"
+           aria-label="Qué mide este contador">
+        ${MODOS_CONTADOR.map(([id, texto]) => `
+          <button class="seg${fila.counter === id ? " active" : ""}"
+                  data-kind="${id}">${esc(texto)}</button>`).join("")}
+      </div>
+      ${fila.counter_own ? "" : `<p class="li-note">Ahora sigue al ajuste general.</p>`}
+    </div>`;
+
   $("#pick-body").innerHTML = `
+    ${tipoContador}
     ${sugerencias}
     <label class="pick-search">
       <svg class="i" aria-hidden="true"><use href="#i-buscar"/></svg>
@@ -161,6 +199,22 @@ async function openSensorPicker(slot) {
 
   $$("#pick-body .pick-sugg [data-pick], #pick-body .banner-act [data-pick]")
     .forEach((b) => b.addEventListener("click", () => assignSensor(slot, b.dataset.pick)));
+  // El tipo de contador se guarda solo y **sin cerrar la hoja**: es habitual
+  // cambiarlo y comprobar el valor sin salir.
+  $$("#pick-kind .seg").forEach((b) => b.addEventListener("click", async () => {
+    const kind = b.dataset.kind;
+    $$("#pick-kind .seg").forEach((x) => x.classList.toggle("active", x === b));
+    $("#pick-kind-note").textContent = NOTA_CONTADOR[kind] || "";
+    try {
+      await api("settings", { method: "PUT",
+        body: JSON.stringify({ energy_counter_kinds: { [slot]: kind } }) });
+      await reloadConfig();
+      await loadSensors();
+      emit("datos");
+    } catch (err) {
+      $("#pick-kind-note").textContent = `No se ha podido guardar: ${err.message}`;
+    }
+  }));
   $("#pick-modal").classList.remove("hidden");
   $("#pick-q").focus();
 }

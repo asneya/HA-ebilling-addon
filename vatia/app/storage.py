@@ -46,7 +46,8 @@ _lock = threading.Lock()
 
 # Ajustes cuyo valor es un diccionario: se combinan con los valores por
 # defecto al cargar y se actualizan por claves (no se reemplazan enteros).
-NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power")
+NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power",
+                   "energy_counter_kinds")
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     # De dónde salen los datos de **toda** la app: la Home, Energía, el flujo y
@@ -106,7 +107,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     #   auto     → se detecta comparando el estado con el incremento del día
     #   daily    → ya son del día en curso: se lee su estado tal cual
     #   lifetime → acumulados: se calcula el incremento desde la medianoche
+    # Es el valor **por defecto** de los seis. Una instalación normal los tiene
+    # mezclados —el de la red totalizado desde que se instaló, los de la batería
+    # del día—, así que cada casilla puede llevar la contraria aquí abajo.
     "energy_counters": "auto",
+    # La excepción de cada contador, por casilla. Lo que no esté aquí sigue al
+    # ajuste general. Se guarda aparte y no dentro de `energy_sensors` porque
+    # eso es «qué entidad», y esto es «qué mide».
+    "energy_counter_kinds": {},
     # Capacidad de la batería en kWh. Sirve para poner en kilovatios el estado de
     # carga —que llega en porcentaje— y así poder decir cuánta batería se llevaría
     # un electrodoméstico. 0 = sin configurar: entonces no se puede separar lo que
