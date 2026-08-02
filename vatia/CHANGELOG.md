@@ -2,6 +2,46 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.42.0
+
+### Cada uno con su Home
+
+La pantalla de inicio se ordena a gusto de cada persona, y el orden es **suyo**:
+en una casa con varias cuentas de Home Assistant, mover una tarjeta no le
+descoloca la app a nadie más. El componente que dibuja el caudal —la galería de
+flujos— pasa a ser también de cada uno.
+
+Funciona porque Home Assistant dice quién está mirando: el Supervisor añade la
+cabecera `X-Remote-User-Id` a todo lo que pasa por Ingress. Entrando desde la
+barra lateral de Home Assistant, las preferencias son tuyas; entrando al puerto
+por tu cuenta no se sabe quién eres y se comparten, y las dos pantallas de
+Ajustes lo dicen en vez de dejarlo a la imaginación.
+
+En **Ajustes → Pantalla de inicio** hay una fila por tarjeta con dos flechas
+para moverla y un interruptor para verla o no. Flechas y no arrastrar: en un
+móvil, dentro de una página que ya hace scroll vertical, arrastrar pelea con el
+scroll y con teclado o lector de pantalla no hay por dónde cogerlo.
+
+Detalles que importan:
+
+- **Todo lo demás sigue siendo de la casa.** Sensores, tarifas, InfluxDB,
+  contadores: son datos de la instalación, no gustos de nadie, y se ven igual
+  desde todas las cuentas.
+- **Lo que ya tenías no cambia.** El valor compartido de siempre es lo que hereda
+  quien no toca nada, así que una instalación que venía de antes se ve igual.
+- **El cierre del día y la ventana** se mueven con lo suyo pegado: el cierre
+  lleva su fila de recuperarlo y la ventana lleva el consejo de «Cabe en la
+  ventana», que es lo que la convierte en una respuesta —primero cuánto sobra,
+  luego qué hacer con ello— y no en dos tarjetas sueltas.
+- **Se puede ocultar todo**, y entonces se dice qué ha pasado y por dónde se
+  deshace, en vez de dejar una pantalla en blanco que parece una app rota.
+- **La copia de seguridad** se lleva las preferencias de todos, y al restaurar
+  los valores compartidos vuelven a donde se ven.
+
+Esto es personalización, no permisos: la cabecera solo llega por Ingress y la
+puede escribir cualquiera que alcance el puerto, que por eso no debe exponerse.
+Decide gustos y nada más.
+
 ## 0.41.3
 
 ### El contador de casa que no mide la casa se detecta y se descarta

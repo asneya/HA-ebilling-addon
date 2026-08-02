@@ -50,8 +50,8 @@ export function showSettingsPage(page) {
   // donde cada control se guarda al tocarlo: dejar ahí una barra que no hace
   // nada invita a pulsarla y a dudar de si el cambio se guardó.
   const hideSave = !page ||
-    ["tariffs", "about", "diagnostics", "backup", "sensors", "source", "flows"]
-      .includes(page);
+    ["tariffs", "about", "diagnostics", "backup", "sensors", "source", "flows",
+     "home"].includes(page);
   $("#settings-save-bar").classList.toggle("hidden", hideSave);
   $("#settings-status").textContent = "";
   window.scrollTo(0, 0);
