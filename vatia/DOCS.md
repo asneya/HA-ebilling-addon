@@ -262,6 +262,15 @@ cinco contadores— o crea un contador de verdad integrando `Load power` con el
 [helper de suma de Riemann](https://www.home-assistant.io/integrations/integration/)
 de Home Assistant.
 
+Y ojo también con `sensor.daily_consumed_energy`, que la propia integración
+define: es **el mismo balance que hace Vatia**, no una medida independiente.
+Ponerlo en esa casilla sería devolverle su propia cuenta disfrazada de lectura, y
+perdería el contraste entre las dos que permite detectar un sensor que miente.
+
+El diccionario completo de registros y entidades, con las tres trampas y los
+detalles de escala, signo y cadencia, está en
+[`docs/sungrow-modbus.md`](../docs/sungrow-modbus.md).
+
 ## Pantalla «Energía»
 
 Se abre pulsando el **resumen de energía** de la Home.
