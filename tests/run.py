@@ -98,7 +98,7 @@ PYTHON = [
     ("unificar.py", ["unificar.py"], {}),
     ("ciclos.py", ["ciclos.py"], {}),
     ("reserva.py", ["reserva.py"], {}),
-    ("aparatos.py", ["aparatos.py"], {}),
+    ("aparatos.py", ["aparatos.py"], {"VATIA_BASE": "http://127.0.0.1:8402"}),
     ("facturaifx.py", ["facturaifx.py"], {}),
     ("perfil.py", ["perfil.py"], {}),
     ("diagapi.py", ["diagapi.py", "http://127.0.0.1:8363"], {}),
@@ -217,15 +217,25 @@ def preparar_trabajo() -> Path:
 def levantar(trabajo: Path) -> bool:
     LOGS.mkdir(parents=True, exist_ok=True)
 
-    for puerto, modulo in FALSOS.items():
-        if not responde(puerto):
-            lanzar([sys.executable, f"{modulo}.py"], TESTS / "falsos", {},
-                   LOGS / f"falso-{puerto}.log")
+    # Un puerto ocupado **aborta**, en vez de adoptar lo que haya. Se adoptaba
+    # —ahorra un segundo de arranque— y ha costado una tarde: un falso parcheado a
+    # mano de una prueba anterior se quedó pegado al 8133 y la regresión entera
+    # corrió contra sus datos, en verde y midiendo otra cosa. Un banco que mide
+    # contra un servidor que no es el suyo no está en verde: está mudo.
+    ocupados = [p for p in [*FALSOS, PUERTO_FICHEROS] if responde(p)]
+    if ocupados:
+        print(f"puertos ya ocupados: {ocupados}")
+        print("  Si son servidores de otra sesión, mátalos: los datos que sirven")
+        print("  pueden no ser los de este banco y la regresión no lo notaría.")
+        return False
 
-    if not responde(PUERTO_FICHEROS):
-        lanzar([sys.executable, "-m", "http.server", str(PUERTO_FICHEROS),
-                "--bind", "127.0.0.1"], TESTS / "navegador", {},
-               LOGS / f"ficheros-{PUERTO_FICHEROS}.log")
+    for puerto, modulo in FALSOS.items():
+        lanzar([sys.executable, f"{modulo}.py"], TESTS / "falsos", {},
+               LOGS / f"falso-{puerto}.log")
+
+    lanzar([sys.executable, "-m", "http.server", str(PUERTO_FICHEROS),
+            "--bind", "127.0.0.1"], TESTS / "navegador", {},
+           LOGS / f"ficheros-{PUERTO_FICHEROS}.log")
 
     for puerto, fixture in INSTANCIAS.items():
         carpeta = trabajo / fixture

@@ -1538,7 +1538,16 @@ body.scrolled .scroll-top { opacity: .95; }
    Sustituye a un renglón de texto que decía «1,66 de sol · 1,1 kWh de batería». */
 .ap-barra { display: flex; height: 5px; border-radius: 3px; overflow: hidden;
   margin-top: 7px; background: var(--hair); }
+/* El tramo interior es el que se rellena: en un aparato parado ocupa la barra
+   entera y no se nota; en uno en marcha, solo lo que lleva del ciclo. Así la barra
+   del origen y la del progreso son la misma y no dos. */
+.ap-barra > span { display: flex; width: 100%; height: 100%; }
 .ap-barra i { display: block; height: 100%; }
+/* Y en marcha, el carril se ve: sin esto un ciclo al 20 % parece una barra corta,
+   no una barra que va por el 20 %. La transición es para que al refrescar el
+   payload avance en vez de saltar. */
+.ap-barra.ap-progreso { background: color-mix(in srgb, var(--ink-3) 22%, transparent); }
+.ap-barra.ap-progreso > span { transition: width .5s ease; }
 /* Las filas de los aparatos son algo más altas que las del consejo de antes: la
    barra necesita su renglón y apretarla contra el nombre no se lee. */
 .ap-fila { min-height: 66px; }

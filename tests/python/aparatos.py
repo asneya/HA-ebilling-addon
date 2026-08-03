@@ -21,8 +21,15 @@ que no existe.
   8. un continuo trae lo que lleva hoy, con su origen atribuido
   9. y lo que no se puede atribuir se declara, no se reparte a ojo
  10. las filas se ordenan por lo que hay que decidir
+ 11. lo que ya está en marcha no tiene hora que elegir
+ 12. una sola noción de «en marcha», la que tolera las pausas
+ 13. y una hora de fin solo si sus ciclos se parecen
+ 14. de punta a punta: la segunda llamada dice lo mismo que la primera
 """
+import json
+import os
 import sys
+import urllib.request
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -134,7 +141,7 @@ reparto = {}
 for h, (s, b, r) in {8: (0.0, 0.0, 1.0), 13: (2.0, 0.0, 0.0), 22: (0.0, 1.5, 0.0)}.items():
     reparto[AHORA.replace(hour=h).isoformat()] = {
         "from_solar": s, "from_battery": b, "from_grid": r, "home_total": s + b + r}
-d = A.dia_de_un_continuo({"8": 0.09, "13": 0.09, "22": 0.09}, reparto,
+d = A.atribuir_por_horas({"8": 0.09, "13": 0.09, "22": 0.09}, reparto,
                          precio_de=lambda _h: 0.20)
 ok(abs(d["kwh"] - 0.27) < 0.001, f"suma lo del día ({d['kwh']} kWh)")
 ok(abs(d["grid_kwh"] - 0.09) < 0.001 and abs(d["sun_kwh"] - 0.09) < 0.001
@@ -143,17 +150,17 @@ ok(abs(d["grid_kwh"] - 0.09) < 0.001 and abs(d["sun_kwh"] - 0.09) < 0.001
 ok(abs(d["eur"] - 0.02) < 0.005,
    f"y solo se cobra la red: 0,09 × 0,20 ({d['eur']} €)")
 # Una hora del aparato sin reparto de la casa: se declara.
-d2 = A.dia_de_un_continuo({"8": 0.09, "3": 0.5}, reparto, precio_de=lambda _h: 0.20)
+d2 = A.atribuir_por_horas({"8": 0.09, "3": 0.5}, reparto, precio_de=lambda _h: 0.20)
 ok(abs(d2["unplaced_kwh"] - 0.5) < 0.001,
    f"lo que no se puede atribuir se dice ({d2['unplaced_kwh']} kWh sin colocar)")
 ok(d2["sun_kwh"] + d2["battery_kwh"] + d2["grid_kwh"] < d2["kwh"],
    "y no se reparte a ojo para que cuadre")
 # Un contador que marca más que la casa entera es ruido, no un aparato glotón.
-d3 = A.dia_de_un_continuo({"8": 5.0}, reparto)
+d3 = A.atribuir_por_horas({"8": 5.0}, reparto)
 ok(abs(d3["grid_kwh"] - 1.0) < 0.001,
    f"su parte no puede pasar del total de la casa ({d3['grid_kwh']} de 1,0)")
-ok(A.dia_de_un_continuo({"8": 0.09}, None) is None, "sin reparto no se inventa")
-ok(A.dia_de_un_continuo({}, reparto) is None, "y sin consumo tampoco")
+ok(A.atribuir_por_horas({"8": 0.09}, None) is None, "sin reparto no se inventa")
+ok(A.atribuir_por_horas({}, reparto) is None, "y sin consumo tampoco")
 
 print("\n10 · el orden de las filas")
 tres = APARATOS + [{"id": "nev", "name": "Nevera", "color": "#08f", "icon": "potencia"}]
@@ -162,6 +169,117 @@ plan3 = P.plan(tres, aprendido, subiendo, lambda _t: 0.19, AHORA)
 formas = [f["kind"] for f in plan3["rows"]]
 ok(formas == ["movible", "fijo", "continuo"],
    f"primero lo que se decide, y los continuos al final ({formas})")
+
+print("\n11 · lo que ya está en marcha")
+# Una lavadora puesta hace 40 minutos, de un ciclo que suele durar 1 h 30.
+suele = {"hours": 1.5, "kwh": 0.9, "cycles": 6, "days": 14,
+         "hours_min": 1.45, "hours_max": 1.6, "peak_w": 2100}
+abierto = {"start": (AHORA - timedelta(minutes=40)).isoformat(),
+           "end": AHORA.isoformat(), "hours": 0.67, "kwh": 0.42,
+           "by_hour": {"10": 0.25, "11": 0.17}}
+p = A.progreso(abierto, suele, AHORA)
+ok(abs(p["elapsed_h"] - 0.67) < 0.01, f"lleva lo que dice el reloj ({p['elapsed_h']} h)")
+ok(p["pct"] == 44, f"y va por el 44 % del tiempo, no de los kWh ({p['pct']} %)")
+ok(p["ends_at"][11:16] == "11:50",
+   f"con su hora de fin ({p['ends_at'][11:16]}), que es el número accionable")
+ok(abs(p["remaining_h"] - 0.83) < 0.02, f"y lo que le queda ({p['remaining_h']} h)")
+ok(p["over"] is False, "sin pasarse de lo habitual")
+
+# En el plan: sigue siendo movible, pero ya no se le propone hora.
+aprendido["lav"] = {"cycle": suele, "kind": "movible", "open": abierto,
+                    "progress": p, "running_split": d,
+                    "tail": {"hours": 0.83, "sun_kwh": 0.8, "battery_kwh": 0.0,
+                             "grid_kwh": 0.0, "sun_pct": 100}}
+plan4 = P.plan(tres, aprendido, subiendo, lambda _t: 0.19, AHORA)
+fila = next(f for f in plan4["rows"] if f["name"] == "Lavadora")
+ok(fila["kind"] == "movible" and fila.get("running"),
+   "sigue siendo movible: mañana volverá a tener su hora")
+ok(fila["best"] is None, "pero ahora no se le propone ninguna, que ya está puesta")
+ok(fila["worth_waiting"] is False, "y no pide esperar a lo que ya está en marcha")
+ok(fila["so_far"] and fila["tail"], "trae lo que lleva y de dónde saldrá la cola")
+ok(plan4["rows"][0]["name"] == "Lavadora",
+   f"y va primero: es lo único que está pasando ({plan4['rows'][0]['name']})")
+
+# Pasarse de lo habitual se dice, en vez de clavar la barra en el 100 %.
+tarde = A.progreso({**abierto, "start": (AHORA - timedelta(hours=2)).isoformat()},
+                   suele, AHORA)
+ok(tarde["over"] is True and tarde["pct"] > 100,
+   f"un programa más largo se pasa del 100 % ({tarde['pct']} %)")
+ok(tarde["ends_at"] is None,
+   "y entonces no se promete una hora de fin que ya ha pasado")
+
+print("\n12 · una sola noción de «en marcha»")
+datos = {"open": {**abierto, "end": (AHORA - timedelta(minutes=10)).isoformat()}}
+ok(A.en_marcha(datos, 1800.0, 15.0, AHORA) is True, "con el aparato tirando, sí")
+ok(A.en_marcha(datos, 1.0, 15.0, AHORA) is True,
+   "y en una pausa de diez minutos también: es la que hace que un lavavajillas "
+   "sea un ciclo y no tres")
+frio = {"open": {**abierto, "end": (AHORA - timedelta(minutes=40)).isoformat()}}
+ok(A.en_marcha(frio, 1.0, 15.0, AHORA) is False,
+   "pasado el hueco tolerado y sin consumo, ya no")
+ok(A.en_marcha(frio, 1800.0, 15.0, AHORA) is True,
+   "aunque lo aprendido vaya con retraso, la lectura de ahora responde")
+ok(A.en_marcha({"open": None}, 1800.0, 15.0, AHORA) is False,
+   "y sin ciclo abierto no se inventa uno")
+
+print("\n13 · la hora de fin solo si sus ciclos se parecen")
+ok(A.hora_de_fin_fiable(suele) is True, "un ciclo que siempre dura lo mismo, sí")
+variado = {**suele, "hours_min": 0.9, "hours_max": 2.4}
+ok(A.hora_de_fin_fiable(variado) is False,
+   "una lavadora con varios programas, no: 0,9–2,4 h no es una hora de fin")
+pv = A.progreso(abierto, variado, AHORA)
+ok(pv["ends_at"] is None and pv["range_h"] == [0.9, 2.4],
+   f"y se dice lo que sí se sabe ({pv['range_h']})")
+ok(A.hora_de_fin_fiable({**suele, "cycles": 2}) is False,
+   "con dos ciclos el recorrido son esos dos y no dice nada")
+ok(A.hora_de_fin_fiable(None) is False, "y sin ciclo aprendido no hay nada que prometer")
+sin_ciclo = A.progreso(abierto, None, AHORA)
+ok(sin_ciclo["pct"] is None and sin_ciclo["elapsed_h"] > 0,
+   "en marcha sin ciclo aprendido: se dice lo que lleva y no se dibuja progreso")
+ok(A.progreso(None, suele, AHORA) is None, "y sin ciclo abierto no hay progreso")
+
+BASE = os.environ.get("VATIA_BASE")
+if BASE:
+    print("\n14 · de punta a punta, dos veces")
+    # Este banco existe por un fallo que ninguno de los de arriba podía ver: el
+    # reparto hora a hora se calculaba bien y se guardaba en la caché del día, pero
+    # el camino que **sirve** de esa caché no lo devolvía. Dos minutos después de
+    # arrancar la aplicación, la fila de la nevera desaparecía de la tarjeta —un
+    # continuo sin reparto no se publica, y así tiene que ser— y volvía sola al
+    # caducar la caché. Con la aplicación recién levantada no se veía nunca, y
+    # probando las funciones por separado, tampoco.
+    #
+    # De ahí la forma de este banco: **la misma pregunta dos veces**. La segunda
+    # respuesta tiene que ser la primera.
+    def filas():
+        with urllib.request.urlopen(BASE + "/api/live", timeout=30) as f:
+            plan = json.load(f).get("plan") or {}
+        return {r["name"]: r for r in plan.get("rows") or []}
+
+    una, otra = filas(), filas()
+    ok(set(una) == set(otra),
+       f"las dos llamadas traen los mismos aparatos ({sorted(una)})")
+    continuos = [n for n, r in una.items() if r["kind"] == "continuo"]
+    ok(bool(continuos), f"con algún continuo entre ellos ({continuos})")
+    for n in continuos:
+        ok(bool(otra.get(n, {}).get("today")),
+           f"y {n} sigue trayendo su día en la segunda, no solo en la primera")
+    # El coche del Home Assistant falso está siempre cargando, y lleva siempre 40
+    # minutos: si esta fila no sale, el camino de «en marcha» no lo recorre nadie.
+    marcha = [n for n, r in una.items() if r.get("running")]
+    ok(bool(marcha), f"y algo en marcha, que si no este camino no se prueba ({marcha})")
+    for n in marcha:
+        r, p = una[n], una[n]["running"]
+        ok(bool(otra[n].get("so_far")),
+           f"{n} en marcha: su origen medido aguanta la caché")
+        ok(r["best"] is None and not r["worth_waiting"],
+           f"y no se le propone hora ni se le pide esperar")
+        ok(abs(p["elapsed_h"] - 0.67) < 0.09,
+           f"lleva los 40 min que lleva ({p['elapsed_h']} h)")
+        ok(p["typical_h"] and abs(p["typical_h"] - 1.0) < 0.2,
+           f"con el ciclo típico de los días anteriores, no el de hoy a medias "
+           f"({p['typical_h']} h)")
+        ok(p["over"] is False and 50 < p["pct"] < 85, f"y va por el {p['pct']} %")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

@@ -51,8 +51,13 @@ _MIN_CICLOS = 2
 # El margen del diseño entre «Gratis» y «Cabe justo»: quince minutos.
 _MARGEN_H = 0.25
 
-_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": None}
+_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": None, "forced": 0.0}
 _TTL = 1800.0
+# Cada cuánto, como mucho, un arranque puede saltarse la caché. Ver
+# `_ha_arrancado_algo`: sin este suelo, los primeros minutos de un ciclo —cuando
+# todavía no hay ni un tramo de cinco minutos en las estadísticas— pedirían el
+# histórico de catorce días en cada payload.
+_MIN_ENTRE_FORZADOS = 180.0
 
 
 def _mediana(valores: list[float]) -> float:
@@ -108,13 +113,22 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
 
     Devuelve, por ciclo, cuándo empezó, cuánto duró (horas) y cuántos kWh se
     llevó. El hueco tolerado permite que un programa con pausas cuente como uno.
+
+    El último puede venir con ``open`` en cierto: es el que **sigue en marcha**
+    cuando se acaban las muestras. Se marca porque no es lo mismo que los demás y
+    tratarlo igual era un fallo silencioso: una lavadora de dos horas que llevaba
+    veinte minutos entraba en la lista como «un ciclo de veinte minutos» y de ahí
+    salía la mediana de «lo que suele durar». Con seis ciclos en catorce días —una
+    lavadora normal— la mediana es la media del tercero y el cuarto, así que uno
+    truncado la mueve. Sus horas y sus kWh son los de **hasta ahora**, que es
+    exactamente lo que hace falta para decir por dónde va.
     """
     paso_h = _PASO_MIN / 60.0
     ciclos: list[dict[str, Any]] = []
     actual: list[tuple[datetime, float]] = []
     hueco = 0
 
-    def cerrar() -> None:
+    def cerrar(sigue: bool = False) -> None:
         nonlocal actual, hueco
         # Se recorta la cola: las muestras en reposo que hicieron falta para saber
         # que el ciclo había acabado no son parte del ciclo. Sin recortarlas, cada
@@ -132,6 +146,7 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
                     "hours": len(actual) * paso_h,
                     "kwh": kwh,
                     "peak_w": max(w for _t, w in actual),
+                    "open": sigue,
                 })
         actual = []
         hueco = 0
@@ -148,7 +163,10 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
                 # El hueco se queda dentro del ciclo: su consumo es el real (casi
                 # cero), pero su tiempo cuenta, porque el programa sigue puesto.
                 actual.append((moment, max(w, 0.0)))
-    cerrar()
+    # Si al acabar las muestras queda algo abierto, es que sigue en marcha: el
+    # último tramo caliente cae dentro del hueco tolerado desde el final. Los que
+    # ya habían terminado cerraron dentro del bucle y aquí no queda nada de ellos.
+    cerrar(sigue=True)
     return ciclos
 
 
@@ -158,21 +176,35 @@ def _resumen(ciclos: list[dict[str, Any]], dias: int) -> dict[str, Any] | None:
     La mediana porque un día que la lavadora se quedó puesta el doble no tiene que
     alargar la previsión de todos los demás. ``None`` si aún no hay bastantes
     ciclos para decir «suele».
+
+    **Solo con los ciclos terminados.** El que está en marcha no ha durado todavía
+    lo que va a durar, así que meterlo aquí es meter un número que aún no existe:
+    con una lavadora recién puesta, «suele durar 2 h» se convertía en «1 h 10».
+    Por eso se filtra aquí, donde se calcula la mediana, y no en cada sitio que
+    pide ciclos: el que reparte por horas o suma kWh de hoy **sí** los quiere
+    todos, porque esa energía se ha gastado de verdad.
     """
-    if len(ciclos) < _MIN_CICLOS:
+    cerrados = [c for c in ciclos if not c.get("open")]
+    if len(cerrados) < _MIN_CICLOS:
         return None
-    horas = _mediana([c["hours"] for c in ciclos])
-    kwh = _mediana([c["kwh"] for c in ciclos])
+    horas = _mediana([c["hours"] for c in cerrados])
+    kwh = _mediana([c["kwh"] for c in cerrados])
     return {
         "hours": round(horas, 2),
         "kwh": round(kwh, 3),
-        "peak_w": round(max(c["peak_w"] for c in ciclos), 0),
-        "cycles": len(ciclos),
+        "peak_w": round(max(c["peak_w"] for c in cerrados), 0),
+        "cycles": len(cerrados),
         "days": dias,
         # Cuándo suele ponerse: con eso el consejo puede decir «lo pones a las
         # 22 h y te sale a punta».
-        "usual_hour": _mediana([c["start"].hour + c["start"].minute / 60 for c in ciclos]),
-        "last": ciclos[-1]["start"].isoformat() if ciclos else None,
+        "usual_hour": _mediana([c["start"].hour + c["start"].minute / 60 for c in cerrados]),
+        "last": cerrados[-1]["start"].isoformat(),
+        # Lo corto y lo largo que llega a ser, que es lo que decide si de este
+        # aparato se puede decir «termina a las 19:40» o solo «suele durar entre
+        # una hora y dos y media». Una mediana sola no distingue un horno —siempre
+        # lo mismo— de una lavadora con cinco programas.
+        "hours_min": round(min(c["hours"] for c in cerrados), 2),
+        "hours_max": round(max(c["hours"] for c in cerrados), 2),
     }
 
 
@@ -225,6 +257,12 @@ def forma_de_uso(
     Nunca devuelve ``"fijo"``: eso no se puede ver en los vatios (ver la nota de
     arriba). Con pocas muestras se dice `movible`, que es lo que la aplicación
     hacía siempre y deja la puerta abierta a aprender.
+
+    Aquí los ciclos se cuentan **todos**, también el que sigue en marcha, y es a
+    propósito: el ciclo del router es uno de 168 horas que nunca cierra, así que
+    descontarlo lo dejaría en cero ciclos y se perdería el 0,14 al día que explica
+    por qué esta señal sola no lo caza. Contar uno de más entre los 224 de una
+    nevera no cambia nada.
     """
     if not muestras or dias <= 0:
         return "movible"
@@ -236,37 +274,47 @@ def forma_de_uso(
 
 
 def _por_horas_hoy(
-    muestras: list[tuple[datetime, float]], medianoche: datetime, now: datetime
+    muestras: list[tuple[datetime, float]], desde: datetime, now: datetime
 ) -> dict[str, float]:
-    """kWh de hoy hora a hora, integrando la potencia de las muestras.
+    """kWh hora a hora entre ``desde`` y ``now``, integrando la potencia.
 
     Para un aparato continuo esto **sustituye** a los ciclos: es lo que ha gastado
     de verdad, y con el reparto horario de la casa se le puede decir de dónde salió.
     Las claves van como texto porque el payload es JSON y ahí las claves numéricas
     no existen.
+
+    Y por eso ``desde`` no puede ser anterior a la medianoche de hoy: la clave es
+    la hora del día, así que las 23:00 de ayer y las de hoy caerían en el mismo
+    sitio. Un ciclo que viene de ayer —un coche cargando de noche— solo puede
+    contar con su parte de hoy, y quien lo llame se encarga de recortarlo.
     """
     paso_h = _PASO_MIN / 60.0
     out: dict[str, float] = {}
     for momento, w in muestras:
-        if momento < medianoche or momento > now:
+        if momento < desde or momento > now:
             continue
         clave = str(momento.hour)
         out[clave] = out.get(clave, 0.0) + max(w, 0.0) * paso_h / 1000.0
     return {k: round(v, 4) for k, v in out.items()}
 
 
-def dia_de_un_continuo(
+def atribuir_por_horas(
     por_hora: dict[str, float] | None,
     reparto: dict[str, dict[str, float]] | None,
     precio_de: Any = None,
 ) -> dict[str, Any] | None:
-    """Lo que un aparato continuo lleva hoy y **de dónde salió**.
+    """De dónde salió, hora a hora, la energía que un aparato **ya ha gastado**.
 
-    Un 24/7 no tiene «hora óptima» que recomendar: tiene consumo. Y su origen no se
-    puede simular —ya pasó— así que se **atribuye**: lo que la nevera gastó a las
-    tres salió del mismo sitio que el resto de la casa a las tres, en la misma
-    proporción. Es la única atribución defendible sin un contador de origen por
-    aparato, y es la misma cuenta que necesitaría un desglose de la factura.
+    Lo que pasó no se puede simular, así que se **atribuye**: lo que la nevera
+    gastó a las tres salió del mismo sitio que el resto de la casa a las tres, en
+    la misma proporción. Es la única atribución defendible sin un contador de
+    origen por aparato, y es la misma cuenta que necesitaría un desglose de la
+    factura.
+
+    Vale para las dos cosas que hay que contar hacia atrás, y es la misma cuenta:
+    lo que lleva hoy un continuo —que no tiene «hora óptima» que recomendar, tiene
+    consumo— y lo que lleva de este ciclo un aparato que está en marcha ahora
+    mismo. Se llamaba `dia_de_un_continuo` cuando solo servía para lo primero.
 
     ``precio_de(iso)`` da el precio de esa hora, si se sabe. El coste se cobra
     **solo de la red**: lo que puso el sol no costó nada, y lo que puso la batería
@@ -333,6 +381,156 @@ def forma(aparato: dict[str, Any], aprendido: dict[str, Any] | None) -> str:
     return str((aprendido or {}).get("detected_kind") or "movible")
 
 
+# ── Un ciclo que está en marcha ────────────────────────────────────────────
+#
+# Cuando algo ya está funcionando, «¿a qué hora lo pongo?» está contestada y deja
+# de ser la pregunta: la que queda es «¿por dónde va y qué me está costando?».
+#
+# Dos decisiones sobre lo que se puede afirmar:
+#
+#   · **El progreso va por tiempo, no por energía.** En una lavadora el
+#     calentamiento está al principio, así que el 70 % de los kWh se gastan en el
+#     primer tercio del programa: una barra por energía diría «casi acabando»
+#     cuando lleva veinte minutos. El tiempo es el eje honesto.
+#   · **Y la duración típica es una mediana sobre programas distintos.** Un rápido
+#     a 30° y un algodón a 60° son el mismo enchufe, así que la barra tiene que
+#     poder pasarse: al superar lo habitual se dice, en vez de quedarse clavada en
+#     el 100 % fingiendo que el final es inminente.
+#
+# De ahí la puerta de la dispersión: una hora de fin solo se promete si los ciclos
+# de ese aparato se parecen entre sí. Un horno siempre tarda lo mismo y se le puede
+# decir «termina a las 19:40»; una lavadora con cinco programas, no, y entonces se
+# dice lo que se sabe: «suele durar entre 1 h y 2 h 30».
+_FIABLE_CICLOS = 3          # con dos, el recorrido son esos dos y no dice nada
+_FIABLE_DISPERSION = 0.3    # lo corto a lo largo, sobre la mediana
+# Margen antes de decir «más de lo habitual»: cinco minutos, para no saltar en el
+# 100,4 % y quedarse ahí el resto del ciclo.
+_MARGEN_PASADO_H = 5 / 60
+
+
+def hora_de_fin_fiable(ciclo: dict[str, Any] | None) -> bool:
+    """¿Se puede prometer una hora de fin para este aparato?
+
+    Solo si sus ciclos se parecen. Es la misma disciplina que con «fijo»: cuando el
+    dato no sostiene la cifra, la cifra no se dice.
+    """
+    if not ciclo:
+        return False
+    tipico = float(ciclo.get("hours") or 0.0)
+    corto, largo = ciclo.get("hours_min"), ciclo.get("hours_max")
+    if tipico <= 0 or corto is None or largo is None:
+        return False
+    if int(ciclo.get("cycles") or 0) < _FIABLE_CICLOS:
+        return False
+    return (float(largo) - float(corto)) <= _FIABLE_DISPERSION * tipico
+
+
+def progreso(
+    abierto: dict[str, Any] | None, ciclo: dict[str, Any] | None, now: datetime
+) -> dict[str, Any] | None:
+    """Por dónde va el ciclo que está en marcha. ``None`` si no hay ninguno.
+
+    Lo medido y lo estimado, separados: ``elapsed_h`` y ``kwh`` son lo que lleva
+    —del reloj y del contador—, y ``ends_at``/``remaining_h`` son la mediana de sus
+    propios ciclos, que solo aparecen si la dispersión los sostiene. Cuando no,
+    queda ``range_h``, que es lo que sí se sabe.
+    """
+    if not abierto or not abierto.get("start"):
+        return None
+    inicio = datetime.fromisoformat(abierto["start"])
+    # Del reloj, no de las muestras: «lleva 42 min» es tiempo transcurrido. Las
+    # muestras van en pasos de cinco minutos y se recortan las pausas, que es lo
+    # correcto para medir consumo y no para contar lo que se lleva esperando.
+    llevan = max(0.0, (now - inicio).total_seconds() / 3600.0)
+    tipico = float((ciclo or {}).get("hours") or 0.0)
+    out: dict[str, Any] = {
+        "start": abierto["start"],
+        "elapsed_h": round(llevan, 2),
+        "kwh": abierto.get("kwh"),
+        "typical_h": tipico or None,
+        "pct": None, "over": False,
+        "ends_at": None, "remaining_h": None, "range_h": None,
+    }
+    if tipico <= 0:
+        # En marcha, pero sin ciclo aprendido con el que decir «por dónde va». Se
+        # enseña lo que lleva y nada más: es lo que hay.
+        return out
+    # Sin recortar al 100 %: un programa más largo de lo habitual tiene que poder
+    # verse, y la tarjeta lo dibuja hasta el borde y lo dice con palabras.
+    out["pct"] = round(llevan / tipico * 100)
+    out["over"] = llevan > tipico + _MARGEN_PASADO_H
+    if out["over"]:
+        return out
+    if hora_de_fin_fiable(ciclo):
+        out["ends_at"] = (inicio + timedelta(hours=tipico)).isoformat()
+        out["remaining_h"] = round(max(0.0, tipico - llevan), 2)
+    else:
+        out["range_h"] = [ciclo.get("hours_min"), ciclo.get("hours_max")]
+    return out
+
+
+def _ha_arrancado_algo(
+    valor: dict[str, dict[str, Any]] | None,
+    states: dict[str, Any],
+    lista: list[dict[str, Any]],
+) -> bool:
+    """¿Hay algo en marcha de lo que lo aprendido no sabe nada?
+
+    Lo aprendido se guarda media hora, y eso está bien para «lo que suele durar»
+    —no cambia de un rato a otro— pero no para el ciclo que **acaba de empezar**:
+    sin esto, una lavadora puesta a y cinco no enseñaba por dónde iba hasta media
+    hora después, con el programa a medias. Cuando arranca algo, lo aprendido queda
+    viejo y se vuelve a aprender: son dos o tres veces al día por aparato.
+
+    Un continuo no cuenta: la nevera arranca el compresor treinta veces al día y su
+    fila no habla de ciclos, así que invalidar por ella sería pedir el histórico de
+    catorce días sesenta veces al día para nada. Y el suelo de tres minutos evita
+    que los primeros minutos de un arranque —cuando aún no hay ni un tramo de cinco
+    minutos en las estadísticas— se conviertan en una consulta por payload.
+    """
+    if time.monotonic() - float(_cache.get("forced") or 0.0) < _MIN_ENTRE_FORZADOS:
+        return False
+    for a in lista:
+        datos = (valor or {}).get(a["id"])
+        # Un aparato del que no se ha aprendido nada no entra aquí: si es nuevo, su
+        # entidad cambia la clave de la caché y ya se vuelve a aprender por eso; y
+        # si es que no tiene estadísticas, forzar no lo va a arreglar.
+        if not datos or forma(a, datos) == "continuo":
+            continue
+        w = _watts(states.get(a.get("power_entity") or ""))
+        if w is not None and w > float(a.get("standby_w") or 0) and not datos.get("open"):
+            return True
+    return False
+
+
+def en_marcha(
+    datos: dict[str, Any] | None, watts: float | None, umbral: float, now: datetime
+) -> bool:
+    """Si un aparato está funcionando **ahora**, con una sola noción de «en marcha».
+
+    Había dos, y no coincidían. `instantaneo` mira la potencia de este segundo, sin
+    ninguna tolerancia; el detector de ciclos tolera quince minutos de hueco, y por
+    eso un lavavajillas cuenta como un ciclo y no como tres. Con las dos vivas a la
+    vez, la pausa entre lavado y secado decía «terminado» durante un cuarto de hora
+    y luego «en marcha» otra vez: la barra de progreso **retrocedía**.
+
+    Así que manda el ciclo abierto, y la lectura de ahora solo lo sostiene: está en
+    marcha si tiene un ciclo abierto y, o bien pasa del umbral en este momento, o
+    bien su última muestra caliente cae dentro del hueco tolerado. Cuando lo
+    aprendido va con retraso, la lectura instantánea es la que responde.
+    """
+    abierto = (datos or {}).get("open")
+    if not abierto:
+        return False
+    if watts is not None and watts > umbral:
+        return True
+    try:
+        fin = datetime.fromisoformat(abierto["end"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (now - fin) <= timedelta(minutes=_HUECO_TOLERADO * _PASO_MIN)
+
+
 async def learn(
     settings: dict[str, Any],
     states: dict[str, Any],
@@ -351,7 +549,9 @@ async def learn(
         return {}
     key = "|".join(sorted(ids)) + "@" + now.strftime("%Y-%m-%d-%H")
     if _cache["key"] == key and time.monotonic() - _cache["at"] < _TTL:
-        return _cache["value"]
+        if not _ha_arrancado_algo(_cache["value"], states, lista):
+            return _cache["value"]
+        _cache["forced"] = time.monotonic()
 
     medianoche = now.replace(hour=0, minute=0, second=0, microsecond=0)
     out: dict[str, dict[str, Any]] = {}
@@ -382,8 +582,25 @@ async def learn(
             # 0,03 kWh». Es cierto que el compresor hace eso, y no significa nada.
             resumen = None if detectada == "continuo" else _resumen(ciclos, _DIAS)
             hoy = [c for c in ciclos if c["start"] >= medianoche]
+            # El que sigue en marcha, si lo hay. Un continuo está siempre «en
+            # marcha» y eso no es noticia: su fila cuenta lo del día, no un ciclo.
+            abierto = next((c for c in ciclos if c.get("open")), None)
             out[a["id"]] = {
                 "cycle": resumen,
+                # El ciclo en curso, para poder decir por dónde va: desde cuándo,
+                # lo que lleva y lo que se ha llevado **hasta ahora**. No es el
+                # ciclo típico ni pretende serlo.
+                "open": None if (abierto is None or detectada == "continuo") else {
+                    "start": abierto["start"].isoformat(),
+                    "end": abierto["end"].isoformat(),
+                    "hours": round(abierto["hours"], 2),
+                    "kwh": round(abierto["kwh"], 3),
+                    # Y su energía hora a hora, que es lo que permite decir de
+                    # dónde ha salido **de verdad** en vez de simularlo: el mismo
+                    # reparto horario que se le hace a un continuo.
+                    "by_hour": _por_horas_hoy(
+                        muestras, max(medianoche, abierto["start"]), now),
+                },
                 # Lo que la aplicación cree que es, para que su ficha lo pueda
                 # enseñar y quien la lea pueda corregirlo. Detectar y callarlo es
                 # lo que hace que una cifra rara parezca un error del programa.
@@ -392,10 +609,14 @@ async def learn(
                 # no tiene «hora óptima», tiene consumo del día y un origen.
                 "today_by_hour": _por_horas_hoy(muestras, medianoche, now),
                 # Los ciclos de hoy, para el cierre del día: cuándo se puso cada
-                # cosa y cuánto se llevó.
+                # cosa y cuánto se llevó. Aquí el que está en marcha **sí** entra,
+                # con lo que lleva: esa energía se ha gastado, y quitarla sería
+                # esconder consumo del día. Va marcado para que quien hable de su
+                # duración sepa que aún no ha acabado.
                 "today": [
                     {"start": c["start"].isoformat(), "end": c["end"].isoformat(),
-                     "hours": round(c["hours"], 2), "kwh": round(c["kwh"], 3)}
+                     "hours": round(c["hours"], 2), "kwh": round(c["kwh"], 3),
+                     "open": bool(c.get("open"))}
                     for c in hoy
                 ],
                 "today_kwh": round(sum(c["kwh"] for c in hoy), 3),

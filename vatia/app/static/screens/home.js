@@ -240,8 +240,13 @@ function cuando(iso) {
    tarjetas.
 
    Los trozos por debajo del 4 % no se dibujan: a esa anchura no se ven y solo
-   ensucian el borde entre los dos vecinos. La cifra sigue estando en el título. */
-function barraOrigen(o) {
+   ensucian el borde entre los dos vecinos. La cifra sigue estando en el título.
+
+   Y en un aparato **en marcha** esta misma barra es la de progreso: se rellena
+   solo hasta `pct` y el resto queda de carril. Una segunda barra debajo sería
+   ruido, y así la de arriba dice las dos cosas de una vez —por dónde va y de dónde
+   ha salido lo que lleva— y crece a medida que avanza el ciclo. */
+function barraOrigen(o, pct) {
   if (!o) return "";
   const partes = [
     ["from_solar", o.sun_kwh || 0, "del sol"],
@@ -256,16 +261,22 @@ function barraOrigen(o) {
       `<i style="width:${((v / total) * 100).toFixed(1)}%;background:${
         SUM_COLORS[clave]}" title="${esc(`${fmtNum.format(v)} kWh ${texto}`)}"></i>`)
     .join("");
-  return `<span class="ap-barra">${trozos}</span>`;
+  // Recortado al 100 % **solo para dibujar**: el «se ha pasado» se dice con
+  // palabras, porque una barra al 103 % no se distingue de una al 100.
+  const relleno = pct == null ? "" :
+    ` style="width:${Math.max(4, Math.min(pct, 100)).toFixed(0)}%"`;
+  return `<span class="ap-barra${pct == null ? "" : " ap-progreso"}"><span${
+    relleno}>${trozos}</span></span>`;
 }
 
-/* Una tarjeta para los aparatos, con tres formas de fila porque son tres
-   preguntas distintas:
+/* Una tarjeta para los aparatos, con una fila por pregunta:
 
      · movible  — «¿a qué hora?». Barra del origen si se pone ahora, lo que
        cuesta, y la mejor hora con lo que se gana.
-     · fijo     — «¿cuánto me cuesta ahora?». Igual, pero sin proponer hora: el
-       aire lo quieres cuando hace calor, no cuando pica el sol.
+     · en marcha — «¿por dónde va y qué me está costando?». Un movible que ya está
+       funcionando: la hora óptima ya no es la pregunta, la decisión está tomada.
+     · fijo     — «¿cuánto me cuesta ahora?». Como el movible, pero sin proponer
+       hora: el aire lo quieres cuando hace calor, no cuando pica el sol.
      · continuo — «¿cuánto lleva hoy y de dónde salió?». Una nevera no tiene hora
        que elegir, y hasta ahora se le calculaba una.
 
@@ -276,9 +287,10 @@ function renderPlan(plan) {
   $("#plan-panel").classList.toggle("hidden", !rows.length && !bat);
   if (!rows.length && !bat) return;
 
-  // El titular habla solo de los que se pueden mover: es lo único sobre lo que hay
-  // una decisión que tomar.
-  const movibles = rows.filter((r) => r.kind === "movible");
+  // El titular habla solo de los que se pueden mover **y aún no están puestos**:
+  // es lo único sobre lo que queda una decisión que tomar. Uno en marcha contado
+  // aquí sacaba un «ya están en su mejor hora» que no venía a cuento.
+  const movibles = rows.filter((r) => r.kind === "movible" && !r.running);
   const mueven = movibles.filter((r) => r.worth_waiting);
   const ahorro = mueven.reduce((a, r) => a + (r.saving_eur || 0), 0);
   const luego = movibles.some((r) => r.best && r.best.at > r.now.at);
@@ -294,7 +306,24 @@ function renderPlan(plan) {
     // cero dicho en palabras—, y sale del mismo reparto que dibuja la barra.
     const importe = typeof v.value === "number" ? fmtEUR.format(v.value) : (v.value || "—");
     let sub, pie;
-    if (r.kind === "continuo") {
+    if (r.running) {
+      // Lo medido delante: lo que lleva puesto sale del reloj, no de una mediana.
+      const p = r.running;
+      sub = `en marcha · lleva ${dur(p.elapsed_h)}`;
+      // Y lo único de esta fila que un medidor de enchufe no sabe decir: de dónde
+      // va a salir lo que le queda. En «% con sol» —la misma cifra y la misma
+      // cuenta que las horas que propone el plan, hecha en el backend— y solo
+      // cuando hay una duración en la que confiar.
+      if (r.tail) sub += ` · lo que queda, ${r.tail.sun_pct} % con sol`;
+      // Y detrás lo estimado, en este orden de preferencia: la hora de fin si sus
+      // ciclos se parecen lo bastante para prometerla; si no, lo que sí se sabe,
+      // que es entre cuánto y cuánto suele durar; y si se ha pasado de lo habitual,
+      // eso, que es más útil que una cuenta atrás en negativo.
+      pie = p.over ? `más de lo habitual (${dur(p.typical_h)})`
+        : p.ends_at ? `~termina ${cuando(p.ends_at)}`
+        : p.range_h ? `suele durar ${dur(p.range_h[0])}–${dur(p.range_h[1])}`
+        : "aún aprendiendo su ciclo";
+    } else if (r.kind === "continuo") {
       const t = r.today || {};
       sub = `${fmtNum.format(t.kwh || 0)} kWh hoy · siempre encendido`;
       pie = v.sub || "";
@@ -312,15 +341,23 @@ function renderPlan(plan) {
         : r.best && r.best.at > r.now.at ? "esperar apenas cambia nada"
         : "es su mejor hora";
     }
+    // La barra: de lo que lleva gastado si está en marcha —medido—, de lo que
+    // lleva hoy si es un continuo, y de lo que se llevaría si se pone ahora en los
+    // demás. En marcha además se rellena solo hasta donde va el ciclo.
+    // Sin ciclo aprendido no hay progreso que dibujar, y `pct` viene vacío: la
+    // barra sale entonces como la de los demás, llena, y no fingiendo un carril.
+    const barra = r.running ? barraOrigen(r.so_far, r.running.pct)
+      : barraOrigen(r.kind === "continuo" ? r.today : r.now);
     return `
-      <div class="ad-row ap-fila" data-kind="${esc(r.kind)}">
+      <div class="ad-row ap-fila" data-kind="${esc(r.kind)}"${
+        r.running ? ' data-running="1"' : ""}>
         <span class="ad-chip" style="--ap:${esc(r.color)}">
           <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
         </span>
         <span class="ad-txt">
           <b>${esc(r.name)}</b>
           <small>${esc(sub)}</small>
-          ${barraOrigen(r.kind === "continuo" ? r.today : r.now)}
+          ${barra}
         </span>
         <span class="ad-verdict">
           <b class="v-${esc(v.kind || "gratis")}">${esc(importe)}</b>

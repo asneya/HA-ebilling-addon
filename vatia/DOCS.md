@@ -315,6 +315,42 @@ la forma de uso:
 | **Tiene ciclo, pero no lo muevo** (fijo) | ¿cuánto me cuesta ahora? | lo mismo, **sin** proponer hora |
 | **Siempre encendido** (continuo) | ¿cuánto lleva hoy y de dónde salió? | los kWh del día y su origen hora a hora |
 
+### Cuando algo está en marcha
+
+Un movible que **ya está funcionando** cambia de pregunta: «¿a qué hora?» está
+contestada, la decisión está tomada. Su fila pasa a decir por dónde va, y la barra
+del origen se convierte además en la del progreso: se rellena hasta donde va el
+ciclo y el resto queda de carril.
+
+Lo medido y lo estimado no se mezclan en la misma cifra:
+
+| | De dónde sale |
+|---|---|
+| Que está en marcha y **desde cuándo** | del detector de ciclos, con su misma tolerancia a las pausas |
+| Lo que **lleva** de tiempo y de kWh | del reloj y del contador |
+| **De dónde ha salido** lo que lleva, y lo que ha costado | atribución hora a hora, como en un continuo |
+| Cuándo **termina** | la mediana de sus propios ciclos |
+| De dónde saldrá **lo que le queda** | simulado, con la potencia que está dando hoy |
+
+El progreso va **por tiempo, no por energía**. En una lavadora el calentamiento
+está al principio: el 70 % de los kWh se gastan en el primer tercio del programa,
+así que una barra por energía diría «casi acabando» a los veinte minutos.
+
+Y la duración típica es una mediana **sobre programas distintos** —un rápido a 30°
+y un algodón a 60° son el mismo enchufe—, así que la barra **puede pasarse**: al
+superar lo habitual se dice («más de lo habitual») en vez de quedarse clavada en el
+100 % fingiendo que el final es inminente.
+
+Por lo mismo, la **hora de fin solo se promete si sus ciclos se parecen**: hacen
+falta al menos tres terminados y que entre el más corto y el más largo no haya más
+de un 30 % de la mediana. Un horno tarda siempre lo mismo y se le puede decir
+«~termina a las 19:40»; una lavadora con cinco programas, no, y entonces se dice lo
+que sí se sabe: «suele durar entre 55 min y 2 h 25 min».
+
+Un ciclo en curso **no cuenta** para calcular «lo que suele durar»: todavía no ha
+durado lo que va a durar. Sus kWh sí cuentan para el consumo del día, porque esa
+energía se ha gastado de verdad.
+
 Vatia **detecta** «siempre encendido» de la curva de potencia: una nevera enciende
 y apaga el compresor decenas de veces al día y un router no se apaga nunca, y eso
 se ve en los vatios. Lo que **no** se puede saber mirando el sensor es si algo
@@ -335,7 +371,8 @@ parte nunca puede pasar del total de la casa de esa hora, y lo que cae en una ho
 sin reparto **se declara como no atribuido** en vez de repartirse a ojo para que
 cuadre.
 
-Las filas se ordenan por lo que hay que decidir: primero los movibles (por ahorro
+Las filas se ordenan por lo que hay que decidir, con lo que **está pasando** por
+delante: primero lo que esté en marcha, luego los movibles (por ahorro
 descendente), después los fijos y al final los continuos.
 
 ## Pantalla «Energía»
