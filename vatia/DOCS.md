@@ -187,6 +187,18 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 | Contadores de energía (kWh) | solar, importada, exportada, carga, descarga y **casa** (opcional) |
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
 | Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
+| El tiempo hora a hora (opcional) | una entidad **`weather.*`** (AEMET, Met.no, OpenWeatherMap…) para la tarjeta del tiempo de la Home |
+
+La entidad `weather.*` es **otra cosa** que los dos sensores de meteorología:
+aquellos dicen cómo está *ahora* —son los que ponen el fondo y la pastilla de la
+cabecera— y esta trae la **previsión horaria**, que es lo que pinta la tarjeta.
+Sin asignarla, esa tarjeta no sale.
+
+La previsión se pide con el servicio `weather.get_forecasts` y no leyendo un
+atributo: desde Home Assistant 2024.4 las entidades del tiempo **ya no publican**
+su previsión en el atributo `forecast`. La **nubosidad** de cada hora depende de la
+integración —AEMET y Met.no la dan, otras no—; cuando no viene, esa columna se
+calla en vez de dibujar un cero que se leería como «despejado».
 
 Los contadores de energía pueden ser **sensores del día en curso** («Solar hoy»,
 «Importada hoy»…) o **contadores acumulados** desde el inicio del histórico

@@ -612,6 +612,70 @@ async def ha_ficha(settings: dict[str, Any], entity: str) -> dict[str, Any]:
     }
 
 
+async def ha_weather_hourly(
+    settings: dict[str, Any], entity: str
+) -> list[dict[str, Any]]:
+    """La previsión horaria de una entidad ``weather.*`` de Home Assistant.
+
+    **Hay que pedirla con un servicio, no leyendo un atributo.** Hasta 2024.3 las
+    entidades del tiempo publicaban su previsión en el atributo ``forecast``, y en
+    2024.4 se retiró: ahora se pide con ``weather.get_forecasts``, que devuelve la
+    respuesta del servicio. Es la diferencia entre que esta tarjeta funcione y que
+    salga vacía en cualquier instalación puesta al día.
+
+    Se pide por websocket y no por REST porque `call_service` con respuesta lleva
+    ahí desde mucho antes que el `?return_response` de la API REST, así que
+    funciona en más versiones de Home Assistant. La conexión es la misma máquina
+    que ya se usa para las estadísticas.
+
+    Devuelve la lista tal y como la da Home Assistant, sin tocar: cada fila lleva
+    ``datetime`` y, según la integración, ``condition``, ``temperature``,
+    ``cloud_coverage``, ``precipitation_probability``… Quién decide qué se usa es
+    quien la enseña, no esto. Lista vacía si no se puede saber, que es lo que hace
+    que la tarjeta desaparezca en vez de inventarse un día.
+    """
+    if not entity:
+        return []
+    _base, ws_url, token = _ha_endpoints(settings)
+    async with aiohttp.ClientSession() as session:
+        async with session.ws_connect(
+            ws_url, timeout=aiohttp.ClientTimeout(total=20)
+        ) as ws:
+            msg = await ws.receive_json()
+            if msg.get("type") == "auth_required":
+                await ws.send_json({"type": "auth", "access_token": token})
+                msg = await ws.receive_json()
+                if msg.get("type") != "auth_ok":
+                    raise SourceError(
+                        "Autenticación websocket rechazada por Home Assistant."
+                    )
+            await ws.send_json({
+                "id": 1,
+                "type": "call_service",
+                "domain": "weather",
+                "service": "get_forecasts",
+                "service_data": {"type": "hourly"},
+                "target": {"entity_id": entity},
+                "return_response": True,
+            })
+            while True:
+                msg = await ws.receive_json()
+                if msg.get("id") != 1 or msg.get("type") != "result":
+                    continue
+                if not msg.get("success"):
+                    error = (msg.get("error") or {}).get("message") or "sin detalle"
+                    raise SourceError(
+                        f"Home Assistant no da la previsión de «{entity}»: {error}"
+                    )
+                resultado = msg.get("result") or {}
+                break
+    # La respuesta viene envuelta dos veces: {"response": {"<entidad>": {"forecast": [...]}}}.
+    respuesta = resultado.get("response") or resultado
+    de_la_entidad = respuesta.get(entity) or {}
+    filas = de_la_entidad.get("forecast")
+    return filas if isinstance(filas, list) else []
+
+
 # ---------------------------------------------------------------------------
 # Qué hay de verdad en InfluxDB
 # ---------------------------------------------------------------------------

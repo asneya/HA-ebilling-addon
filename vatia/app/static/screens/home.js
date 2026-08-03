@@ -122,6 +122,7 @@ function renderLive() {
   // batería o de la red, y eso es lo que dice su renglón de estimación.
   renderAdvice(live.advice);
   renderPlan(live.plan);
+  renderTiempo(live.weather_hours);
   // Lo que está haciendo cada electrodoméstico va en este payload, y su sección
   // de Ajustes lo enseña: se anuncia para no tener que pedirlo dos veces.
   emit("vivo", live);
@@ -352,6 +353,70 @@ function renderPlan(plan) {
   }
   $("#plan-note").innerHTML = notas.join(" ");
   $("#plan-note").classList.toggle("hidden", !notas.length);
+}
+
+/* El tiempo hora a hora de las horas de sol que quedan hoy.
+
+   No es una tarjeta del tiempo cualquiera: en una aplicación de energía lo que
+   importa es **qué deja pasar el cielo**, así que cada fila pone la nubosidad al
+   lado del sol previsto para esa hora, y el sol sale de la misma curva que la
+   ventana y el plan. Así se puede leer del tirón: «a las dos, 70 % de nubes, y
+   aun así 2,1 kW». */
+function renderTiempo(t) {
+  const horas = (t && t.hours) || [];
+  $("#tiempo-panel").classList.toggle("hidden", !horas.length);
+  if (!horas.length) return;
+
+  // El titular: hasta cuándo llega el día y cuánta nube hay de media en lo que
+  // queda. Es lo que se quiere saber sin leer las filas.
+  const conNubes = horas.filter((h) => h.cloud_pct != null);
+  const nubeMedia = conNubes.length
+    ? Math.round(conNubes.reduce((a, h) => a + h.cloud_pct, 0) / conNubes.length)
+    : null;
+  const hasta = new Date(t.until).toLocaleTimeString("es-ES",
+    { hour: "2-digit", minute: "2-digit" });
+  $("#tiempo-aside").textContent = nubeMedia == null
+    ? `hasta las ${hasta}`
+    : `${nubeMedia} % de nubes hasta las ${hasta}`;
+
+  const pico = t.peak_w || 0;
+  $("#tiempo-rows").innerHTML = horas.map((h) => {
+    const hora = new Date(h.at).toLocaleTimeString("es-ES",
+      { hour: "2-digit", minute: "2-digit" });
+    // La barra en proporción al pico de lo que queda, no al del día entero: a
+    // las seis de la tarde todas las barras serían un hilo y no se compararía
+    // nada con nada.
+    const alto = pico > 0 ? Math.max(2, Math.round(h.sun_w / pico * 100)) : 0;
+    const nube = h.cloud_pct == null ? "" :
+      `<span class="tp-nube" title="nubosidad prevista">${esc(String(h.cloud_pct))} %</span>`;
+    const temp = h.temperature == null ? ""
+      : `<span class="tp-temp">${esc(fmtTemp.format(h.temperature))}°</span>`;
+    return `
+      <div class="tp-row">
+        <span class="tp-hora">${esc(hora)}</span>
+        <span class="tp-icono" title="${esc(h.condition || "")}">${
+          weatherIcon(h.condition, "day")}</span>
+        ${temp}
+        ${nube}
+        <span class="tp-barra"><i style="height:${alto}%"></i></span>
+        <span class="tp-sol">${esc(kwSol(h.sun_w))}</span>
+      </div>`;
+  }).join("");
+
+  // Y de dónde sale el sol de la columna de la derecha, porque no es del sensor:
+  // es la curva ya corregida con el tejado y con el cielo de hoy. La misma regla
+  // que las otras dos tarjetas — una cifra que no es la del sensor lo dice.
+  $("#tiempo-note").innerHTML = `La columna de la derecha es el sol previsto para
+    esa hora, con la corrección de tu tejado ya aplicada: es la misma curva de la
+    que salen la ventana y el plan.`;
+  $("#tiempo-note").classList.remove("hidden");
+}
+
+/* Vatios a texto corto para la columna del sol: por debajo del kilovatio se dan
+   en vatios enteros, que «0,3 kW» a las siete de la tarde se lee como nada. */
+function kwSol(w) {
+  if (!w || w < 1) return "—";
+  return w < 1000 ? `${Math.round(w)} W` : `${fmtNum.format(w / 1000)} kW`;
 }
 
 function renderAdvice(advice) {

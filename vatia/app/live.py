@@ -8,6 +8,7 @@ del día, para el fondo dinámico.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
@@ -1173,6 +1174,105 @@ async def free_energy(
     }
 
 
+# La previsión del tiempo se guarda un cuarto de hora. La Home pide `/api/live`
+# cada veinte segundos y la previsión horaria no cambia en ese rato: pedirla en
+# cada refresco sería abrir un websocket a Home Assistant tres veces por minuto
+# para releer lo mismo.
+_tiempo_cache: dict[str, Any] = {"key": None, "at": 0.0, "value": None}
+_TIEMPO_TTL = 900.0
+
+
+async def weather_hours(
+    settings: dict[str, Any],
+    curva: dict[str, Any] | None,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """El tiempo hora a hora de **las horas de sol que quedan hoy**.
+
+    Ni el día entero ni las próximas veinticuatro: en una aplicación de energía
+    las once de la noche no cambian ninguna decisión, y las horas que ya pasaron
+    tampoco. El corte de arriba sale de la propia curva del sol —la última hora en
+    la que la previsión da algo— y no de la puesta de sol de `sun.sun`, para que la
+    tarjeta acabe donde acaba lo que se puede aprovechar.
+
+    Cada hora lleva lo que dice el tiempo y lo que eso significa para el tejado: la
+    nubosidad al lado del sol previsto para esa hora, sacado de la misma curva que
+    la ventana y el plan. Es lo que convierte «40 % de nubes» en algo sobre lo que
+    decidir.
+
+    ``None`` cuando no se puede saber: sin entidad configurada, sin previsión del
+    tiempo, o de noche —cuando ya no quedan horas de sol—. La tarjeta desaparece
+    en vez de enseñar una fila vacía.
+    """
+    entidad = settings.get("weather_entity") or ""
+    if not entidad or not curva:
+        return None
+
+    # Hasta dónde llega el día: la última hora de hoy con algo de sol previsto.
+    # Se mira sobre la curva sin corregir por el cielo de hoy —`bias` sí, `sky`
+    # no— porque lo que se busca es la geometría del día, a qué hora se pone el
+    # sol, y esa no la cambian las nubes.
+    del_dia = [(t, w) for t, w in curva["points"] if t.date() == now.date()]
+    con_sol = [t for t, w in del_dia if w > 0]
+    if not con_sol:
+        return None
+    ultima = max(con_sol)
+    if now >= ultima:
+        return None
+
+    ahora_key = (entidad, now.date().isoformat(), now.hour)
+    if (_tiempo_cache["key"] != ahora_key
+            or time.monotonic() - _tiempo_cache["at"] >= _TIEMPO_TTL):
+        try:
+            filas = await datasources.ha_weather_hourly(settings, entidad)
+        except (datasources.SourceError, aiohttp.ClientError,
+                asyncio.TimeoutError) as err:
+            _LOGGER.info("Sin previsión del tiempo de «%s»: %s", entidad, err)
+            filas = None
+        if filas is not None:
+            _tiempo_cache.update(
+                {"key": ahora_key, "at": time.monotonic(), "value": filas}
+            )
+    filas = _tiempo_cache["value"] if _tiempo_cache["key"] == ahora_key else None
+    if not filas:
+        return None
+
+    # La hora en curso cuenta: quedan minutos suyos por delante. Se compara con el
+    # comienzo de esta hora y no con `now`, que si no la fila de las 11 desaparece
+    # a las 11:01.
+    desde = now.replace(minute=0, second=0, microsecond=0)
+    horas = []
+    for fila in filas:
+        momento = series_mod._parse_dt(fila.get("datetime"), now.tzinfo)
+        if momento is None or not (desde <= momento <= ultima):
+            continue
+        if momento.date() != now.date():
+            continue
+        sol = series_mod.forecast_at(curva["points"], momento)
+        nubes = fila.get("cloud_coverage")
+        horas.append({
+            "at": momento.isoformat(),
+            "condition": fila.get("condition"),
+            "temperature": _num(fila.get("temperature")),
+            # `cloud_coverage` no lo dan todas las integraciones (AEMET sí,
+            # algunas no): `null` significa «no se sabe» y la tarjeta se calla esa
+            # columna, en vez de dibujar un cero que se leería como «despejado».
+            "cloud_pct": None if nubes is None else round(float(nubes)),
+            "sun_w": round(sol, 1),
+        })
+    if not horas:
+        return None
+    pico = max(h["sun_w"] for h in horas)
+    return {
+        "entity": entidad,
+        "hours": horas,
+        # El pico de lo que queda, para que la barra de sol de cada fila se pueda
+        # dibujar en proporción a algo que está en la propia tarjeta.
+        "peak_w": pico,
+        "until": ultima.isoformat(),
+    }
+
+
 def _sunset(states: dict[str, Any], now: datetime) -> datetime | None:
     """Puesta de sol de hoy, de ``sun.sun``."""
     attrs = (states.get("sun.sun") or {}).get("attributes") or {}
@@ -1384,7 +1484,13 @@ async def build(
     # es donde se compara lo previsto de hoy con lo producido de verdad: de ahí
     # sale el sesgo del tejado y también el cielo de hoy.
     curva = curva_solar(settings, states, power, buckets, now.tzinfo, now)
-    window = await free_energy(curva, settings, states, now.tzinfo, now)
+    # La ventana y el tiempo, a la vez: la ventana espera al perfil de la casa y
+    # el tiempo a Home Assistant, y son esperas independientes. En serie, la más
+    # lenta se suma a la otra en un endpoint que se pide cada veinte segundos.
+    window, tiempo = await asyncio.gather(
+        free_energy(curva, settings, states, now.tzinfo, now),
+        weather_hours(settings, curva, now),
+    )
     # El ahorro solo hace falta cuando el cierre va a salir: tras la puesta de
     # sol. Calcularlo a mediodía sería trabajo (y PVPC) tirado a la basura.
     sunset = _sunset(states, now)
@@ -1434,6 +1540,7 @@ async def build(
             flow_cfg.get("battery_charge") or flow_cfg.get("battery_discharge")
         ),
         "weather": _weather(states, settings),
+        "weather_hours": tiempo,
         "phase": _day_phase(states, now),
         "window": window,
         "appliances": ahora_aparatos,
@@ -1679,6 +1786,10 @@ def list_entities(states: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
         # selector del sensor de condición meteorológica, que puede ser un
         # sensor de texto cualquiera.
         "any": [],
+        # Y «weather», solo las entidades `weather.*`: son las únicas que tienen
+        # previsión horaria, así que ofrecer trescientos sensores en ese
+        # desplegable sería ofrecer trescientas maneras de equivocarse.
+        "weather": [],
     }
     for entity_id, state in states.items():
         attrs = state.get("attributes") or {}
@@ -1692,6 +1803,7 @@ def list_entities(states: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
         }
         if entity_id.startswith("weather."):
             groups["any"].append(item)
+            groups["weather"].append(item)
             continue
         if not entity_id.startswith("sensor."):
             continue

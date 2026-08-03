@@ -196,7 +196,47 @@ async def states(req):
     out.append(S("sensor.solcast_pv_forecast", round(sum(
         f["pv_estimate"] for f in detallado()[:48]) / 2, 2), "kWh", "energy",
         "Solcast previsión", detailedForecast=detallado()))
+    # La entidad del tiempo. **Sin atributo `forecast`**, como las de Home
+    # Assistant desde 2024.4: la previsión horaria solo se consigue llamando al
+    # servicio `weather.get_forecasts`, y este fake lo exige para que el banco no
+    # pueda pasar leyendo un atributo que en una casa de verdad no está.
+    out.append(S("weather.casa", "sunny" if elev > 3 else "clear-night",
+                 name="El tiempo en casa",
+                 temperature=round(18.0 + 10.6 * max(
+                     0.0, math.cos(((h - 15) / 9) * math.pi / 2)), 1),
+                 cloud_coverage=nubes(h)))
     return web.json_response(out)
+
+
+def nubes(h):
+    """Nubosidad prevista (%) a la hora decimal `h`.
+
+    Sube por la tarde: así el banco puede comprobar que la nubosidad y el sol se
+    leen como dos columnas distintas —a las 17:00 hay nubes **y** todavía sol— en
+    vez de una derivada de la otra.
+    """
+    if h < 12:
+        return round(10 + h)
+    return min(95, round(22 + (h - 12) * 9))
+
+
+def prevision_horaria(t0):
+    """Las 48 horas siguientes, como las da `weather.get_forecasts`."""
+    filas = []
+    for i in range(48):
+        t = t0.replace(minute=0, second=0, microsecond=0) + timedelta(hours=i)
+        h = t.hour
+        nube = nubes(h)
+        filas.append({
+            "datetime": t.isoformat(),
+            "condition": ("cloudy" if nube >= 70 else
+                          "partlycloudy" if nube >= 30 else "sunny"),
+            "temperature": round(18.0 + 10.6 * max(
+                0.0, math.cos(((h - 15) / 9) * math.pi / 2)), 1),
+            "cloud_coverage": nube,
+            "precipitation_probability": max(0, nube - 40),
+        })
+    return filas
 
 
 async def one(req):
@@ -217,6 +257,19 @@ async def ws(req):
         d = json.loads(m.data)
         if d.get("type") == "auth":
             await w.send_json({"type": "auth_ok"}); continue
+        if d.get("type") == "call_service":
+            # Solo el que se usa, y con la envoltura de verdad: la respuesta llega
+            # dentro de `response` y por entidad, que es donde se equivocaría
+            # cualquiera que lo escribiera de memoria.
+            if (d.get("domain"), d.get("service")) != ("weather", "get_forecasts"):
+                await w.send_json({"id": d["id"], "type": "result", "success": False,
+                                   "error": {"message": "servicio no simulado"}})
+                continue
+            eid = (d.get("target") or {}).get("entity_id") or ""
+            await w.send_json({"id": d["id"], "type": "result", "success": True,
+                               "result": {"response": {
+                                   eid: {"forecast": prevision_horaria(ahora())}}}})
+            continue
         if d.get("type") == "recorder/list_statistic_ids":
             await w.send_json({"id": d["id"], "type": "result", "success": True, "result":
                 [{"statistic_id": f"sensor.{k}_{suf}",

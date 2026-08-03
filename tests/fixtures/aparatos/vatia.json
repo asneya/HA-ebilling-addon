@@ -56,6 +56,7 @@
     "battery_kwh": 7.5,
     "condition_sensor": "sensor.exterior_condition",
     "temperature_sensor": "sensor.exterior_temp",
+    "weather_entity": "weather.casa",
     "solar_forecast_sensor": "sensor.solcast_pv_forecast",
     "theme": "dark",
     "dynamic_background": false,
@@ -68,8 +69,7 @@
     ],
     "home_hidden": [],
     "my_tariff_id": "iberdrola-plan-estable",
-    "working_period": null,
-    "weather_entity": ""
+    "working_period": null
   },
   "tariffs": [
     {

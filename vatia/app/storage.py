@@ -181,6 +181,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # la condición (texto) y otro con la temperatura exterior.
     "condition_sensor": "",
     "temperature_sensor": "",
+    # Entidad `weather.*` para la tarjeta del tiempo hora a hora. Es otra cosa que
+    # los dos sensores de arriba: aquellos dicen cómo está **ahora** y esta trae la
+    # previsión horaria, que hay que pedir con el servicio `weather.get_forecasts`
+    # porque desde 2024.4 ya no viene en los atributos. Vacío = sin tarjeta.
+    "weather_entity": "",
     # Sensor de previsión de generación solar (Solcast, Forecast.Solar…). Se usa
     # para dibujar el forecast punteado en la pantalla de Energía cuando el
     # intervalo incluye tiempo futuro.
@@ -202,11 +207,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # una preferencia de quien mira (ver `PREFS_USUARIO`), y esto es el orden
     # que ve quien no la ha tocado: el caudal primero, que es a lo que se
     # entra; el cierre del día cuando toca; la ventana con su consejo pegado
-    # debajo —primero cuánto sobra, luego qué hacer con ello—; y el resumen.
+    # debajo —primero cuánto sobra, luego qué hacer con ello—; el tiempo hora a
+    # hora, que es de dónde va a salir ese sol; y el resumen.
     # Las claves que no estén en la lista se pintan detrás, en este mismo
     # orden, para que una tarjeta nueva no desaparezca de las Homes ya
     # ordenadas a mano.
-    "home_order": ["ahora", "cierre", "ventana", "plan", "resumen"],
+    "home_order": ["ahora", "cierre", "ventana", "plan", "tiempo", "resumen"],
     # Tarjetas que quien mira ha decidido no ver. Ocultar no es apagar: lo que
     # hay detrás se sigue calculando, porque otras pantallas lo usan.
     "home_hidden": [],

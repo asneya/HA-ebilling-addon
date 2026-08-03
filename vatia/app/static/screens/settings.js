@@ -363,6 +363,9 @@ function fillEntitySelects() {
   $("#s-condition").innerHTML = opciones("any", s.condition_sensor || "");
   $("#s-temp").innerHTML = opciones("temperature", s.temperature_sensor || "");
   $("#s-forecast").innerHTML = opciones("any", s.solar_forecast_sensor || "");
+  // Solo entidades `weather.*`: son las únicas con previsión horaria.
+  $("#s-weather").innerHTML = opciones(
+    "weather", s.weather_entity || "", "— sin tarjeta del tiempo —");
 }
 
 /* Lo que manda la barra de «Guardar ajustes».
@@ -390,6 +393,7 @@ function settingsFromForm() {
     condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
     solar_forecast_sensor: $("#s-forecast").value,
+    weather_entity: $("#s-weather").value,
     influx: {
       version: parseInt($("#s-ifx-version").value, 10) || 2,
       url: $("#s-ifx-url").value.trim(),
