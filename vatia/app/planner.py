@@ -46,6 +46,16 @@ _PASO_SIM_H = 0.25
 # Por debajo de esto no se dice nada: mover una lavadora para ahorrar dos
 # céntimos es hacerle perder el tiempo a alguien.
 MIN_AHORRO_EUR = 0.05
+# Pero los euros no son lo único que se mira. Si esperar cambia **de dónde sale
+# la energía** —de la batería o la red al sol— eso vale aunque en la factura sean
+# céntimos: es el objetivo de tener placas, y es además lo que la tarjeta de la
+# ventana ya está anunciando («gratis desde las 10:06»). Sin esto, las dos
+# tarjetas de la misma pantalla se contradecían: una decía «espera a las 10:06» y
+# la otra «ahora es su mejor hora», porque esperar solo ahorraba 1,3 céntimos.
+#
+# Veinte puntos y no menos: por debajo de ahí la diferencia cabe dentro del error
+# de la propia previsión, y prometerla sería fingir una precisión que no hay.
+MIN_GANANCIA_SOL_PCT = 20
 # Y por debajo de esto no se recomienda cargar la batería de la red: ciclarla
 # tiene un coste de vida útil que no está en ninguna cuenta de la luz.
 MIN_AHORRO_BATERIA_EUR = 0.15
@@ -170,17 +180,25 @@ def _mejor_hora(
     ahorro = None
     if con_precio:
         ahorro = round(ahora["eur"] - mejor["eur"], 3)
+    de_ahora, de_mejor = _opcion(ahora, kwh), _opcion(mejor, kwh)
+    # Cuánto sol se gana esperando, en puntos del ciclo. Es la otra mitad de la
+    # respuesta: «ahorras 0,01 €» no convence a nadie, «pasas del 60 % al 100 %
+    # de sol» sí, y además es lo que de verdad cambia.
+    gana_sol = de_mejor["sun_pct"] - de_ahora["sun_pct"]
     return {
         "hours": round(horas, 2),
         "kwh": round(kwh, 2),
-        "now": _opcion(ahora, kwh),
-        "best": _opcion(mejor, kwh),
+        "now": de_ahora,
+        "best": de_mejor,
         "saving_eur": ahorro,
-        # `True` cuando esperar de verdad cambia algo. Si el mejor momento es
-        # ahora —o el ahorro es de céntimos— la app no debe pedir que se espere.
+        "sun_gain_pct": gana_sol,
+        # `True` cuando esperar de verdad cambia algo: o el dinero se nota, o
+        # cambia de dónde sale la energía. Si el mejor momento es ahora, ninguna
+        # de las dos cosas puede pasar y no se pide esperar.
         "worth_waiting": bool(
             mejor["at"] > ahora["at"]
-            and (ahorro is None or ahorro >= MIN_AHORRO_EUR)
+            and ((ahorro is None or ahorro >= MIN_AHORRO_EUR)
+                 or gana_sol >= MIN_GANANCIA_SOL_PCT)
         ),
         "priced": con_precio,
     }

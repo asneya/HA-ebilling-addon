@@ -16,6 +16,14 @@ const BASE = base("http://127.0.0.1:8402/");
 const fallos = [];
 const ok = (c, t) => { if (!c) fallos.push(t); console.log((c ? "  ok    " : "  FALLA ") + t); };
 
+/* Lo que se afirma aquí es «no espera al servidor», no «tarda menos de X». La
+   respuesta se retrasa 500 ms a propósito, así que cualquier tope bien por
+   debajo de esa cifra distingue las dos cosas; apretarlo hasta los 60 ms lo
+   convertía en un presupuesto de latencia, y en CI, con la máquina cargada,
+   61,5 ms daban rojo sin que nada estuviera roto. */
+const RED_MS = 500;
+const TOPE_MS = 250;
+
 const abrir = async (b) => {
   const ctx = await b.newContext({
     viewport: { width: 414, height: 900 },
@@ -52,12 +60,13 @@ const retardo = (p, sel) => p.evaluate(async (s) => {
   // Se retrasa la respuesta medio segundo: si la marca dependiera de ella, se
   // notaría. Es la reproducción exacta de una casa con InfluxDB lejos.
   await p.route("**/api/series*", async (ruta) => {
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, RED_MS));
     await ruta.continue();
   });
   const r1 = await retardo(p, '.seg[data-range="week"]');
   ok(r1.activo, "al soltar el dedo el botón ya está marcado");
-  ok(r1.ms < 60, `y sin esperar a los datos (${r1.ms.toFixed(1)} ms de 500 de red)`);
+  ok(r1.ms < TOPE_MS,
+    `y sin esperar a los datos (${r1.ms.toFixed(1)} ms de ${RED_MS} de red)`);
   // Y cuando la carga termina, la marca sigue donde se puso.
   await p.waitForTimeout(1500);
   ok(await p.evaluate(() =>
@@ -105,9 +114,9 @@ const retardo = (p, sel) => p.evaluate(async (s) => {
 
   console.log("\n5 · las otras barras");
   const r2 = await retardo(p, '.vt[data-eview="solar"]');
-  ok(r2.activo && r2.ms < 60, `la vista de análisis (${r2.ms.toFixed(1)} ms)`);
+  ok(r2.activo && r2.ms < TOPE_MS, `la vista de análisis (${r2.ms.toFixed(1)} ms)`);
   const r3 = await retardo(p, '.tab[data-view="billing"]');
-  ok(r3.activo && r3.ms < 60, `la barra de abajo (${r3.ms.toFixed(1)} ms)`);
+  ok(r3.activo && r3.ms < TOPE_MS, `la barra de abajo (${r3.ms.toFixed(1)} ms)`);
   await p.waitForTimeout(1500);
 
   console.log("\n6 · manda la pantalla");

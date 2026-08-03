@@ -1,10 +1,18 @@
 /* El bloque «a dónde fue cada cosa» del diagnóstico.
  *
- *   1. sale con las dos filas de cada origen y su contador
+ *   1. sale con las dos filas de cada origen y su contador, con datos de verdad
  *   2. cuando todo cuadra, no hay fila de sobrante ni aviso
  *   3. cuando la descarga no la coloca nadie, se dice y se marca
  *   4. un descuadre de 20 Wh es deriva normal y no se menciona
  *   5. sin errores de consola
+ *
+ * El punto 1 se comprueba contra el reparto real, que es lo que prueba que el
+ * servidor lo produce de verdad. Del 2 en adelante se inyecta el reparto: que
+ * los datos reales **cuadren** no es algo que este banco pueda dar por hecho —el
+ * contador de la casa puede marcar menos de lo que suman los orígenes, y
+ * entonces sobra descarga sin colocar con toda la razón; eso es justo el punto
+ * 3—. Afirmarlo sobre los datos de verdad hacía que el banco se pusiera rojo
+ * según la hora del día, que no es lo que se quiere saber.
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = base("http://127.0.0.1:8402/");
@@ -53,7 +61,7 @@ const leer = (p) => p.evaluate(() => {
 (async () => {
   const b = await abrirNavegador();
 
-  console.log("\n1-2 · el reparto real, que cuadra");
+  console.log("\n1 · el reparto que sirve el servidor");
   let { ctx, p } = await abrir(b, null);
   let v = await leer(p);
   ok(v.cabeceras.some((c) => /Importada de la red/.test(c)),
@@ -63,8 +71,15 @@ const leer = (p) => p.evaluate(() => {
   ok(v.filas.filter((f) => f.etiqueta === "A la casa").length === 2,
     `cada origen dice cuánto fue a la casa (${v.filas.filter((f) => f.etiqueta === "A la casa").length})`);
   ok(v.filas.some((f) => f.etiqueta === "A cargar la batería"), "y lo demás, a dónde");
-  ok(!v.filas.some((f) => f.etiqueta === "Sin colocar"),
-    "cuadrando, no hay fila de sobrante");
+  await ctx.close();
+
+  console.log("\n2 · cuadrando, no se menciona ningún sobrante");
+  ({ ctx, p } = await abrir(b, {
+    grid: { home: 4.1, other: 1.3, placed: 5.4, meter: 5.4, unplaced: 0 },
+    battery: { home: 2.27, other: 0, placed: 2.27, meter: 2.27, unplaced: 0 },
+  }));
+  v = await leer(p);
+  ok(!v.filas.some((f) => f.etiqueta === "Sin colocar"), "no hay fila de sobrante");
   ok(!/Sin colocar|ningún otro sensor/.test(v.texto), "ni aviso ninguno");
   await ctx.close();
 

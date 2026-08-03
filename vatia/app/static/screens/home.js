@@ -285,21 +285,36 @@ function renderPlan(plan) {
   // cuando dos ya están en su mejor hora es inflar el titular.
   const mueven = rows.filter((r) => r.worth_waiting);
   const ahorro = mueven.reduce((a, r) => a + (r.saving_eur || 0), 0);
-  $("#plan-aside").textContent = ahorro > 0
-    ? `ahorras ${fmtEUR.format(ahorro)} moviéndolos`
-    : rows.length ? "ya están en su mejor hora" : "";
+  // Y cuando no se pide mover nada, hay que decir la verdad. «Ya están en su
+  // mejor hora» era falso siempre que el mejor momento fuera más tarde y la
+  // diferencia solo no llegara al umbral: contradecía a la tarjeta de la ventana,
+  // que en la misma pantalla decía «gratis desde las 10:06».
+  const luego = rows.some((r) => r.best.at > r.now.at);
+  $("#plan-aside").textContent = !rows.length ? ""
+    : mueven.length && ahorro > 0 ? `ahorras ${fmtEUR.format(ahorro)} moviéndolos`
+    : mueven.length ? "mejor esperar"
+    : luego ? "da casi igual cuándo"
+    : "ya están en su mejor hora";
 
   $("#plan-rows").innerHTML = rows.map((r) => {
     const b = r.best;
+    // **El porcentaje tiene que ser del momento del que se habla.** Con
+    // `worth_waiting` en falso la fila decía «ahora mismo» y enseñaba el sol de
+    // la mejor hora: a las 9:47 ponía «ahora mismo · 100 % con sol» cuando ahora
+    // el sol cubría el 60 % y el 100 % era de las 10:17.
     const sub = r.worth_waiting
       ? `${b.sun_pct} % con sol · ${dur(r.hours)}`
-      : `ahora mismo · ${b.sun_pct} % con sol`;
-    // El valor de la derecha es la hora, que es la respuesta; el ahorro va
-    // debajo, que es el porqué.
+      : `ahora mismo · ${r.now.sun_pct} % con sol`;
+    // El valor de la derecha es la hora, que es la respuesta; el porqué va
+    // debajo.
     const valor = r.worth_waiting ? cuando(b.at) : "ahora";
     const clase = r.worth_waiting ? "v-justo" : "v-gratis";
-    const porque = r.saving_eur > 0 ? `ahorras ${fmtEUR.format(r.saving_eur)}`
-      : r.worth_waiting ? "sale más barato" : "es su mejor hora";
+    // Y el porqué, también cierto. Si esperar cambia el sol pero no el dinero,
+    // eso es lo que hay que decir: es el motivo de verdad y se entiende.
+    const porque = r.saving_eur >= 0.01 ? `ahorras ${fmtEUR.format(r.saving_eur)}`
+      : r.worth_waiting ? `pasa a ${b.sun_pct} % con sol`
+      : b.at > r.now.at ? "esperar apenas cambia nada"
+      : "es su mejor hora";
     return `
       <div class="ad-row">
         <span class="ad-chip" style="--ap:${esc(r.color)}">

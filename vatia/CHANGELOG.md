@@ -2,6 +2,47 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.47.1
+
+### El plan y la ventana dejan de contradecirse
+
+De una queja, con las dos capturas al lado: a las 9:47, la tarjeta de la ventana
+decía «Lavadora · gratis **desde las 10:06**» y justo debajo la del plan decía
+«Lavadora · **ahora** · ahora mismo · 99 % con sol · **es su mejor hora**».
+Literalmente: *«parecen estar trabajando sobre dos modelos diferentes, es
+confuso y genera desconfianza»*. Y tenía razón, porque eran tres errores
+distintos apilados.
+
+**El 99 % no era de ahora.** La fila leía siempre el porcentaje de la mejor hora,
+también cuando no pedía esperar, y le pegaba encima la etiqueta «ahora mismo».
+A las 9:47 el sol cubría el 60 % de la lavadora; el 99 % era de las 10:17. La
+cifra era correcta y la etiqueta mentía sobre a qué momento pertenecía.
+
+**«Es su mejor hora» se afirmaba sin saberlo.** Era el texto por defecto de
+cualquier fila que no pidiera esperar — incluidas las que sí tenían una hora
+mejor más tarde, solo que la diferencia en euros no llegaba al umbral de los 5
+céntimos. Ahora, cuando la mejor hora es más tarde pero da casi igual, se dice
+eso: **«esperar apenas cambia nada»**, y el titular dice **«da casi igual
+cuándo»** en vez de afirmar que ya están todos colocados.
+
+**Y esperar no se mide solo en euros.** Es la raíz de las otras dos: si pasar de
+las 9:47 a las 10:17 mueve la lavadora del 60 % al 100 % de sol, eso vale aunque
+en la factura sean 1,3 céntimos — es el objetivo de tener placas, y es lo que la
+tarjeta de la ventana ya estaba anunciando. Se añade un segundo motivo para
+recomendar esperar: **una ganancia de 20 puntos de sol**, y el porqué se explica
+con el sol («pasa a 100 % con sol») en vez de prometer un ahorro que no existe.
+Veinte puntos y no menos, porque por debajo de eso la diferencia cabe dentro del
+error de la propia previsión.
+
+Con esto las dos tarjetas hablan del mismo día: si la ventana dice que a las
+10:06 sale gratis, el plan propone las 10:06.
+
+Al banco de pruebas se le añaden la sección 12 de `plan.py` —que reproduce la
+mañana del 3 de agosto con sus números exactos— y `planui.js`, trece
+comprobaciones de que la tarjeta no atribuye un porcentaje a un momento que no
+es el suyo.
+
+
 ## 0.47.0
 
 ### «Desde la red» ya no se pasa del contador de la compañía

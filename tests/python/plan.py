@@ -11,6 +11,20 @@
   9. y solo si el ahorro se nota
  10. sin capacidad o sin carga no se contesta
  11. sin fuentes no hay plan, en vez de un plan inventado
+ 12. la mañana del 3 de agosto: esperar media hora cambia el sol de 60 % a 100 %
+
+El punto 12 sale de una queja, y es el que más importa. A las 9:47 la tarjeta de
+la ventana decía «Lavadora · gratis **desde las 10:06**» y la del plan decía
+«Lavadora · **ahora** · ahora mismo · 99 % con sol · es su mejor hora». Dos
+tarjetas de la misma pantalla contradiciéndose sobre el mismo instante.
+
+Dos causas, las dos aquí:
+
+  · `worth_waiting` solo miraba euros, y esperar media hora ahorraba 1,3
+    céntimos. Pero cambiaba de dónde sale la energía —de la batería al sol—, que
+    es justo lo que la otra tarjeta estaba anunciando a gritos;
+  · y la tarjeta, al no pedir esperar, seguía enseñando el porcentaje de sol de
+    la **mejor** hora con la etiqueta «ahora mismo». El 99 % era de las 10:17.
 """
 import sys
 from datetime import datetime, timedelta
@@ -155,6 +169,43 @@ ok(P.plan([LAVADORA], {}, FUENTES, precio, AHORA)["rows"] == [],
 # es peor que ninguna tarjeta.
 ok(P.plan([LAVADORA], {}, {**FUENTES, "capacity_kwh": 0.0}, precio, AHORA) is None,
    "sin filas y sin batería que aconsejar, no hay tarjeta")
+
+print("\n12 · la mañana del 3 de agosto, que es de donde viene la queja")
+MANANA = datetime(2026, 8, 3, 9, 47, tzinfo=TZ)
+
+
+def sol_manana(m):
+    """Sin sol hasta las 10:06, y a partir de ahí de sobra. El día real."""
+    h = m.hour + m.minute / 60
+    return 3000.0 if 10.1 <= h < 18 else 0.0
+
+
+F_MANANA = {"sol_at": sol_manana, "casa_at": lambda _m: 350.0,
+            "soc": 90.0, "capacity_kwh": 10.0, "factor": 1.0}
+caro = lambda m: 0.17 if 10 <= m.hour < 22 else 0.10          # noqa: E731
+
+r = P._mejor_hora({"hours": 1.17, "kwh": 0.32}, MANANA, F_MANANA, caro, 0.10)
+ok(r["now"]["sun_pct"] < r["best"]["sun_pct"],
+   f"ahora el sol cubre menos que en la mejor hora "
+   f"({r['now']['sun_pct']} % contra {r['best']['sun_pct']} %)")
+ok(r["saving_eur"] < P.MIN_AHORRO_EUR,
+   f"y en euros la diferencia es calderilla ({r['saving_eur']} €)")
+# Lo que motiva el arreglo: aun siendo calderilla, esperar media hora cambia de
+# dónde sale la energía, y eso es lo que el usuario ve en la otra tarjeta.
+ok(r["worth_waiting"],
+   f"pero aun así compensa esperar, porque cambia el sol "
+   f"({r['now']['sun_pct']} % → {r['best']['sun_pct']} %)")
+ok(r["sun_gain_pct"] >= P.MIN_GANANCIA_SOL_PCT,
+   f"y se dice cuánto sol se gana esperando ({r['sun_gain_pct']} puntos)")
+
+# Y al revés: si esperar no cambia ni los euros ni el sol, no se pide esperar.
+r2 = P._mejor_hora({"hours": 1.17, "kwh": 0.32},
+                   datetime(2026, 8, 3, 12, 0, tzinfo=TZ), F_MANANA, caro, 0.10)
+ok(not r2["worth_waiting"],
+   f"a mediodía, con el sol ya dando, no se pide esperar "
+   f"(sol ahora {r2['now']['sun_pct']} %, se gana {r2['sun_gain_pct']})")
+ok(r2["now"]["sun_pct"] == 100,
+   f"y «ahora» dice el sol de ahora, que es el 100 % ({r2['now']['sun_pct']} %)")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")
