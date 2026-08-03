@@ -113,6 +113,7 @@ NAVEGADOR = [
     ("tarjetas.js", ["tarjetas.js", "http://127.0.0.1:8404/"], {}),
     ("pulsado.js", ["pulsado.js", "http://127.0.0.1:8402/"], {}),
     ("reparto.js", ["reparto.js", "http://127.0.0.1:8402/"], {}),
+    ("planui.js", ["planui.js", "http://127.0.0.1:8402/"], {}),
     ("rolesui.js", ["rolesui.js", "http://127.0.0.1:8412/"], {}),
     ("gal.js", ["gal.js", "http://127.0.0.1:8300/"], {}),
     ("cruz.js", ["cruz.js", "http://127.0.0.1:8306/"], {}),
@@ -121,6 +122,9 @@ NAVEGADOR = [
 # Un banco que acaba bien lo dice en su última línea. Cada uno lo dice a su
 # manera porque cada uno cuenta una cosa distinta, y forzarlos a todos a la
 # misma frase les quitaría lo que tienen de legibles.
+# `todo en verde` puede venir con una coletilla —un banco que solo pudo
+# comprobar parte, por ejemplo porque a esa hora del día no hay nada que
+# comprobar— así que se busca al principio de la línea y no al final.
 VEREDICTOS_BUENOS = ("todo en verde", "ni un negativo", "errores: ninguno")
 
 procesos: list[subprocess.Popen] = []
@@ -293,7 +297,7 @@ def pasar(nombre, cmd, entorno, carpeta, trabajo, tiempo) -> bool:
         salida += f"\n(se pasó de {tiempo} s)"
     log.write_text(salida)
     ultima = (salida.strip().splitlines() or ["(sin salida)"])[-1].strip()
-    bien = any(ultima.endswith(v) for v in VEREDICTOS_BUENOS)
+    bien = any(v in ultima for v in VEREDICTOS_BUENOS)
     print(ultima if bien else f"{ultima}\n{'':<16} → {log}")
     return bien
 
