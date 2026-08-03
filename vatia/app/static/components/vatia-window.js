@@ -140,7 +140,7 @@
         <div class="pill ${d.state}"><i></i>${esc(say.pill)}</div>
         <h2>${esc(say.head)}</h2>
         <p class="sub">${esc(say.sub)}</p>
-        ${this._track(d, t)}${say.note}${this._sesgo(d)}`;
+        ${this._track(d, t)}${say.note}${this._cielo(d)}${this._sesgo(d)}`;
     }
 
     /* «y el mejor rato es a las 14:30»: la media dice cuánto y el pico dice
@@ -214,6 +214,40 @@
           : "Tampoco mañana se espera excedente.",
         note: "",
       };
+    }
+
+    /* El cielo de hoy, cuando desmiente a la previsión.
+
+       De una queja: la tarjeta prometía «gratis desde las 10:06» un día en que
+       estaba nublado y la producción real era bajísima. Ahora la hora que se da
+       ya lleva descontado lo que el tejado está dando de verdad — pero eso hay
+       que decirlo, porque si no la cifra parece la de la previsión y no cuadra
+       con lo que se ve por la ventana.
+
+       Solo cuando se nota: por encima del 85 % la corrección no cambia ninguna
+       decisión y solo sería ruido. Y solo a la baja: si el tejado da más de lo
+       prometido, la ventana llega antes y de sobra, y nadie se queja de eso. */
+    _cielo(d) {
+      const s = d.sky;
+      if (!s || !s.factor || s.factor > 0.85) return "";
+      const pct = Math.round(s.factor * 100);
+      // De dónde sale: la hora cerrada, el instante, o los dos. Decirlo importa
+      // porque las dos medidas envejecen distinto —la hora tarda en enterarse de
+      // un frente, el instante se cree cualquier nube— y quien lea la tarjeta
+      // tiene derecho a saber con qué se ha decidido.
+      const de = [];
+      if (s.hour_ratio != null) {
+        de.push(`la hora de las ${esc(String(s.hour).padStart(2, "0"))}:00, en la
+          que dio el <b>${esc(String(Math.round(s.hour_ratio * 100)))} %</b>`);
+      }
+      if (s.now_ratio != null) {
+        de.push(`lo que está dando ahora mismo, el
+          <b>${esc(String(Math.round(s.now_ratio * 100)))} %</b>`);
+      }
+      return `<p class="note">Hoy el cielo no acompaña: el tejado va al
+        <b>${esc(String(pct))} %</b> de lo previsto, así que la hora de arriba ya
+        va rebajada${de.length ? ` — medido con ${de.join(" y con ")}` : ""}.
+        Si se despeja, esto se corrige solo en cuanto el tejado lo note.</p>`;
     }
 
     /* Que la curva no es la del sensor, dicho en letra pequeña.

@@ -23,9 +23,12 @@ no guarda.
 
 Lo que **no** hace, a propósito:
 
-- No corrige el tiempo. Si hoy hay nubes que la previsión no vio, esto no se
-  entera: eso lo arregla el factor en vivo, que compara la producción de este
-  momento con la prevista para este momento.
+- No corrige el tiempo. Si hoy hay nubes que la previsión no vio, el sesgo no se
+  entera: para eso está `factor_hoy`, al final de este módulo, que compara lo que
+  el tejado está dando hoy con lo que se le había prometido. Son dos cosas
+  distintas y se aplican en este orden —primero el sesgo, luego el cielo de hoy—
+  porque medir el cielo contra una curva que ya se sabe que miente contaría el
+  mismo error dos veces.
 - No inventa con dos datos. Hace falta un mínimo de días por hora; por debajo,
   esa hora se queda sin corregir.
 - No se desboca. El factor se recorta, porque un día raro con la previsión casi
@@ -202,6 +205,90 @@ def aprender(config_dir: str) -> Sesgo:
         por_hora[hora] = factor
         muestras[hora] = len(valores)
     return Sesgo(por_hora, muestras)
+
+
+# ── El cielo de hoy ─────────────────────────────────────────────────────────
+#
+# El sesgo de arriba es sistemático: la sombra de la chimenea cae a la misma
+# hora todos los días y por eso se aprende de muchos días. Esto es justo lo
+# contrario: lo que pasa **hoy** y nadie vio venir. Un frente de nubes no se
+# corrige con historia, solo mirando el tejado.
+#
+# Se mide con dos testigos, y con los dos porque cada uno falla donde el otro
+# acierta:
+#
+#   · **La última hora cerrada**, en energía. Una hora entera de kWh medidos
+#     lleva dentro las nubes que pasaron por ella, así que no la despeina una
+#     sola. Pero llega hasta una hora tarde: un frente que entró a y diez
+#     todavía no está en ella.
+#   · **Este instante**, en potencia. Reacciona al segundo, y por eso mismo
+#     confunde una nube de paso con un día encapotado.
+#
+# La media de las dos reacciona en minutos —el instante tira del número en
+# cuanto cambia el cielo— sin que una nube suelta la mande al suelo, porque la
+# hora cerrada la sujeta. Con un solo testigo disponible se usa ese, y si no hay
+# ninguno no se corrige nada.
+#
+# Lo que **no** hace: adivinar cuándo se despeja. Si las nubes se van a mediodía,
+# esto seguirá aplicando el cielo de la mañana hasta que el tejado diga otra cosa,
+# con hasta una hora de retraso. Para saber que se van hay que mirar el cielo, y
+# eso es el trabajo de la previsión, no de esta corrección.
+MIN_FACTOR_HOY, MAX_FACTOR_HOY = 0.05, 1.5
+# Por debajo de esta potencia prevista el cociente instantáneo no dice nada: al
+# amanecer y al atardecer se estaría dividiendo entre casi cero.
+MIN_PREVISTO_AHORA_W = 100.0
+
+
+def factor_hoy(
+    previsto: dict[int, float],
+    real: dict[int, float],
+    ahora: tuple[float, float] | None = None,
+) -> dict[str, Any] | None:
+    """Cuánto está dando el tejado **hoy** respecto a lo previsto.
+
+    ``previsto`` y ``real`` son Wh por hora de las horas de hoy **ya cerradas**;
+    la que está en curso va a medias y daría un cociente bajo siempre.
+    ``ahora`` es el par ``(previsto_w, real_w)`` de este instante, si se sabe.
+
+    Devuelve ``None`` cuando no hay ningún testigo —de noche, o antes de que
+    cierre la primera hora con sol—, y entonces la previsión se queda como está:
+    es lo correcto, porque no hay nada que la desmienta.
+
+    El suelo está en ``MIN_FACTOR_HOY``, que es bajo a propósito: un día
+    encapotado de verdad da menos del 10 % de lo prometido, y recortarlo a la
+    quinta parte —como haría un suelo cómodo— es seguir prometiendo un sol que no
+    está. El techo es más apretado porque el error al alza no engaña a nadie: si
+    el tejado da más de lo previsto, la ventana llega antes y de sobra.
+    """
+    razones: list[float] = []
+    hora: int | None = None
+    de_hora: float | None = None
+    cerradas = sorted(
+        h for h, wh in previsto.items()
+        if wh >= MIN_PREVISTO_WH and real.get(h) is not None and real[h] >= 0
+    )
+    if cerradas:
+        # La última, no la media de todas: si el frente entró a las diez, las
+        # horas claras de antes solo servirían para diluirlo.
+        hora = cerradas[-1]
+        de_hora = real[hora] / previsto[hora]
+        razones.append(de_hora)
+    de_ahora: float | None = None
+    if ahora is not None:
+        previsto_w, real_w = ahora
+        if previsto_w >= MIN_PREVISTO_AHORA_W:
+            de_ahora = max(real_w, 0.0) / previsto_w
+            razones.append(de_ahora)
+    if not razones:
+        return None
+    factor = max(MIN_FACTOR_HOY, min(sum(razones) / len(razones), MAX_FACTOR_HOY))
+    return {
+        "factor": round(factor, 2),
+        # Los dos testigos por separado, para poder explicar de dónde sale.
+        "hour": hora,
+        "hour_ratio": None if de_hora is None else round(de_hora, 2),
+        "now_ratio": None if de_ahora is None else round(de_ahora, 2),
+    }
 
 
 def por_horas(puntos: list[tuple[datetime, float]]) -> dict[int, float]:

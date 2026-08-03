@@ -944,6 +944,42 @@ def _sesgo_tejado() -> prevision.Sesgo:
     return _sesgo_cache["value"]
 
 
+def _pares_de_hoy(
+    puntos: list[tuple[datetime, float]],
+    buckets: dict[str, dict[str, float]] | None,
+    now: datetime,
+) -> tuple[dict[int, float], dict[int, float]]:
+    """Lo previsto y lo producido en las horas de hoy que ya han cerrado, en Wh.
+
+    Solo horas **cerradas**: la que está en curso va a medias y daría un cociente
+    bajo siempre, a cualquier hora del día.
+
+    Sirve para dos cosas distintas y hay que pasarle la curva que toca en cada
+    una. Para **aprender el sesgo** del tejado va la curva cruda, que es lo que
+    prometió el sensor. Para **medir el cielo de hoy** va la curva ya corregida
+    con el sesgo, porque lo que se quiere saber es cuánto se desvía hoy de lo que
+    este tejado da normalmente, no de lo que prometió quien no lo conoce.
+    """
+    previsto = {
+        h: wh for h, wh in prevision.por_horas(
+            [(t, w) for t, w in puntos if t.date() == now.date()]
+        ).items() if h < now.hour
+    }
+    real: dict[int, float] = {}
+    for iso, valores in (buckets or {}).items():
+        pv = valores.get("pv_energy")
+        if pv is None:
+            continue
+        try:
+            momento = datetime.fromisoformat(iso)
+        except ValueError:
+            continue
+        if momento.date() != now.date() or momento.hour >= now.hour:
+            continue
+        real[momento.hour] = real.get(momento.hour, 0.0) + pv * 1000.0
+    return previsto, real
+
+
 def _anotar_prevision(
     puntos: list[tuple[datetime, float]],
     buckets: dict[str, dict[str, float]] | None,
@@ -955,32 +991,13 @@ def _anotar_prevision(
     de ayer —son un atributo, y los atributos no van a las estadísticas—, pero
     la previsión de hoy sí incluye las horas que ya pasaron, y lo producido en
     ellas está en los buckets que la Home ya se ha descargado.
-
-    Solo se apuntan las horas **cerradas**: la que está en curso va a medias y
-    daría un cociente bajo todos los días a la misma hora.
     """
     if not buckets:
         return
     if (_anotado["dia"] == now.date()
             and time.monotonic() - _anotado["at"] < _ANOTAR_CADA):
         return
-    previsto = {
-        h: wh for h, wh in prevision.por_horas(
-            [(t, w) for t, w in puntos if t.date() == now.date()]
-        ).items() if h < now.hour
-    }
-    real: dict[int, float] = {}
-    for iso, valores in buckets.items():
-        pv = valores.get("pv_energy")
-        if pv is None:
-            continue
-        try:
-            momento = datetime.fromisoformat(iso)
-        except ValueError:
-            continue
-        if momento.date() != now.date() or momento.hour >= now.hour:
-            continue
-        real[momento.hour] = real.get(momento.hour, 0.0) + pv * 1000.0
+    previsto, real = _pares_de_hoy(puntos, buckets, now)
     if not previsto or not real:
         return
     prevision.registrar(storage.CONFIG_DIR, now.date(), previsto, real)
@@ -1005,34 +1022,82 @@ def _hueco_bateria(
     return max(0.0, min(100.0 - soc, 100.0)) / 100.0 * capacidad * 1000.0
 
 
+def curva_solar(
+    settings: dict[str, Any],
+    states: dict[str, Any],
+    power: dict[str, float],
+    buckets: dict[str, dict[str, float]] | None,
+    tz,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """La curva de sol de la que salen **todas** las respuestas del día.
+
+    Existe por una queja, y la queja tenía razón: la ventana calculaba el sol con
+    la previsión corregida solo con el sesgo del tejado, y el plan con esa misma
+    previsión corregida además con la producción de este momento. Dos curvas
+    distintas en la misma pantalla, así que la ventana prometía «gratis desde las
+    10:06» mientras el plan, mirando el tejado, ya sabía que no. *«Parecen estar
+    trabajando sobre dos modelos diferentes»* — eran dos, literalmente.
+
+    Ahora hay una, y las dos correcciones se aplican aquí en este orden:
+
+    1. **El sesgo del tejado**, aprendido de los días anteriores: la sombra de la
+       chimenea a las nueve, los paneles sin limpiar. Es sistemático.
+    2. **El cielo de hoy**, medido en el tejado: las nubes que la previsión no
+       vio. Va después, porque medirlo contra la curva cruda contaría el sesgo
+       dos veces.
+
+    El cielo de hoy se aplica **solo a hoy**. Que hoy esté encapotado no dice
+    nada de mañana, y de mañana ya opina quien mira el cielo.
+
+    ``None`` cuando no hay previsión solar: sin ella no hay curva, y las dos
+    tarjetas que dependen de esto desaparecen en vez de inventarse una hora.
+    """
+    puntos = series_mod.forecast_power(
+        series_mod._forecast_states(settings, states), tz
+    )
+    if not puntos:
+        return None
+    # Aprender el sesgo va con la curva **cruda**: es la diferencia entre lo que
+    # promete el sensor y lo que da este tejado, y midiéndola contra la curva ya
+    # corregida saldría siempre 1.
+    _anotar_prevision(puntos, buckets, now)
+    sesgo = _sesgo_tejado()
+    puntos = sesgo.aplicar(puntos)
+
+    previsto, real = _pares_de_hoy(puntos, buckets, now)
+    previsto_ahora = series_mod.forecast_at(puntos, now)
+    cielo = prevision.factor_hoy(
+        previsto, real,
+        (previsto_ahora, max(power.get("pv") or 0.0, 0.0))
+        if previsto_ahora else None,
+    )
+    factor = (cielo or {}).get("factor") or 1.0
+    if factor != 1.0:
+        puntos = [
+            (t, w * factor if t.date() == now.date() else w) for t, w in puntos
+        ]
+    return {"points": puntos, "bias": sesgo.payload(), "sky": cielo}
+
+
 async def free_energy(
+    curva: dict[str, Any] | None,
     settings: dict[str, Any],
     states: dict[str, Any],
     tz,
     now: datetime,
-    buckets: dict[str, dict[str, float]] | None = None,
 ) -> dict[str, Any] | None:
     """La ventana de energía gratis de hoy y de mañana, con su estado.
 
     ``None`` cuando falta con qué calcularla: sin previsión solar no hay ventana
     que enseñar, y es mejor no enseñar nada que inventarse una hora.
 
-    ``buckets`` es el detalle del día que ya trae `daily_energy`: sirve para
-    comparar lo previsto con lo producido de verdad y aprender el sesgo del
-    tejado. Sin ellos la ventana sale igual, solo sin corregir.
+    La curva se la dan hecha —ver `curva_solar`— y no la calcula ella: es lo que
+    garantiza que esta tarjeta y la del plan hablen del mismo sol.
     """
-    points = series_mod.forecast_power(
-        series_mod._forecast_states(settings, states), tz
-    )
-    if not points:
+    if not curva:
         return None
-    # El sesgo del tejado: lo que la previsión se pasa o se queda corta a cada
-    # hora, aprendido de los días anteriores. Se aplica antes que nada, porque
-    # todo lo que viene detrás —la ventana, el consejo, el reparto— tiene que
-    # partir de la mejor curva que se tenga, no de la cruda.
-    _anotar_prevision(points, buckets, now)
-    sesgo = _sesgo_tejado()
-    points = sesgo.aplicar(points)
+    points = curva["points"]
     perfil = await _house_profile(settings, states, tz, now)
     if perfil is None:
         return None
@@ -1101,8 +1166,10 @@ async def free_energy(
         # vez de restar en silencio. `null` = no se ha descontado nada.
         "battery_room_kwh": None if hueco is None else round(hueco / 1000.0, 2),
         # Y lo que se le ha corregido a la previsión, por lo mismo: una curva
-        # que no es la del sensor tiene que decir que no lo es.
-        "bias": sesgo.payload(),
+        # que no es la del sensor tiene que decir que no lo es. `bias` es lo que
+        # corrige el tejado siempre; `sky`, lo que corrige el cielo de hoy.
+        "bias": curva["bias"],
+        "sky": curva["sky"],
     }
 
 
@@ -1313,9 +1380,11 @@ async def build(
 
     energy_summary = _energy_summary(energy, daily["flows"])
     buckets = daily.get("buckets") or {}
-    # Los buckets van a la ventana para poder comparar lo previsto de hoy con
-    # lo producido de verdad, que es de donde sale el sesgo del tejado.
-    window = await free_energy(settings, states, now.tzinfo, now, buckets)
+    # Una sola curva de sol para todo el payload. Los buckets entran aquí porque
+    # es donde se compara lo previsto de hoy con lo producido de verdad: de ahí
+    # sale el sesgo del tejado y también el cielo de hoy.
+    curva = curva_solar(settings, states, power, buckets, now.tzinfo, now)
+    window = await free_energy(curva, settings, states, now.tzinfo, now)
     # El ahorro solo hace falta cuando el cierre va a salir: tras la puesta de
     # sol. Calcularlo a mediodía sería trabajo (y PVPC) tirado a la basura.
     sunset = _sunset(states, now)
@@ -1333,7 +1402,7 @@ async def build(
     plan = None
     if aparatos:
         aprendido = await appliances_mod.learn(settings, states, aparatos, now.tzinfo, now)
-        fuentes = await _fuentes(settings, states, power, soc, now.tzinfo, now)
+        fuentes = await _fuentes(curva, settings, states, soc, now.tzinfo, now)
         consejo = appliances_mod.advice(
             aparatos, aprendido, window, now,
             _precio_tras_ventana(settings, tariffs, window, now),
@@ -1378,54 +1447,38 @@ async def build(
 
 
 async def _fuentes(
+    curva: dict[str, Any] | None,
     settings: dict[str, Any],
     states: dict[str, Any],
-    power: dict[str, float],
     soc: float | None,
     tz,
     now: datetime,
 ) -> dict[str, Any] | None:
     """Con qué se estima de dónde saldría la energía de un ciclo puesto ahora.
 
-    Las dos curvas son las mismas que usa la ventana —la previsión solar y el
-    perfil horario de la casa—, así que no cuesta ninguna petición más: el perfil
-    está en caché y la previsión sale de los atributos del sensor que ya está en
-    `states`.
+    Las dos curvas son las mismas que usa la ventana —la del sol y el perfil
+    horario de la casa—, y ahora lo son de verdad y no de palabra: la del sol se
+    la dan hecha (`curva_solar`), en vez de recalcularla aquí con otras
+    correcciones. Ahí estaba el defecto que hacía que las dos tarjetas de la Home
+    se contradijeran.
 
-    La previsión se **corrige con la producción real de este momento**. Es lo que
-    la hace utilizable: un día de nubes que la previsión no vio prometería un sol
-    que no está, y la estimación diría «lo pone el sol» mientras la casa tira de
-    la batería. El factor se recorta entre 0,2 y 1,5 para que un desajuste puntual
-    —una nube justo encima del panel a mediodía— no lleve la corrección al absurdo.
+    No cuesta ninguna petición: el perfil está en caché y la curva ya se ha
+    calculado para la ventana.
     """
-    puntos = series_mod.forecast_power(
-        series_mod._forecast_states(settings, states), tz
-    )
-    if not puntos:
+    if not curva:
         return None
+    puntos = curva["points"]
     perfil = await _house_profile(settings, states, tz, now)
     if perfil is None:
         return None
-
-    # El sesgo del tejado primero y el factor en vivo después, en este orden:
-    # el sesgo es la diferencia constante entre lo que promete la previsión y
-    # lo que da este tejado, y el factor es cuánto se desvía **hoy** de eso. Al
-    # revés se contarían dos veces, porque el factor se mediría contra una curva
-    # que ya se sabe que miente.
-    puntos = _sesgo_tejado().aplicar(puntos)
-
-    previsto_ahora = series_mod.forecast_at(puntos, now)
-    real_ahora = max(power.get("pv") or 0.0, 0.0)
-    factor = 1.0
-    if previsto_ahora and previsto_ahora > 50:
-        factor = max(0.2, min(real_ahora / previsto_ahora, 1.5))
-
     return {
-        "sol_at": lambda momento: series_mod.forecast_at(puntos, momento) * factor,
+        "sol_at": lambda momento: series_mod.forecast_at(puntos, momento),
         "casa_at": perfil.at,
         "soc": soc,
         "capacity_kwh": float(settings.get("battery_kwh") or 0.0),
-        "factor": round(factor, 2),
+        # Se lleva al plan para poder decirlo en la tarjeta: es el mismo objeto
+        # que enseña la ventana, así que las dos no pueden discrepar.
+        "sky": curva["sky"],
     }
 
 
