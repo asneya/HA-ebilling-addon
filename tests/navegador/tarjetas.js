@@ -1,6 +1,11 @@
 /* Reordenar y ocultar tarjetas de la Home, en el navegador y por usuario.
  *
  *   1. Ajustes → Pantalla de inicio las lista todas, en su orden
+ *
+ * Cuáles son «todas» se lee del catálogo de la propia aplicación
+ * (`core/tarjetas.js`) y no se escribe aquí: lo que este banco comprueba es el
+ * mecanismo, y tenerlas a mano hacía que añadir una tarjeta lo pusiera en rojo
+ * sin que nada estuviera roto.
  *   2. y dice que lo que se toca ahí es solo tuyo
  *   3. bajar una la mueve de verdad en la Home
  *   4. sin desmontar el componente del caudal (no se reinicializa al reordenar)
@@ -54,26 +59,40 @@ const lista = (p) => p.evaluate(() =>
   [...document.querySelectorAll("#home-cards-list [data-card-row]")]
     .map((li) => li.dataset.cardRow));
 
+/* El catálogo, leído de la propia aplicación.
+
+   Antes estaban las cinco escritas a mano aquí, y añadir una sexta tarjeta ponía
+   este banco en rojo sin que nada estuviera roto. Lo que este banco comprueba es
+   el **mecanismo** —que se listan todas, que se mueven, que se ocultan—, no cuáles
+   son; el catálogo es de `core/tarjetas.js` y de ahí se lee. */
+const catalogo = (p) => p.evaluate(() =>
+  import("/static/core/tarjetas.js").then((m) => m.CATALOGO.map((c) => c.id)));
+
 (async () => {
   const b = await abrirNavegador();
-
-  // Se parte de cero para Ana: el banco se puede repetir.
-  const limpio = await b.newContext({ extraHTTPHeaders: { "X-Remote-User-Id": ANA } });
-  await limpio.request.put(BASE + "api/settings", {
-    data: { home_order: ["ahora", "cierre", "ventana", "plan", "resumen"], home_hidden: [] },
-  });
-  await limpio.close();
 
   const ctxAna = await b.newContext({
     viewport: { width: 414, height: 900 },
     extraHTTPHeaders: { "X-Remote-User-Id": ANA, "X-Remote-User-Display-Name": "Ana" },
   });
-  const p = await abrir(ctxAna);
+  let p = await abrir(ctxAna);
+  const TODAS = await catalogo(p);
+  const DE_FABRICA = TODAS.join(",");
+
+  // Se parte de cero para Ana: el banco se puede repetir. El orden de partida es
+  // el del catálogo, así que una tarjeta nueva no obliga a tocar esto.
+  const limpio = await b.newContext({ extraHTTPHeaders: { "X-Remote-User-Id": ANA } });
+  await limpio.request.put(BASE + "api/settings", {
+    data: { home_order: TODAS, home_hidden: [] },
+  });
+  await limpio.close();
+  await p.close();
+  p = await abrir(ctxAna);
 
   console.log("\n1-2 · la lista de Ajustes");
   await irAjustesInicio(p);
-  ok((await lista(p)).join(",") === "ahora,cierre,ventana,plan,resumen",
-    `las cinco en su orden (${(await lista(p)).join(" · ")})`);
+  ok((await lista(p)).join(",") === DE_FABRICA,
+    `las ${TODAS.length} en su orden (${(await lista(p)).join(" · ")})`);
   const quien = await p.textContent("#home-quien");
   ok(/Solo para ti, Ana/.test(quien), `dice de quién es: «${quien.slice(0, 46)}…»`);
 
@@ -114,7 +133,10 @@ const lista = (p) => p.evaluate(() =>
   });
   await p.click('[data-card-row="ahora"] .down');
   await p.waitForTimeout(1400);
-  ok((await lista(p)).join(",") === "cierre,ahora,ventana,plan,resumen",
+  // Bajar la primera la pone segunda: se intercambian los dos primeros y el resto
+  // se queda como estaba.
+  const bajada = [TODAS[1], TODAS[0], ...TODAS.slice(2)].join(",");
+  ok((await lista(p)).join(",") === bajada,
     `la lista se reordena (${(await lista(p)).join(" · ")})`);
   ok(/Guardado/.test(await p.textContent("#home-estado")),
     `y lo dice: «${(await p.textContent("#home-estado")).trim()}»`);
@@ -169,7 +191,10 @@ const lista = (p) => p.evaluate(() =>
 
   console.log("\n10 · ocultarlo todo");
   await irAjustesInicio(p);
-  for (const id of ["ahora", "cierre", "ventana", "plan"]) {
+  // Todas menos «resumen», que la sección 5 ya ha ocultado. Se recorre el
+  // catálogo, así que una tarjeta nueva entra sola en esta comprobación en vez de
+  // dejarla a medias sin que nadie se entere.
+  for (const id of TODAS.filter((x) => x !== "resumen")) {
     await p.click(`[data-card-row="${id}"] [data-card-ver]`);
     await p.waitForTimeout(900);
   }
@@ -194,10 +219,10 @@ const lista = (p) => p.evaluate(() =>
   }), "y las flechas caben y son pulsables");
 
   // Se deja como estaba, que el banco se puede repetir.
-  await p.evaluate(() => fetch("api/settings", {
+  await p.evaluate((todas) => fetch("api/settings", {
     method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ home_order: ["ahora", "cierre", "ventana", "plan", "resumen"], home_hidden: [] }),
-  }));
+    body: JSON.stringify({ home_order: todas, home_hidden: [] }),
+  }), TODAS);
   await b.close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }
   console.log(fallos.length ? `\n${fallos.length} fallos` : "\ntodo en verde");

@@ -20,9 +20,16 @@ fixture, esto tiene que gritar antes del commit y no después de publicarlo.
 
   1. todo lo que hay en `tests/fixtures/` está versionado
   2. y todo lo versionado sigue en disco
-  3. las fixtures son JSON válido
+  3. las fixtures son JSON válido y no repiten ninguna clave
   4. los tokens y contraseñas son de adorno
   5. las URLs apuntan a la máquina local, no a una casa de verdad
+
+La de las claves repetidas se añadió después de que costara media hora: al meter
+`weather_entity` resultó que las fixtures ya arrastraban una copia vacía de una
+configuración vieja, al final del bloque. `json.loads` acepta la clave dos veces
+y se queda con la última, sin decir nada, así que el valor bueno quedaba anulado
+en silencio y la tarjeta no salía. Un fichero que dice dos cosas de lo mismo es un
+fichero que no se puede leer, y quien lo abra no lo va a ver.
 """
 import json
 import re
@@ -74,6 +81,44 @@ for f in sorted(FIX.rglob("*.json")):
     except ValueError as err:
         malos.append(f"{f.name}: {err}")
 ok(not malos, f"las {len(list(FIX.rglob('*.json')))} fixtures se leen{' · ' + str(malos) if malos else ''}")
+
+# Y sin claves repetidas. Esto no lo detecta nadie: `json.loads` acepta un objeto
+# con la misma clave dos veces y se queda **con la última**, sin decir nada. Pasó
+# de verdad al añadir `weather_entity`: las fixtures ya arrastraban una copia
+# vacía de una configuración vieja al final del bloque, así que el valor bueno
+# —puesto arriba, junto a los otros sensores de meteorología— quedaba anulado en
+# silencio y la tarjeta no salía. Un fichero que dice dos cosas de lo mismo es un
+# fichero que no se puede leer, y quien lo abra no lo va a ver.
+def claves_repetidas(texto: str) -> list[str]:
+    """Las claves que aparecen dos veces en algún objeto del JSON."""
+    encontradas: list[str] = []
+
+    def revisar(pares):
+        vistas = set()
+        for clave, _valor in pares:
+            if clave in vistas:
+                encontradas.append(clave)
+            vistas.add(clave)
+        return dict(pares)
+
+    try:
+        json.loads(texto, object_pairs_hook=revisar)
+    except ValueError:
+        pass                      # ya lo ha dicho la comprobación de arriba
+    return encontradas
+
+
+repetidas = []
+for f in sorted(FIX.rglob("*.json")):
+    for clave in claves_repetidas(f.read_text()):
+        repetidas.append(f"{f.parent.name}/{f.name}: «{clave}»")
+ok(not repetidas,
+   "y ninguna repite una clave, que se resolvería en silencio"
+   + ("" if not repetidas else " · " + "; ".join(dict.fromkeys(repetidas))))
+# Que el detector detecte: un detector que nunca ha detectado nada no ha
+# demostrado nada.
+ok(claves_repetidas('{"settings": {"a": 1, "a": 2}}') == ["a"],
+   "y sabría reconocerlo si volviera a pasar")
 
 print("\n4-5 · sin secretos")
 # Se busca por **forma del valor** y no por nombre de clave. Mirar solo las

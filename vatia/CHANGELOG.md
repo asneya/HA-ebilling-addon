@@ -2,6 +2,80 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.49.0
+
+### El tiempo hora a hora, en la Home
+
+Una tarjeta nueva, ordenable y ocultable como las demás, con **las horas de sol
+que quedan del día en curso**. Ni el día entero ni las próximas veinticuatro: en
+una aplicación de energía las once de la noche no cambian ninguna decisión, y las
+horas que ya pasaron tampoco. El corte de arriba sale de la propia curva del sol
+—la última hora en que la previsión da algo— y no de la puesta de sol, para que la
+tarjeta acabe donde acaba lo aprovechable.
+
+Cada fila lleva la hora, el icono de su condición, la temperatura, la nubosidad y
+**el sol previsto para esa hora**, con una barra proporcional al pico de lo que
+queda. Poner la nube al lado del sol es lo que distingue esta tarjeta de un widget
+del tiempo: se lee del tirón, «a las dos, 45 % de nubes, y aun así 5 kW».
+
+El sol de la columna de la derecha es el de la **misma curva** de la que salen la
+ventana y el plan —la de la 0.48.0, con el sesgo del tejado y el cielo de hoy ya
+aplicados—, y la tarjeta lo dice, que es la regla de la casa: una cifra que no es
+la del sensor tiene que declararlo.
+
+### La previsión se pide con el servicio, no leyendo un atributo
+
+Es el detalle que decide si esto funciona. Hasta Home Assistant 2024.3 las
+entidades del tiempo publicaban su previsión en el atributo `forecast`; en 2024.4
+se retiró, y ahora hay que llamar a **`weather.get_forecasts`**. Se pide por
+websocket —`call_service` con respuesta lleva ahí desde antes que el
+`?return_response` de la API REST, así que funciona en más versiones— por la misma
+conexión que ya se usa para las estadísticas, y se guarda un cuarto de hora: la
+Home pide `/api/live` cada veinte segundos y la previsión horaria no cambia en ese
+rato.
+
+Los Home Assistant de mentira del banco sirven su `weather.casa` **sin** el
+atributo, a propósito: si alguien reescribiera esto leyendo atributos, el banco se
+pondría rojo en vez de pasar y fallar en las casas.
+
+### Configuración
+
+En **Ajustes → El tiempo hora a hora** se elige una entidad `weather.*` (AEMET,
+Met.no, OpenWeatherMap…). Es otra cosa que los dos sensores de meteorología que ya
+había: aquellos dicen cómo está *ahora* —ponen el fondo y la pastilla de la
+cabecera— y esta trae la previsión. Sin asignarla, la tarjeta no sale.
+
+El desplegable ofrece **solo entidades `weather.*`**, que son las únicas con
+previsión horaria: ofrecer trescientos sensores ahí sería ofrecer trescientas
+maneras de equivocarse.
+
+La **nubosidad** depende de la integración —AEMET y Met.no la dan, otras no—.
+Cuando no viene, esa columna se calla en vez de dibujar un cero que se leería como
+«despejado».
+
+### Banco
+
+- `tests/python/tiempo.py` (nuevo): la franja —empieza en la hora en curso, acaba
+  con el sol, ni una hora de otro día— y que el sol de cada fila no promete más
+  que la curva del día. De noche declara que no puede comprobar nada, en vez de dar
+  por hecho que es de día.
+- `tests/navegador/tiempoui.js` (nuevo): las filas, la barra proporcional, los
+  vatios por debajo del kilovatio, la nubosidad ausente, la tarjeta que no sale
+  sin entidad, que es ordenable, y que cabe a 320 px.
+- `tests/navegador/tarjetas.js`: tenía las cinco tarjetas escritas a mano y añadir
+  una sexta lo ponía en rojo sin que nada estuviera roto. Ahora lee el catálogo de
+  la propia aplicación, que es lo que comprueba de verdad —el mecanismo, no cuáles
+  son—, y la sección de «ocultarlo todo» recorre el catálogo en vez de una lista
+  fija, así que una tarjeta nueva entra sola.
+- `tests/python/fixtures.py`: **ninguna fixture puede repetir una clave.** Salió de
+  perder media hora con esto — las fixtures ya arrastraban un `weather_entity`
+  vacío de una configuración vieja, al final del bloque de ajustes. `json.loads`
+  acepta la clave dos veces y se queda con la última, sin decir nada, así que el
+  valor bueno quedaba anulado en silencio y la tarjeta no salía en el banco. Un
+  fichero que dice dos cosas de lo mismo no se puede leer, y quien lo abra no lo va
+  a ver.
+
+
 ## 0.48.0
 
 ### Una sola curva de sol, y el cielo de hoy dentro

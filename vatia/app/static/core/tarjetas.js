@@ -46,6 +46,13 @@ export const CATALOGO = [
     color: "#5e5ce6",
   },
   {
+    id: "tiempo",
+    name: "El tiempo hora a hora",
+    claim: "Las horas de sol que quedan hoy, con las nubes y lo que dejan pasar",
+    icon: "i-parcial",
+    color: "#64d2ff",
+  },
+  {
     id: "resumen",
     name: "Resumen de energía",
     claim: "Lo generado y lo consumido hoy, por origen y destino",

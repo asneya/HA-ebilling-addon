@@ -155,6 +155,15 @@
         <p class="ad-note" id="plan-note"></p>
       </section>
 
+      <section class="panel glass hidden" id="tiempo-panel" data-card="tiempo">
+        <div class="ad-head">
+          <span class="ad-title">El tiempo hora a hora</span>
+          <span class="ad-aside" id="tiempo-aside"></span>
+        </div>
+        <div class="tp-rows" id="tiempo-rows"></div>
+        <p class="ad-note" id="tiempo-note"></p>
+      </section>
+
       <section class="panel glass tappable" id="summary-panel" data-card="resumen"
                role="button" tabindex="0"
                aria-label="Ver el detalle de energía">
@@ -1080,6 +1089,24 @@
             estados de HA (<code>sunny</code>, <code>partlycloudy</code>,
             <code>rainy</code>…) o texto en castellano («Parcialmente nuboso»);
             se interpreta para elegir el icono y el fondo.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel glass group">
+        <div class="group-head">El tiempo hora a hora</div>
+        <div class="list">
+          <label class="li"><span class="li-label">Entidad del tiempo</span><select id="s-weather"></select></label>
+          <p class="li-note">
+            Una entidad <code>weather.*</code> (AEMET, Met.no, OpenWeatherMap…),
+            que es otra cosa que los dos sensores de arriba: aquellos dicen cómo
+            está <b>ahora</b> y esta trae la <b>previsión horaria</b>, con la que
+            se pinta la tarjeta de la Home. Sin asignarla, esa tarjeta no sale.
+          </p>
+          <p class="li-note">
+            La nubosidad de cada hora depende de la integración: AEMET y Met.no la
+            dan, y otras no. Cuando no viene, la columna se calla en vez de
+            dibujar un cero que se leería como «despejado».
           </p>
         </div>
       </div>
