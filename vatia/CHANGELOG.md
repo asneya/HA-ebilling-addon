@@ -2,6 +2,114 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.53.0
+
+### Lo que está en marcha deja de preguntar a qué hora ponerlo
+
+De una idea: *«para los electrodomésticos movibles podría ser detectar si están en
+funcionamiento en ese instante e indicar algo tipo tiempo restante o porcentaje de
+ejecución, barra de progreso…»*.
+
+Un movible que **ya está funcionando** tiene otra pregunta. «¿A qué hora lo pongo?»
+está contestada —la decisión está tomada— y proponerle una hora óptima es tan
+inútil como calcularle una a la nevera. Su fila pasa a decir por dónde va:
+
+> **Lavadora** · en marcha · lleva 40 min · lo que queda, 98 % con sol
+> ▮▮▮▮▮▮▯▯▯▯▯▯▯▯▯▯▯▯▯▯   **Gratis** · ~termina a las 18:35
+
+La **barra del origen es también la del progreso**: se rellena hasta donde va el
+ciclo y el resto queda de carril. Una segunda barra debajo habría sido ruido, y así
+la de arriba dice las dos cosas de una vez —por dónde va y de dónde ha salido lo
+que lleva— y crece con el ciclo.
+
+Lo medido y lo estimado, separados y sin mezclarse en la misma cifra:
+
+| | De dónde sale |
+|---|---|
+| Desde cuándo está en marcha | del detector de ciclos, con su misma tolerancia a las pausas |
+| Lo que lleva de tiempo y de kWh | del reloj y del contador |
+| De dónde ha salido lo que lleva, y su coste | atribución hora a hora, como en un continuo |
+| Cuándo termina | la mediana de sus propios ciclos |
+| De dónde saldrá lo que le queda | simulado, con la potencia que está dando hoy |
+
+Y lo único de esta fila que un medidor de enchufe no puede decir: **la cola se
+simula**. Los veinte minutos que le quedan se pasan por el mismo
+`planner.simular` que contesta «¿y si lo pongo ahora?», con la potencia que el
+aparato está dando hoy —no la del ciclo típico—, porque si hoy va con un programa
+más flojo es el de hoy el que va a terminar.
+
+### Tres cosas que se han decidido no afirmar
+
+**El progreso va por tiempo, no por energía.** En una lavadora el calentamiento
+está al principio: el 70 % de los kWh se gastan en el primer tercio del programa,
+así que una barra por energía diría «casi acabando» a los veinte minutos.
+
+**Y la barra puede pasarse del 100 %.** La duración típica es una mediana sobre
+programas distintos —un rápido a 30° y un algodón a 60° son el mismo enchufe—, así
+que al superar lo habitual se dice («más de lo habitual (1 h 30 min)») en vez de
+quedarse clavada al final fingiendo que el final es inminente.
+
+**La hora de fin solo se promete si sus ciclos se parecen**: tres terminados como
+mínimo y no más de un 30 % de la mediana entre el más corto y el más largo. Un
+horno tarda siempre lo mismo y se le puede decir «~termina a las 19:40»; una
+lavadora con cinco programas, no, y entonces se dice lo que sí se sabe: «suele durar
+entre 55 min y 2 h 25 min». Es la misma disciplina que con «fijo»: cuando el dato no
+sostiene la cifra, la cifra no se dice.
+
+### Un ciclo a medias se estaba contando como uno terminado
+
+Buscando dónde encajar lo anterior salió un fallo de fondo. `_ciclos_de` cerraba el
+tramo abierto al acabar las muestras, así que **el ciclo que estaba corriendo entraba
+en la lista como si hubiera acabado**: una lavadora de dos horas puesta hacía veinte
+minutos figuraba como «un ciclo de veinte minutos» y de ahí salía la mediana de «lo
+que suele durar». Con seis ciclos en catorce días —una lavadora normal— la mediana
+es la media del tercero y el cuarto, así que uno truncado la mueve.
+
+Ahora el abierto va marcado y **fuera de las medianas**, que es donde estaba el
+daño; sus kWh **sí** cuentan para el consumo del día, porque esa energía se ha
+gastado de verdad. En la instalación de prueba: ciclo típico 1 h, sacado de los
+días anteriores, con el de hoy a los 40 minutos y sin contaminarlo.
+
+### Y una sola noción de «en marcha»
+
+Había dos, y no coincidían: la lectura instantánea no tolera ningún hueco y el
+detector de ciclos tolera quince minutos —que es lo que hace que un lavavajillas
+cuente como un ciclo y no como tres—. Con las dos vivas, la pausa entre lavado y
+secado habría dicho «terminado» durante un cuarto de hora y luego «en marcha» otra
+vez: **la barra de progreso habría retrocedido**. Ahora manda el ciclo abierto y la
+lectura de ahora solo lo sostiene, que además es lo que responde cuando lo aprendido
+va con retraso.
+
+Y como lo aprendido se guarda media hora, un arranque **invalida la caché**: sin eso
+una lavadora puesta a y cinco no habría enseñado por dónde iba hasta media hora
+después, con el programa a medias. Los continuos no cuentan para esto —la nevera
+arranca el compresor treinta veces al día— y hay un suelo de tres minutos entre
+invalidaciones.
+
+### La fila de la nevera desaparecía a los dos minutos (0.52.0)
+
+Un fallo de la versión anterior, encontrado al verificar esto de punta a punta. El
+reparto hora a hora se calculaba bien y se guardaba en la caché del día, pero **el
+camino que sirve de esa caché no lo devolvía**. Dos minutos después de arrancar el
+add-on, la fila de la nevera desaparecía de la tarjeta —un continuo sin reparto no
+se publica, y así debe ser— y volvía sola al caducar la caché. Con la aplicación
+recién levantada no se veía nunca, y probando las funciones por separado, tampoco.
+
+De ahí la forma del banco nuevo: **la misma pregunta dos veces**, y la segunda
+respuesta tiene que ser la primera. Y el Home Assistant de mentira tiene ahora un
+coche que **está siempre cargando** —arrancó hace cuarenta minutos, siempre—, por el
+mismo motivo por el que tiene una nevera: un camino sin datos que lo recorran es
+donde viven los fallos.
+
+### El banco que corría contra el servidor de otro
+
+Y una tarde perdida que no se va a repetir. `tests/run.py` adoptaba lo que
+encontrara escuchando en los puertos de los falsos —ahorra un segundo de arranque—,
+así que un Home Assistant de mentira parcheado a mano en una prueba anterior se
+quedó pegado al 8133 y **la regresión entera corrió contra sus datos**, en verde y
+midiendo otra cosa. Ahora un puerto ocupado aborta con su explicación: un banco que
+mide contra un servidor que no es el suyo no está en verde, está mudo.
+
 ## 0.52.0
 
 ### Dos tarjetas de lo mismo, y una de ellas contestando a una pregunta que no existe

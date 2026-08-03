@@ -396,6 +396,21 @@ def plan(
                 continue
             filas.append(fila)
             continue
+        # Lo que ya está funcionando no tiene hora que elegir: esa decisión está
+        # tomada. La fila pasa a contar por dónde va, con lo que lleva medido y su
+        # origen atribuido —también en `live`, que es quien tiene el reparto— y con
+        # lo que le queda simulado. Sigue siendo un movible: mañana volverá a tener
+        # su hora.
+        if datos.get("progress"):
+            fila.update({
+                "running": datos["progress"],
+                "so_far": datos.get("running_split"),
+                "tail": datos.get("tail"),
+                "best": None, "saving_eur": None, "sun_gain_pct": 0,
+                "worth_waiting": False,
+            })
+            filas.append(fila)
+            continue
         ciclo = datos.get("cycle")
         mejor = _mejor_hora(ciclo, now, fuentes, precio, valor_bateria) if ciclo else None
         if not mejor:
@@ -409,10 +424,11 @@ def plan(
             fila.update({"best": None, "saving_eur": None, "sun_gain_pct": 0,
                          "worth_waiting": False})
         filas.append(fila)
-    # Primero lo que más se gana moviéndolo, y los continuos al final: no hay nada
-    # que decidir sobre ellos, están para saber lo que cuestan.
-    orden = {"movible": 0, "fijo": 1, "continuo": 2}
-    filas.sort(key=lambda f: (orden.get(f["kind"], 9),
+    # Primero lo que está pasando, que es lo único de la tarjeta que no es una
+    # hipótesis; luego lo que más se gana moviéndolo; y los continuos al final: no
+    # hay nada que decidir sobre ellos, están para saber lo que cuestan.
+    orden = {"movible": 1, "fijo": 2, "continuo": 3}
+    filas.sort(key=lambda f: (0 if f.get("running") else orden.get(f["kind"], 9),
                               -(f.get("saving_eur") or 0.0), f["name"]))
     bateria = cargar_de_red(now, fuentes, precio, manana)
     if not filas and not bateria:

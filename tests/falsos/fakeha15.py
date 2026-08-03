@@ -10,7 +10,17 @@ minutos, que es de donde se aprenden. Con forma a propósito:
     lo que parte un ciclo en tres si no se tolera el hueco;
   · el horno es exactamente el pico de las 13 h que ya tenía la casa, así que la
     suma de los aparatos nunca se pasa del consumo de la casa — que es lo que el
-    diagrama detallado necesita para que el «resto de la casa» no salga negativo.
+    diagrama detallado necesita para que el «resto de la casa» no salga negativo;
+  · la nevera es un 24/7 con el compresor 18 min sí y 27 no, para que el camino de
+    los aparatos **continuos** se pruebe con una curva de verdad;
+  · y el coche está **cargando ahora mismo**, siempre, arrancó hace 40 minutos.
+
+El coche está por el mismo motivo que la nevera: un camino sin datos que lo
+recorran es donde viven los fallos. Cuando la fila «en marcha» se añadió, el
+reparto hora a hora salía bien de su función y la aplicación lo perdía al servirlo
+de la caché del día, así que la nevera desaparecía de la tarjeta dos minutos
+después de arrancar. Ninguna prueba de las funciones por separado podía verlo. Con
+un aparato en marcha en cada regresión, sí.
 """
 _DOC = """HA falso con previsión solar de verdad, para la ventana de energía gratis.
 
@@ -79,7 +89,27 @@ def aparatos(h, dia=0):
     `dia` es el ordinal de la fecha: sirve para que no todos los días sean
     iguales, que es lo que hace que una mediana valga más que una media.
     """
-    out = {"lavadora": 0.0, "lavavajillas": 0.0, "horno": 0.0, "nevera": 0.0}
+    out = {"lavadora": 0.0, "lavavajillas": 0.0, "horno": 0.0, "nevera": 0.0,
+           "coche": 0.0}
+
+    # Coche: **siempre está cargando**, y siempre lleva 40 minutos de una hora. Su
+    # ventana se calcula del reloj y no de un horario fijo, que es lo que lo hace
+    # útil: con un horario fijo, el camino de «en marcha» solo se recorrería si al
+    # banco le tocase pasar a esa hora. Los días anteriores carga de 23 a 24, para
+    # que tenga ciclos **cerrados** de una hora con los que aprender lo que suele
+    # durar — y que hoy no se cuente entre ellos es justo lo que hay que probar.
+    #
+    # El `dia in (0, hoy)` no es un descuido: `casa()` pregunta por los aparatos sin
+    # decir qué día es —se queda con el 0 por defecto— y si el coche no saliera
+    # también ahí, un enchufe de 1.200 W quedaría **fuera** del consumo de la casa y
+    # el «resto de la casa» del diagrama detallado se iría a negativo.
+    t_ahora = ahora()
+    if dia in (0, t_ahora.toordinal()):
+        ini = t_ahora.hour + t_ahora.minute / 60.0 - 40 / 60.0
+        if ini <= h < ini + 1.0:
+            out["coche"] = 1200.0
+    elif 23.0 <= h < 24.0:
+        out["coche"] = 1200.0
 
     # Nevera: 24/7, con el compresor 18 minutos sí y 27 no. Está aquí para que el
     # camino de los aparatos **continuos** se pruebe de verdad: con solo ciclos, la
@@ -137,7 +167,7 @@ S = lambda eid, st, unit=None, dc=None, name=None, **x: {"entity_id": eid, "stat
                    **({"friendly_name": name} if name else {}), **x}}
 
 CLAVES = ["pv", "grid_import", "grid_export", "batt_charge", "batt_discharge", "home"]
-APARATOS = ["lavadora", "lavavajillas", "horno", "nevera"]
+APARATOS = ["lavadora", "lavavajillas", "horno", "nevera", "coche"]
 
 
 async def states(req):

@@ -8,6 +8,8 @@ Lo que se comprueba:
   5. la mediana no la mueve un día raro
   6. los veredictos del diseño, con sus copias
   7. el reparto del cierre del día, por solape con la ventana
+  8. de dónde saldría la energía de un ciclo puesto ahora
+  9. y el ciclo que sigue en marcha no cuenta como uno que terminó
 """
 import sys
 from datetime import datetime, timedelta
@@ -205,6 +207,56 @@ ok(A.estimate(None, AHORA, 0.20, fuentes(0.0)) is None, "sin ciclo no hay estima
 ok(A.estimate(ciclo2h, AHORA, 0.20, None) is None, "y sin fuentes tampoco")
 e = A.estimate(ciclo2h, AHORA, None, fuentes(sol=0.0))
 ok(e["battery_eur"] is None, "sin precio, los kWh sí y los euros no")
+
+print("\n9 · el ciclo que sigue en marcha")
+# La curva se acaba con el aparato encendido: eso no es un ciclo de veinte minutos,
+# es un ciclo que lleva veinte minutos. Antes se guardaba como los demás.
+c = A._ciclos_de(curva([(10, 11, 2000), (23.6, 24, 2000)]), 15)
+ok(len(c) == 2, f"dos tramos ({len(c)})")
+ok(c[0].get("open") is False, "el que terminó está cerrado")
+ok(c[1].get("open") is True, f"y el último sigue abierto ({c[1]['start']:%H:%M} →)")
+ok(abs(c[1]["hours"] - 0.4) < 0.09,
+   f"con lo que lleva, no lo que va a durar ({c[1]['hours']:.2f} h)")
+
+# La mediana: cuatro lavados de dos horas y uno recién puesto.
+muestras = []
+for i in range(4):
+    muestras += curva([(10, 12, 2000)], f"2026-07-{10 + i:02d}")
+muestras += curva([(23.5, 24, 2000)], "2026-07-14")
+c = A._ciclos_de(muestras, 15)
+r = A._resumen(c, 14)
+ok(len(c) == 5 and sum(1 for x in c if x.get("open")) == 1,
+   "cinco tramos, uno de ellos en marcha")
+ok(abs(r["hours"] - 2.0) < 0.01,
+   f"«lo que suele durar» sigue siendo 2 h y no 1 h 15 ({r['hours']:.2f} h)")
+ok(r["cycles"] == 4, f"y solo cuenta los que acabaron ({r['cycles']})")
+ok(r["last"] == c[3]["start"].isoformat(),
+   "«el último» es el último que terminó, no el que va por medio")
+
+# Con un ciclo cerrado y otro en marcha no hay «suele»: antes sí lo había, y salía
+# de medio ciclo.
+c2 = A._ciclos_de(curva([(10, 12, 2000)], "2026-07-10")
+                  + curva([(23.5, 24, 2000)], "2026-07-11"), 15)
+ok(A._resumen(c2, 14) is None,
+   "con un ciclo terminado y otro a medias no se habla de «lo que suele durar»")
+
+# Y la dispersión, que es la que decide si se puede prometer una hora de fin.
+ok(r["hours_min"] == r["hours_max"] == 2.0,
+   f"un aparato que siempre dura lo mismo lo dice ({r['hours_min']}–{r['hours_max']} h)")
+variado = []
+for i, largo in enumerate([1.0, 1.5, 2.5]):
+    variado += curva([(10, 10 + largo, 2000)], f"2026-07-{10 + i:02d}")
+rv = A._resumen(A._ciclos_de(variado, 15), 14)
+ok(rv["hours_min"] < rv["hours_max"] - 1.0,
+   f"y uno con programas distintos, también ({rv['hours_min']}–{rv['hours_max']} h)")
+
+# El router: su único ciclo no cierra nunca, y aun así tiene que seguir saliendo
+# «continuo». Si la detección descontara el abierto se quedaría con cero ciclos.
+router = curva([(0, 24, 8)], "2026-07-10")
+cr = A._ciclos_de(router, 2)
+ok(len(cr) == 1 and cr[0]["open"] is True, "el router da un solo ciclo, y abierto")
+ok(A.forma_de_uso(router, 2, cr, 1) == "continuo",
+   "y se sigue detectando como continuo")
 
 print("\n" + (f"{len(fallos)} fallos" if fallos else "todo en verde"))
 sys.exit(1 if fallos else 0)

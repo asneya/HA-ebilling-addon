@@ -484,7 +484,13 @@ async def daily_energy(
         cached = {"totals": dict(_daily_cache["value"]["totals"]),
                   "flows": _daily_cache["value"]["flows"],
                   "sources": dict(_daily_cache["value"].get("sources") or {}),
-                  "buckets": _daily_cache["value"].get("buckets") or {}}
+                  "buckets": _daily_cache["value"].get("buckets") or {},
+                  # El reparto hora a hora también: se guarda, y al servir de la
+                  # caché se quedaba fuera. Dos minutos después de arrancar, la fila
+                  # de la nevera desaparecía de la tarjeta —un continuo sin reparto
+                  # no se publica, y con razón— y volvía sola al caducar la caché.
+                  # Con la aplicación recién levantada no se veía nunca.
+                  "flows_by_hour": _daily_cache["value"].get("flows_by_hour") or {}}
         if del_dia:
             # El estado va al segundo; el reparto viene cacheado. El estado
             # tampoco manda si marca cero y la potencia dice otra cosa.
@@ -1655,16 +1661,33 @@ async def build(
         # Y a los continuos se les calcula aquí su día, porque la atribución del
         # origen necesita el reparto horario de la casa, que está en este alcance.
         por_horas = daily.get("flows_by_hour")
+        precio_de_la_hora = (
+            (lambda h: precio_at(
+                now.replace(hour=int(h), minute=0, second=0, microsecond=0)))
+            if precio_at else None
+        )
+        vatios = {f["id"]: f.get("watts") for f in ahora_aparatos}
         for a in aparatos:
             datos = aprendido.setdefault(a["id"], {})
             datos["kind"] = appliances_mod.forma(a, datos)
             if datos["kind"] == "continuo":
-                datos["today_split"] = appliances_mod.dia_de_un_continuo(
-                    datos.get("today_by_hour"), por_horas,
-                    (lambda h: precio_at(
-                        now.replace(hour=int(h), minute=0, second=0, microsecond=0)))
-                    if precio_at else None,
-                )
+                datos["today_split"] = appliances_mod.atribuir_por_horas(
+                    datos.get("today_by_hour"), por_horas, precio_de_la_hora)
+                continue
+            # Y lo que está en marcha: por dónde va, de dónde ha salido lo que
+            # lleva —atribuido, porque ya pasó— y de dónde saldrá lo que le queda,
+            # que eso sí se puede simular. Las dos mitades del mismo ciclo con la
+            # cuenta que le toca a cada una.
+            if not appliances_mod.en_marcha(
+                    datos, vatios.get(a["id"]), float(a.get("standby_w") or 0), now):
+                continue
+            marcha = appliances_mod.progreso(datos.get("open"), datos.get("cycle"), now)
+            if not marcha:
+                continue
+            datos["progress"] = marcha
+            datos["running_split"] = appliances_mod.atribuir_por_horas(
+                (datos.get("open") or {}).get("by_hour"), por_horas, precio_de_la_hora)
+            datos["tail"] = _cola_del_ciclo(marcha, fuentes, now)
         # Una sola tarjeta para los electrodomésticos: de dónde saldría la energía
         # si se pone ahora, lo que costaría, y la hora óptima de los que se pueden
         # mover. Antes eran dos —«Cabe en la ventana» y «El plan de hoy»— con dos
@@ -1680,7 +1703,9 @@ async def build(
         # a pasar lo del «Gratis» con 1,1 kWh de batería debajo.
         precio_ahora = _precio_tras_ventana(settings, tariffs, window, now)
         for fila in (plan or {}).get("rows") or []:
-            origen = fila.get("now") or fila.get("today")
+            # En una fila en marcha lo que se cobra es **lo que lleva**, no lo que
+            # costaría ponerlo: ya está puesto. Sale del mismo sitio que su barra.
+            origen = fila.get("now") or fila.get("today") or fila.get("so_far")
             fila["verdict"] = appliances_mod.etiqueta_de_origen(origen, precio_ahora)
         for fila in ahora_aparatos:
             datos = aprendido.get(fila["id"]) or {}
@@ -1791,6 +1816,44 @@ async def _precio_por_hora(
         return valor
 
     return precio
+
+
+def _cola_del_ciclo(
+    marcha: dict[str, Any],
+    fuentes: dict[str, Any] | None,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """De dónde saldrá lo que le queda al ciclo que ya está en marcha.
+
+    Un ciclo en marcha tiene dos mitades y cada una se cuenta como le toca: la que
+    ya pasó se **atribuye** con el reparto de la casa —está medida—, y esta se
+    **simula** con el mismo `planner.simular` que contesta «¿y si lo pongo ahora?».
+    Es lo único de esta fila que un medidor de enchufe no puede decir: que los
+    veinte minutos que le quedan van a caer ya con el sol bajando.
+
+    La potencia es la **suya de hoy** —lo que lleva gastado partido por lo que lleva
+    puesto—, no la del ciclo típico: si hoy va con un programa más flojo, es el de
+    hoy el que va a terminar. Y sin una duración en la que se confíe no hay cola:
+    no se puede decir de dónde saldrá algo cuyo final no se sabe.
+    """
+    quedan = marcha.get("remaining_h") or 0.0
+    llevan = marcha.get("elapsed_h") or 0.0
+    kwh = marcha.get("kwh") or 0.0
+    if not fuentes or quedan <= 0 or llevan <= 0 or kwh <= 0:
+        return None
+    vatios = kwh / llevan * 1000.0
+    sol, bat, red = planner.simular(now, quedan, vatios, fuentes, planner.PASO_FINO)
+    total = sol + bat + red
+    return {
+        "hours": round(quedan, 2),
+        "sun_kwh": round(sol, 3),
+        "battery_kwh": round(bat, 3),
+        "grid_kwh": round(red, 3),
+        # El «% con sol», aquí y no en la tarjeta: es la misma cifra que llevan las
+        # horas que propone el plan y tiene que salir de la misma cuenta. Calcularla
+        # otra vez en el JavaScript es cómo empezaron las dos que discrepaban.
+        "sun_pct": round(sol / total * 100) if total > 0 else 0,
+    }
 
 
 def _precio_tras_ventana(

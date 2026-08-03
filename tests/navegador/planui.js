@@ -19,7 +19,9 @@
  *   7. y si el tejado se desvía de la previsión, se dice aquí también
  *   8. la barra del origen dice de qué depósito sale, con los colores del resumen
  *   9. un aparato de siempre encendido no trae hora, trae lo que lleva hoy
- *  10. sin errores de consola
+ *  10. y uno en marcha dice por dónde va, sin proponerle una hora ya pasada
+ *  11. la barra del progreso es la misma del origen, y puede pasarse
+ *  12. sin errores de consola
  */
 const { abrirNavegador, base } = require("./camino");
 const BASE = base("http://127.0.0.1:8402/");
@@ -64,12 +66,16 @@ async function abrir(plan) {
     nota: document.querySelector("#plan-note")?.textContent.replace(/\s+/g, " ").trim(),
     filas: [...document.querySelectorAll("#plan-rows .ad-row")].map((f) => ({
       kind: f.dataset.kind,
+      marcha: f.dataset.running === "1",
       // Los trozos de la barra del origen: su color y su anchura, que es lo que
       // sustituye al renglón de texto de la tarjeta retirada.
       barra: [...f.querySelectorAll(".ap-barra i")].map((x) => ({
         color: x.style.background, ancho: parseFloat(x.style.width),
         titulo: x.getAttribute("title"),
       })),
+      // Y hasta dónde llega el relleno, que en un aparato en marcha es el
+      // progreso del ciclo: la barra del origen y la del progreso son la misma.
+      relleno: f.querySelector(".ap-barra.ap-progreso > span")?.style.width || null,
       sub: f.querySelector(".ad-txt small")?.textContent.trim(),
       valor: f.querySelector(".ad-verdict b")?.textContent.trim(),
       porque: f.querySelector(".ad-verdict small")?.textContent.trim(),
@@ -182,6 +188,81 @@ let navegador;
   ok(!/mejor/.test(v.filas[0].sub), "y no propone ninguna hora");
   ok(v.filas[0].barra.length === 3, "con su barra del origen igual que los demás");
   ok(/siempre encendido/.test(v.nota), `y se dice que lo ha decidido la app («${v.nota}»)`);
+
+  console.log("\n10 · un aparato en marcha");
+  // La lavadora puesta hace 40 minutos, de un ciclo de 1 h 30 que siempre dura lo
+  // mismo. La pregunta «¿a qué hora?» ya está contestada: la fila cuenta otra cosa.
+  const enMarcha = (extra) => fila({
+    running: { start: "2026-08-03T10:20:00+02:00", elapsed_h: 0.67, kwh: 0.42,
+               typical_h: 1.5, pct: 44, over: false,
+               ends_at: "2026-08-03T11:50:00+02:00", remaining_h: 0.83,
+               range_h: null },
+    so_far: { kwh: 0.42, sun_kwh: 0.21, battery_kwh: 0.13, grid_kwh: 0.08,
+              eur: 0.02 },
+    tail: { hours: 0.83, sun_kwh: 0.5, battery_kwh: 0, grid_kwh: 0, sun_pct: 100 },
+    best: null, saving_eur: null, worth_waiting: false,
+    verdict: { kind: "parcial", value: 0.02, sub: "50 % lo pone el sol" },
+    ...extra,
+  });
+  v = await abrir({ battery: null, rows: [enMarcha({})] });
+  ok(v.filas[0].marcha, "la fila se sabe en marcha");
+  ok(/en marcha/.test(v.filas[0].sub) && /lleva 40 min/.test(v.filas[0].sub),
+    `dice lo que lleva puesto, que es lo medido («${v.filas[0].sub}»)`);
+  // La hora sale en la zona del navegador, que aquí es UTC: las 11:50 de Madrid.
+  ok(/~termina a las 09:50/.test(v.filas[0].porque),
+    `y la hora de fin, que es el número accionable («${v.filas[0].porque}»)`);
+  ok(!/mejor/.test(v.filas[0].sub) && !/mejor/.test(v.filas[0].porque),
+    "sin proponer una hora óptima de algo que ya está puesto");
+  ok(/lo que queda, 100 % con sol/.test(v.filas[0].sub),
+    "y de dónde va a salir lo que le queda, que es lo que nadie más dice");
+  // Con \s, que `Intl` separa el € con espacio duro.
+  ok(/^0,02\s€$/.test(v.filas[0].valor),
+    `a la derecha, lo que lleva costado y no lo que costaría ponerlo («${v.filas[0].valor}»)`);
+  ok(!/mejor hora/.test(v.aside),
+    `el titular no cuenta lo que ya está puesto («${v.aside}»)`);
+
+  // Sin fiarse de la duración no se promete una hora: se dice lo que se sabe.
+  v = await abrir({ battery: null, rows: [enMarcha({
+    running: { start: "2026-08-03T10:20:00+02:00", elapsed_h: 0.67, kwh: 0.42,
+               typical_h: 1.5, pct: 44, over: false, ends_at: null,
+               remaining_h: null, range_h: [0.9, 2.4] },
+    tail: null,
+  })] });
+  ok(/suele durar 55 min–2 h 25 min/.test(v.filas[0].porque),
+    `una lavadora con varios programas dice el recorrido («${v.filas[0].porque}»)`);
+  ok(!/termina/.test(v.filas[0].porque), "y no una hora de fin que no se sostiene");
+  ok(!/lo que queda/.test(v.filas[0].sub),
+    "ni de dónde saldrá una cola cuyo final no se sabe");
+
+  console.log("\n11 · la barra del progreso");
+  v = await abrir({ battery: null, rows: [enMarcha({})] });
+  ok(v.filas[0].relleno === "44%",
+    `se rellena hasta donde va el ciclo (${v.filas[0].relleno})`);
+  ok(v.filas[0].barra.length === 3,
+    "y dentro sigue estando el origen de lo que lleva gastado");
+  // Pasarse de lo habitual: la barra llega al borde y **se dice**, que es lo que
+  // una barra clavada en el 100 % no puede distinguir.
+  v = await abrir({ battery: null, rows: [enMarcha({
+    running: { start: "2026-08-03T09:00:00+02:00", elapsed_h: 2.0, kwh: 0.9,
+               typical_h: 1.5, pct: 133, over: true, ends_at: null,
+               remaining_h: null, range_h: null },
+    tail: null,
+  })] });
+  ok(v.filas[0].relleno === "100%",
+    `un programa más largo llena la barra (${v.filas[0].relleno})`);
+  ok(/más de lo habitual \(1 h 30 min\)/.test(v.filas[0].porque),
+    `y lo dice con palabras («${v.filas[0].porque}»)`);
+  // Y sin ciclo aprendido no hay progreso que dibujar: barra normal, sin carril.
+  v = await abrir({ battery: null, rows: [enMarcha({
+    running: { start: "2026-08-03T10:20:00+02:00", elapsed_h: 0.67, kwh: 0.42,
+               typical_h: null, pct: null, over: false, ends_at: null,
+               remaining_h: null, range_h: null },
+    tail: null,
+  })] });
+  ok(v.filas[0].relleno === null,
+    "sin ciclo aprendido no se dibuja un progreso inventado");
+  ok(/aprendiendo su ciclo/.test(v.filas[0].porque),
+    `y se dice que aún se está aprendiendo («${v.filas[0].porque}»)`);
 
   await (await navegador).close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }
