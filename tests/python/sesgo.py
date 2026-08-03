@@ -12,14 +12,14 @@
  10. el histórico se poda a los días que se guardan
  11. `por_horas` integra la curva de potencia en Wh por hora
 
-Y el cielo de hoy, que es otra cosa —lo que pasa hoy y nadie vio venir—:
+Y el desvio de hoy, que es otra cosa —cuánto se aparta hoy de lo previsto—:
 
  12. sin ningún testigo no se corrige nada
  13. con la última hora cerrada, el factor sale de la energía medida
  14. se usa la **última**, no la media del día: un frente no se diluye
  15. el instante y la hora cerrada se promedian
- 16. una nube de paso no manda el día al suelo, porque la hora la sujeta
- 17. un día encapotado de verdad sí baja mucho, sin suelo cómodo
+ 16. un bajón de paso no manda el día al suelo, porque la hora la sujeta
+ 17. un desvio grande de verdad sí baja mucho, sin suelo cómodo
  18. al amanecer el instante no cuenta: se dividiría entre casi nada
  19. las horas sin previsión suficiente no dan cociente
 """
@@ -130,12 +130,16 @@ rampa = [(datetime(2026, 8, 2, 8, tzinfo=TZ), 0.0),
          (datetime(2026, 8, 2, 9, tzinfo=TZ), 1000.0)]
 ok(abs(P.por_horas(rampa)[8] - 500.0) < 1, "y una rampa, la mitad")
 
-# ── El cielo de hoy ─────────────────────────────────────────────────────────
+# ── El desvio de hoy ─────────────────────────────────────────────────────────
 #
-# De una queja del 3 de agosto: la tarjeta prometía «gratis desde las 10:06» y
-# la producción real era bajísima porque estaba nublado. La previsión no lo vio
-# y el sesgo del tejado tampoco puede verlo —es de otros días—, así que hace
-# falta mirar el tejado de hoy.
+# De una queja del 3 de agosto: la tarjeta prometía «gratis desde las 10:06» y la
+# producción real era bajísima. El sesgo del tejado no puede verlo —es de otros
+# días—, así que hace falta mirar el tejado de hoy.
+#
+# Y **no** es un factor de nubosidad: la previsión con la que se compara ya lleva la
+# meteorología dentro, así que esto es el residuo. Qué lo causa —suciedad, una
+# sombra, el inversor recortando, la previsión fallando— no se puede saber desde
+# aquí, y por eso no se nombra en ningún sitio.
 
 print("\n12 · sin testigos no se corrige")
 ok(P.factor_hoy({}, {}) is None, "de noche no hay nada que medir")
@@ -162,15 +166,15 @@ mezcla = P.factor_hoy({9: 2000.0}, {9: 1000.0}, (3000.0, 900.0))
 ok(abs(mezcla["factor"] - 0.4) < 0.01, f"la media de los dos ({mezcla['factor']})")
 ok(mezcla["hour_ratio"] == 0.5 and mezcla["now_ratio"] == 0.3,
    f"y los dos se dicen por separado ({mezcla})")
-# Una nube justo encima del panel: el instante se hunde, la hora no.
+# Un bajón de dos minutos: el instante se hunde, la hora no.
 nube = P.factor_hoy({9: 2000.0}, {9: 2000.0}, (3000.0, 150.0))
 ok(nube["factor"] >= 0.5,
-   f"una nube de paso no manda el día al suelo ({nube['factor']})")
+   f"un bajón de paso no manda el día al suelo ({nube['factor']})")
 
-print("\n17 · un día encapotado sí baja")
+print("\n17 · un desvio grande sí baja")
 gris = P.factor_hoy({9: 3000.0}, {9: 180.0}, (3000.0, 200.0))
 ok(gris["factor"] <= 0.1,
-   f"el 6 % previsto se queda en el 6 %, no en el 20 ({gris['factor']})")
+   f"el 6 % medido se queda en el 6 %, no en el 20 ({gris['factor']})")
 ok(gris["factor"] >= P.MIN_FACTOR_HOY,
    f"pero nunca en cero, que sería otra mentira ({gris['factor']})")
 

@@ -89,7 +89,7 @@ PYTHON = [
     ("barra.py", ["barra.py"], {}),
     ("forma.py", ["forma.py"], {}),
     ("sesgo.py", ["sesgo.py"], {}),
-    ("cielo.py", ["cielo.py"], {}),
+    ("desvio.py", ["desvio.py"], {}),
     ("plan.py", ["plan.py"], {}),
     ("resumen.py", ["resumen.py"], {"VATIA_BASE": "http://127.0.0.1:8402"}),
     ("sungrow.py", ["sungrow.py"], {}),
@@ -112,7 +112,7 @@ PYTHON = [
 
 NAVEGADOR = [
     ("forma.js", ["forma.js"], {}),
-    ("cieloui.js", ["cieloui.js"], {}),
+    ("desvioui.js", ["desvioui.js"], {}),
     ("cinta.js", ["cinta.js"], {}),
     ("tarjetas.js", ["tarjetas.js", "http://127.0.0.1:8404/"], {}),
     ("pulsado.js", ["pulsado.js", "http://127.0.0.1:8402/"], {}),

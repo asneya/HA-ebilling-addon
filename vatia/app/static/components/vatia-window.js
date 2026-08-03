@@ -149,7 +149,7 @@
         <div class="pill ${d.state}"><i></i>${esc(say.pill)}</div>
         <h2>${esc(say.head)}</h2>
         <p class="sub">${esc(say.sub)}</p>
-        ${this._track(d, t)}${say.note}${this._cielo(d)}${this._sesgo(d)}`;
+        ${this._track(d, t)}${say.note}${this._desvio(d)}${this._sesgo(d)}`;
     }
 
     /* «y el mejor rato es a las 14:30»: la media dice cuánto y el pico dice
@@ -225,25 +225,34 @@
       };
     }
 
-    /* El cielo de hoy, cuando desmiente a la previsión.
+    /* Lo que el tejado se desvía hoy de lo previsto.
 
-       De una queja: la tarjeta prometía «gratis desde las 10:06» un día en que
-       estaba nublado y la producción real era bajísima. Ahora la hora que se da
-       ya lleva descontado lo que el tejado está dando de verdad — pero eso hay
-       que decirlo, porque si no la cifra parece la de la previsión y no cuadra
-       con lo que se ve por la ventana.
+       De una queja: la tarjeta prometía «gratis desde las 10:06» un día en que la
+       producción real era bajísima. Ahora la hora que se da ya lleva descontado lo
+       que el tejado está dando de verdad — pero eso hay que decirlo, porque si no
+       la cifra parece la de la previsión y no cuadra con lo que se ve.
+
+       **Y no se dice por qué**, que es lo que decía antes («hoy el cielo no
+       acompaña») y era afirmar lo que no se sabe: la previsión de Solcast ya lleva
+       dentro la meteorología, además del azimut, la inclinación y la potencia
+       nominal del tejado. Así que un tejado al 60 % de lo previsto no significa
+       que haya nubes —ya estaban contadas— sino que algo se desvía de un modelo
+       que ya las tenía en cuenta: suciedad, una sombra nueva, un panel o un string
+       caído, el inversor recortando, o la propia previsión equivocándose. Vatia
+       mide el cuánto; el por qué no lo puede saber, y por eso lo deja abierto en
+       vez de elegir el culpable más pintoresco.
 
        Solo cuando se nota: por encima del 85 % la corrección no cambia ninguna
        decisión y solo sería ruido. Y solo a la baja: si el tejado da más de lo
        prometido, la ventana llega antes y de sobra, y nadie se queja de eso. */
-    _cielo(d) {
-      const s = d.sky;
+    _desvio(d) {
+      const s = d.roof_today;
       if (!s || !s.factor || s.factor > 0.85) return "";
       const pct = Math.round(s.factor * 100);
       // De dónde sale: la hora cerrada, el instante, o los dos. Decirlo importa
       // porque las dos medidas envejecen distinto —la hora tarda en enterarse de
-      // un frente, el instante se cree cualquier nube— y quien lea la tarjeta
-      // tiene derecho a saber con qué se ha decidido.
+      // un cambio, el instante se cree cualquier bajón puntual— y quien lea la
+      // tarjeta tiene derecho a saber con qué se ha decidido.
       const de = [];
       if (s.hour_ratio != null) {
         de.push(`la hora de las ${esc(String(s.hour).padStart(2, "0"))}:00, en la
@@ -253,10 +262,10 @@
         de.push(`lo que está dando ahora mismo, el
           <b>${esc(String(Math.round(s.now_ratio * 100)))} %</b>`);
       }
-      return `<p class="note">Hoy el cielo no acompaña: el tejado va al
-        <b>${esc(String(pct))} %</b> de lo previsto, así que la hora de arriba ya
-        va rebajada${de.length ? ` — medido con ${de.join(" y con ")}` : ""}.
-        Si se despeja, esto se corrige solo en cuanto el tejado lo note.</p>`;
+      return `<p class="note">Hoy tu tejado va al <b>${esc(String(pct))} %</b> de lo
+        previsto, así que la hora de arriba ya va rebajada${
+          de.length ? ` — medido con ${de.join(" y con ")}` : ""}. Si remonta, esto
+        se corrige solo en cuanto el tejado lo note.</p>`;
     }
 
     /* Que la curva no es la del sensor, dicho en letra pequeña.

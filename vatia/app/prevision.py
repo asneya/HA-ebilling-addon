@@ -1,10 +1,11 @@
 """Lo que tu tejado corrige de la previsión.
 
-Ninguna previsión solar sabe de tu casa. Sabe de irradiancia, de nubes y de la
-orientación que se tecleó al configurarla, pero no de la chimenea que da sombra
-hasta las diez, ni del árbol del vecino, ni de que los paneles llevan dos años
-sin limpiarse. Eso es un sesgo **sistemático**: aparece a la misma hora todos
-los días, y por eso se puede aprender.
+Una previsión solar como la de Solcast **sabe bastante de tu casa**: la ubicación,
+el azimut, la inclinación y la potencia nominal que se teclearon al configurarla, y
+la meteorología de tu sitio. No es una curva teórica de cielo despejado. Lo que no
+sabe es la chimenea que da sombra hasta las diez, el árbol del vecino, o que los
+paneles llevan dos años sin limpiarse. Eso es un sesgo **sistemático**: aparece a la
+misma hora todos los días, y por eso se puede aprender.
 
 Lo que se aprende es un factor por hora: la mediana de ``real / previsto`` a esa
 hora en los últimos días. Un 0,6 a las nueve significa «a las nueve tu tejado da
@@ -23,12 +24,12 @@ no guarda.
 
 Lo que **no** hace, a propósito:
 
-- No corrige el tiempo. Si hoy hay nubes que la previsión no vio, el sesgo no se
-  entera: para eso está `factor_hoy`, al final de este módulo, que compara lo que
-  el tejado está dando hoy con lo que se le había prometido. Son dos cosas
-  distintas y se aplican en este orden —primero el sesgo, luego el cielo de hoy—
-  porque medir el cielo contra una curva que ya se sabe que miente contaría el
-  mismo error dos veces.
+- No se entera de lo que pase **hoy**. El sesgo es de otros días; si hoy el tejado
+  se desvía de lo previsto —por lo que sea— para eso está `factor_hoy`, al final de
+  este módulo, que compara lo que está dando hoy con lo que se le había prometido.
+  Son dos cosas distintas y se aplican en este orden —primero el sesgo, luego el
+  desvío de hoy— porque medir el desvío contra una curva que ya se sabe que miente
+  contaría el mismo error dos veces.
 - No inventa con dos datos. Hace falta un mínimo de días por hora; por debajo,
   esa hora se queda sin corregir.
 - No se desboca. El factor se recorta, porque un día raro con la previsión casi
@@ -207,32 +208,41 @@ def aprender(config_dir: str) -> Sesgo:
     return Sesgo(por_hora, muestras)
 
 
-# ── El cielo de hoy ─────────────────────────────────────────────────────────
+# ── El desvío de hoy ────────────────────────────────────────────────────────
 #
 # El sesgo de arriba es sistemático: la sombra de la chimenea cae a la misma
 # hora todos los días y por eso se aprende de muchos días. Esto es justo lo
-# contrario: lo que pasa **hoy** y nadie vio venir. Un frente de nubes no se
-# corrige con historia, solo mirando el tejado.
+# contrario: lo que pasa **hoy** y no cuadra con lo que se había prometido para
+# hoy. No se corrige con historia, solo mirando el tejado.
+#
+# **De qué es este número, y de qué no.** Es el cociente entre lo que el tejado
+# está dando y lo que la previsión decía que daría. Y como esa previsión ya lleva
+# dentro la meteorología del sitio —Solcast modela nubes, no solo geometría—, un
+# tejado al 60 % **no significa que haya nubes**: significa que algo se desvía de un
+# modelo que ya las tenía en cuenta. Puede ser suciedad, una sombra nueva, un panel
+# o un string caído, el inversor recortando, o la previsión equivocándose hoy. Aquí
+# se mide el cuánto; el por qué no se puede saber desde dos sensores, y por eso no
+# se nombra en ningún sitio. Se llamaba «el cielo de hoy» y era afirmar una causa.
 #
 # Se mide con dos testigos, y con los dos porque cada uno falla donde el otro
 # acierta:
 #
-#   · **La última hora cerrada**, en energía. Una hora entera de kWh medidos
-#     lleva dentro las nubes que pasaron por ella, así que no la despeina una
-#     sola. Pero llega hasta una hora tarde: un frente que entró a y diez
-#     todavía no está en ella.
+#   · **La última hora cerrada**, en energía. Una hora entera de kWh medidos ya
+#     lleva dentro todo lo que pasó en ella, así que no la despeina un bajón
+#     suelto. Pero llega hasta una hora tarde: un cambio de a y diez todavía no
+#     está en ella.
 #   · **Este instante**, en potencia. Reacciona al segundo, y por eso mismo
-#     confunde una nube de paso con un día encapotado.
+#     confunde un bajón de dos minutos con el día entero.
 #
-# La media de las dos reacciona en minutos —el instante tira del número en
-# cuanto cambia el cielo— sin que una nube suelta la mande al suelo, porque la
-# hora cerrada la sujeta. Con un solo testigo disponible se usa ese, y si no hay
-# ninguno no se corrige nada.
+# La media de las dos reacciona en minutos —el instante tira del número en cuanto
+# cambia algo— sin que un bajón suelto la mande al suelo, porque la hora cerrada la
+# sujeta. Con un solo testigo disponible se usa ese, y si no hay ninguno no se
+# corrige nada.
 #
-# Lo que **no** hace: adivinar cuándo se despeja. Si las nubes se van a mediodía,
-# esto seguirá aplicando el cielo de la mañana hasta que el tejado diga otra cosa,
-# con hasta una hora de retraso. Para saber que se van hay que mirar el cielo, y
-# eso es el trabajo de la previsión, no de esta corrección.
+# Lo que **no** hace: adivinar cuándo remonta. Si el desvío se debe a nubes y se
+# van a mediodía, esto seguirá aplicando el número de la mañana hasta que el tejado
+# diga otra cosa, con hasta una hora de retraso. Adelantarse a eso es trabajo de la
+# previsión, que sí mira el cielo, no de esta corrección.
 MIN_FACTOR_HOY, MAX_FACTOR_HOY = 0.05, 1.5
 # Por debajo de esta potencia prevista el cociente instantáneo no dice nada: al
 # amanecer y al atardecer se estaría dividiendo entre casi cero.
@@ -254,11 +264,15 @@ def factor_hoy(
     cierre la primera hora con sol—, y entonces la previsión se queda como está:
     es lo correcto, porque no hay nada que la desmienta.
 
-    El suelo está en ``MIN_FACTOR_HOY``, que es bajo a propósito: un día
-    encapotado de verdad da menos del 10 % de lo prometido, y recortarlo a la
-    quinta parte —como haría un suelo cómodo— es seguir prometiendo un sol que no
-    está. El techo es más apretado porque el error al alza no engaña a nadie: si
-    el tejado da más de lo previsto, la ventana llega antes y de sobra.
+    El suelo está en ``MIN_FACTOR_HOY``, que es bajo a propósito: un tejado puede
+    dar menos del 10 % de lo prometido, y recortarlo a la quinta parte —como haría
+    un suelo cómodo— es seguir prometiendo un sol que no está. El techo es más
+    apretado porque el error al alza no engaña a nadie: si el tejado da más de lo
+    previsto, la ventana llega antes y de sobra.
+
+    Y una advertencia para quien lo lea desde fuera: esto **no es un factor de
+    nubosidad**. La previsión con la que se compara ya lleva la meteorología dentro
+    (ver la nota de arriba), así que este cociente es el residuo, no el tiempo.
     """
     razones: list[float] = []
     hora: int | None = None

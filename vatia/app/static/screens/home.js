@@ -330,14 +330,17 @@ function renderPlan(plan) {
   }).join("");
 
   const notas = [];
-  // El cielo de hoy, con las mismas palabras que la tarjeta de la ventana y
+  // El desvío de hoy, con las mismas palabras que la tarjeta de la ventana y
   // desde el mismo dato: las dos tarjetas prometen horas sacadas de la misma
   // curva, así que si esa curva va rebajada las dos tienen que decirlo. Callarlo
   // aquí sería volver a la incoherencia de partida por la puerta de atrás.
-  const cielo = plan && plan.sky;
-  if (cielo && cielo.factor && cielo.factor <= 0.85) {
-    notas.push(`Hoy el tejado va al <b>${Math.round(cielo.factor * 100)} %</b> de
-      lo previsto, así que estas horas ya van con el sol rebajado. Si se despeja,
+  //
+  // Y sin decir por qué se desvía: la previsión ya lleva la meteorología dentro,
+  // así que esto no es nubosidad y la causa no se puede saber desde dos sensores.
+  const desvio = plan && plan.roof_today;
+  if (desvio && desvio.factor && desvio.factor <= 0.85) {
+    notas.push(`Hoy tu tejado va al <b>${Math.round(desvio.factor * 100)} %</b> de
+      lo previsto, así que estas horas ya van con el sol rebajado. Si remonta,
       mejorarán solas.`);
   }
   if (bat) {
@@ -361,7 +364,11 @@ function renderPlan(plan) {
    importa es **qué deja pasar el cielo**, así que cada fila pone la nubosidad al
    lado del sol previsto para esa hora, y el sol sale de la misma curva que la
    ventana y el plan. Así se puede leer del tirón: «a las dos, 70 % de nubes, y
-   aun así 2,1 kW». */
+   aun así 2,1 kW».
+
+   La nubosidad de aquí sí es meteorología —viene de la entidad `weather.*`— y no
+   hay que confundirla con `roof_today`, que es cuánto se desvía el tejado de una
+   previsión que ya tenía esas nubes contadas. Son dos números distintos. */
 function renderTiempo(t) {
   const horas = (t && t.hours) || [];
   $("#tiempo-panel").classList.toggle("hidden", !horas.length);
@@ -404,7 +411,7 @@ function renderTiempo(t) {
   }).join("");
 
   // Y de dónde sale el sol de la columna de la derecha, porque no es del sensor:
-  // es la curva ya corregida con el tejado y con el cielo de hoy. La misma regla
+  // es la curva ya corregida con el tejado y con su desvío de hoy. La misma regla
   // que las otras dos tarjetas — una cifra que no es la del sensor lo dice.
   $("#tiempo-note").innerHTML = `La columna de la derecha es el sol previsto para
     esa hora, con la corrección de tu tejado ya aplicada: es la misma curva de la

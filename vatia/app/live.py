@@ -956,10 +956,10 @@ def _pares_de_hoy(
     bajo siempre, a cualquier hora del día.
 
     Sirve para dos cosas distintas y hay que pasarle la curva que toca en cada
-    una. Para **aprender el sesgo** del tejado va la curva cruda, que es lo que
-    prometió el sensor. Para **medir el cielo de hoy** va la curva ya corregida
-    con el sesgo, porque lo que se quiere saber es cuánto se desvía hoy de lo que
-    este tejado da normalmente, no de lo que prometió quien no lo conoce.
+    una. Para **aprender el sesgo** del tejado va la curva tal y como la da el
+    sensor. Para **medir el desvío de hoy** va la curva ya corregida con el sesgo,
+    porque lo que se quiere saber es cuánto se aparta hoy de lo que este tejado da
+    normalmente, no de lo que prometió quien todavía no lo conocía.
     """
     previsto = {
         h: wh for h, wh in prevision.por_horas(
@@ -1140,12 +1140,15 @@ def curva_solar(
 
     1. **El sesgo del tejado**, aprendido de los días anteriores: la sombra de la
        chimenea a las nueve, los paneles sin limpiar. Es sistemático.
-    2. **El cielo de hoy**, medido en el tejado: las nubes que la previsión no
-       vio. Va después, porque medirlo contra la curva cruda contaría el sesgo
-       dos veces.
+    2. **El desvío de hoy**, medido en el tejado: cuánto se aparta hoy de esa
+       curva. Va después, porque medirlo contra la curva sin corregir contaría el
+       sesgo dos veces. Ojo con el nombre: la previsión de Solcast ya lleva la
+       meteorología dentro, así que este número **no es nubosidad** — es el residuo,
+       y su causa (suciedad, una sombra, el inversor recortando, la previsión
+       fallando) no se puede saber desde aquí y no se nombra.
 
-    El cielo de hoy se aplica **solo a hoy**. Que hoy esté encapotado no dice
-    nada de mañana, y de mañana ya opina quien mira el cielo.
+    El desvío de hoy se aplica **solo a hoy**. Lo que hoy se desvíe no dice nada de
+    mañana, y de mañana ya opina la previsión.
 
     ``None`` cuando no hay previsión solar: sin ella no hay curva, y las dos
     tarjetas que dependen de esto desaparecen en vez de inventarse una hora.
@@ -1164,12 +1167,12 @@ def curva_solar(
 
     previsto, real = _pares_de_hoy(puntos, buckets, now)
     previsto_ahora = series_mod.forecast_at(puntos, now)
-    cielo = prevision.factor_hoy(
+    desvio = prevision.factor_hoy(
         previsto, real,
         (previsto_ahora, max(power.get("pv") or 0.0, 0.0))
         if previsto_ahora else None,
     )
-    factor = (cielo or {}).get("factor") or 1.0
+    factor = (desvio or {}).get("factor") or 1.0
     if factor != 1.0:
         puntos = [
             (t, w * factor if t.date() == now.date() else w) for t, w in puntos
@@ -1177,7 +1180,7 @@ def curva_solar(
     return {
         "points": puntos,
         "bias": sesgo.payload(),
-        "sky": cielo,
+        "roof_today": desvio,
         # Y lo que ya ha pasado, medido. La curva de previsión sigue entera —el plan
         # simula horas futuras y la necesita— y esto se usa solo para **dibujar** el
         # día: hasta ahora, lo que fue; desde ahora, lo que se espera.
@@ -1276,9 +1279,9 @@ async def free_energy(
         "battery_room_kwh": None if hueco is None else round(hueco / 1000.0, 2),
         # Y lo que se le ha corregido a la previsión, por lo mismo: una curva
         # que no es la del sensor tiene que decir que no lo es. `bias` es lo que
-        # corrige el tejado siempre; `sky`, lo que corrige el cielo de hoy.
+        # corrige el tejado siempre; `roof_today`, cuánto se desvía hoy de eso.
         "bias": curva["bias"],
-        "sky": curva["sky"],
+        "roof_today": curva["roof_today"],
     }
 
 
@@ -1317,9 +1320,8 @@ async def weather_hours(
         return None
 
     # Hasta dónde llega el día: la última hora de hoy con algo de sol previsto.
-    # Se mira sobre la curva sin corregir por el cielo de hoy —`bias` sí, `sky`
-    # no— porque lo que se busca es la geometría del día, a qué hora se pone el
-    # sol, y esa no la cambian las nubes.
+    # Da igual el desvío de hoy: lo que se busca es la geometría del día —a qué
+    # hora se pone el sol— y esa no la mueve lo que el tejado esté rindiendo.
     del_dia = [(t, w) for t, w in curva["points"] if t.date() == now.date()]
     con_sol = [t for t, w in del_dia if w > 0]
     if not con_sol:
@@ -1590,7 +1592,7 @@ async def build(
     buckets = daily.get("buckets") or {}
     # Una sola curva de sol para todo el payload. Los buckets entran aquí porque
     # es donde se compara lo previsto de hoy con lo producido de verdad: de ahí
-    # sale el sesgo del tejado y también el cielo de hoy.
+    # sale el sesgo del tejado y también el desvío de hoy.
     curva = curva_solar(
         settings, states, power, buckets, now.tzinfo, now, home_power
     )
@@ -1702,7 +1704,7 @@ async def _fuentes(
         "reserve_pct": reserva,
         # Se lleva al plan para poder decirlo en la tarjeta: es el mismo objeto
         # que enseña la ventana, así que las dos no pueden discrepar.
-        "sky": curva["sky"],
+        "roof_today": curva["roof_today"],
     }
 
 

@@ -470,8 +470,8 @@ def estimate(
     Cómo se estima, minuto a minuto del ciclo:
 
       · el sol que se espera sale de la **previsión corregida con la producción
-        real de ahora**: un día de nubes que la previsión no vio se lleva su
-        factor de corrección, así que no promete un sol que no está;
+        real de ahora**: si el tejado se está desviando de lo previsto, la curva
+        se lleva ese factor y no promete un sol que no está;
       · el consumo de la casa, del perfil horario (la mediana de esa hora), que ya
         es lo que usa la ventana;
       · el aparato tira de su media (kWh del ciclo entre sus horas): no se finge
