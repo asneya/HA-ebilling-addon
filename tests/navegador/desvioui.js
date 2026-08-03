@@ -15,7 +15,9 @@
  *   6. sin testigo tampoco
  *   7. la nota del sesgo del tejado sigue estando, que es otra cosa
  *   8. el titular dice lo que está en juego, no una potencia media
- *   9. sin errores de consola
+ *   9. de mañana, no saber nada no es lo mismo que saber que no sobra
+ *  10. y se dice desde cuándo sobra algo, que hasta ahí carga la batería
+ *  11. sin errores de consola
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = `${ficheros()}/bancoventana.html`;
@@ -99,6 +101,35 @@ const abrir = async (b, q) => {
     "sin tarifa, los kWh sí y los euros no");
   ok(/no tendrías que comprar/.test(t),
     "y se dice por qué importan de todos modos");
+
+  console.log("\n9 · de mañana, no saber no es saber que no");
+  // De una queja: *«siempre aparece un mensaje de que mañana no habrá excedentes que
+  // no tengo idea de a qué se refiere porque todos los días se exporta algo»*. Y era
+  // verdad: sin previsión de mañana la tarjeta decía «no se espera excedente», que
+  // es afirmar sobre un día del que no había ni un dato. Con un sensor que solo
+  // publica hoy, eso salía todos los días.
+  t = await abrir(b, "?bat=4.2&manana=0&prevmanana=0");
+  ok(/mañana todavía no hay previsión/.test(t),
+    `sin dato de mañana se dice que no hay dato («${(t.match(/De mañana[^.]*\./) || [""])[0]}»)`);
+  ok(!/no se espera excedente/.test(t), "y no que no vaya a sobrar");
+  ok(/separados por comas/.test(t), "con la salida: poner los dos sensores");
+  // Y cuando sí hay previsión y de verdad no sobra, se dice lo que siempre.
+  t = await abrir(b, "?bat=4.2&manana=0&prevmanana=1");
+  ok(/no se espera excedente/.test(t),
+    "con previsión y sin excedente, eso sí se afirma");
+  ok(!/todavía no hay previsión/.test(t), "y entonces no se habla de sensores");
+
+  console.log("\n10 · desde cuándo sobra algo que gastar");
+  // La batería no se lleva su parte a prorrata: después de servir a la casa, el
+  // inversor la lleva al 100 % cuanto antes, así que hasta que se llena no sobra
+  // nada que enchufar. El total ya lo descontaba; la hora es lo que faltaba.
+  t = await abrir(b, "?bat=4.2");
+  ok(/No sobra nada que gastar hasta las \d\d:\d\d/.test(t),
+    `se dice la hora («${(t.match(/No sobra nada[^.:]*hasta las \d\d:\d\d/) || [""])[0]}»)`);
+  ok(/va entero a la batería/.test(t), "y por qué: hasta ahí el sol carga la batería");
+  t = await abrir(b, "?bat=0");
+  ok(!/No sobra nada que gastar hasta/.test(t),
+    "con la batería llena no se hace esperar a nadie");
 
   await b.close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

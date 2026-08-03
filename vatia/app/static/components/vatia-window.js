@@ -201,7 +201,7 @@
             pill: "ENERGÍA GRATIS AHORA",
             head: `Te sobran ${kw(cuanto)} durante ${dur(d.hours_left)}.`,
             sub: cierra + this._cuando(t),
-            note: this._bateria(t) + this._note(t, m),
+            note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
           };
         }
         return {
@@ -215,7 +215,7 @@
             : ahorro != null ? `Gastarlos te ahorra ${eur(ahorro)}.`
             : `Es energía que no tendrías que comprar, y a partir del cierre cada kWh lo pagas.`)
             + luego + this._cuando(t),
-          note: this._bateria(t) + this._note(t, m),
+          note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
         };
       }
       if (d.state === "pre") {
@@ -235,7 +235,7 @@
               dur(d.hours_left)} con excedente.`
             : `Faltan ${dur(falta)}. Te sobrarán ${kw(t.spendable_w ?? t.surplus_w)} durante ${
               dur(t.net_hours ?? t.hours)}.`) + this._cuando(t),
-          note: this._bateria(t) + this._note(t, m),
+          note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
         };
       }
       if (d.state === "post") {
@@ -329,15 +329,35 @@
     _bateria(t) {
       const bat = t.battery_kwh || 0;
       if (bat < 0.2) return "";
+      // Y **hasta cuándo**, si se sabe: después de servir a la casa, la prioridad
+      // del inversor es llevar la batería al 100 %, así que las primeras horas de
+      // excedente van enteras ahí y no sobra nada que enchufar todavía. El total ya
+      // descontaba ese hueco; lo que faltaba era decir cuándo empieza a sobrar.
+      const desde = t.spendable_from
+        ? ` No sobra nada que gastar <b>hasta las ${hhmm(t.spendable_from)}</b>:
+            hasta esa hora el sol que pasa de la casa va entero a la batería.`
+        : "";
       return `<p class="note">De lo que da el sol hoy, <b>${esc(nf1.format(bat))} kWh</b>
         van a llenar la batería antes de que sobre nada: lo de arriba es lo que
-        queda de verdad para enchufar algo.</p>`;
+        queda de verdad para enchufar algo.${desde}</p>`;
     }
 
     // Cómo viene mañana comparado con hoy. Solo se dice cuando hay diferencia:
     // «mañana parecido» no le sirve a nadie.
-    _note(t, m) {
+    //
+    // Y **de mañana puede no saberse nada**, que no es lo mismo que saber que no
+    // sobra. Sin `tomorrow` esto decía «mañana no se espera excedente» en los dos
+    // casos, así que con un sensor de previsión que solo publica hoy salía todos
+    // los días —de una queja: *«siempre aparece un mensaje de que mañana no habrá
+    // excedentes que no tengo idea de a qué se refiere porque todos los días se
+    // exporta algo»*—. Tenía razón: no era una previsión, era un hueco.
+    _note(t, m, sabido) {
       if (!m) {
+        if (sabido === false) {
+          return `<p class="note">De <b>mañana todavía no hay previsión</b>. Si tu
+            integración publica el día siguiente en otro sensor, puedes poner los dos
+            separados por comas en <b>Ajustes → Previsión solar</b>.</p>`;
+        }
         return `<p class="note">Mañana <b>no se espera excedente</b>: lo que
           quieras dejar para el sol, mejor hoy.</p>`;
       }

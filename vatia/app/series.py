@@ -261,7 +261,13 @@ def forecast_power(states_list: list[dict[str, Any]], tz) -> list[tuple[datetime
     points: dict[datetime, float] = {}
     for state in states_list:
         attrs = state.get("attributes") or {}
-        for key in ("detailedForecast", "detailedHourly", "forecast"):
+        # `...Tomorrow` porque hay integraciones de Solcast que publican los dos
+        # días en el **mismo** sensor, en dos atributos. Sin leerlo, con ese montaje
+        # la aplicación no tenía ni un punto de mañana y la tarjeta lo contaba como
+        # «mañana no se espera excedente», que es afirmar sobre lo que no se sabe.
+        for key in ("detailedForecast", "detailedHourly", "forecast",
+                    "detailedForecastTomorrow", "detailedHourlyTomorrow",
+                    "forecastTomorrow"):
             rows = attrs.get(key)
             if not isinstance(rows, list):
                 continue
@@ -447,7 +453,13 @@ def free_window(
     # extremos interpolados para no contar de más ni de menos.
     def integrar(a: datetime, b: datetime) -> tuple[float, float]:
         dentro = [(t, w) for t, w in curve if a < t < b]
-        shape = [(a, umbral(a))] + dentro + [(b, umbral(b))]
+        # Los extremos, con la previsión **interpolada** y no con el umbral. En un
+        # corte de la ventana da lo mismo —ahí la curva vale exactamente el umbral,
+        # que es cómo se encontró el corte—, pero en un instante cualquiera de en
+        # medio no: poner el umbral es forzar excedente cero justo ahí y perder la
+        # mitad de un paso de área. Se vio al preguntar «¿cuánto queda de ahora al
+        # cierre?», que se quedaba 0,8 kWh corto de lo que decía la propia integral.
+        shape = [(a, forecast_at(curve, a))] + dentro + [(b, forecast_at(curve, b))]
         wh = 0.0
         alto = 0.0
         for i in range(len(shape) - 1):
@@ -514,6 +526,37 @@ def free_window(
             wh, _alto = integrar(max(a, ahora), b)
             resto_wh += wh
     resto_bat_wh = min(max(bateria_wh or 0.0, 0.0), resto_wh)
+
+    # **Cuándo empieza a sobrar de verdad.** La batería no se lleva su parte a
+    # prorrata a lo largo del día: un inversor en autoconsumo, después de servir a
+    # la casa, la lleva al 100 % **cuanto antes**, así que las primeras horas de
+    # excedente van enteras ahí y no sobra nada para enchufar hasta que se llena.
+    # El total ya estaba bien —se descuenta el hueco entero—, pero el reparto en el
+    # tiempo no se decía, y eso es justo lo que hace falta para saber si hay que
+    # esperar. Se busca el instante en que lo acumulado desde ahora iguala el hueco.
+    libre = None
+    if ahora is not None and bateria_wh and resto_bat_wh > 0:
+        acumulado = 0.0
+        for a, b in spans:
+            desde = max(a, ahora)
+            if b <= desde:
+                continue
+            wh, _alto = integrar(desde, b)
+            if acumulado + wh < resto_bat_wh:
+                acumulado += wh
+                continue
+            # Dentro de este tramo: se busca por bisección, que `integrar` es
+            # barata y así no hace falta reescribirla por pasos.
+            lo, hi = desde, b
+            for _ in range(24):
+                medio = lo + (hi - lo) / 2
+                parcial, _p = integrar(desde, medio)
+                if acumulado + parcial < resto_bat_wh:
+                    lo = medio
+                else:
+                    hi = medio
+            libre = hi
+            break
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -540,6 +583,10 @@ def free_window(
         "left_battery_kwh": None if ahora is None else round(resto_bat_wh / 1000.0, 3),
         "left_spendable_kwh": (None if ahora is None
                                else round((resto_wh - resto_bat_wh) / 1000.0, 3)),
+        # Desde cuándo sobra algo que se pueda gastar: hasta esa hora el excedente
+        # se lo lleva entero la batería. `None` cuando ya sobra ahora mismo (la
+        # batería está llena o no hay con qué contarla).
+        "spendable_from": libre.isoformat() if libre else None,
         "spans": detalle,
         "gaps": gaps,
         # La forma del día, para poder dibujarla: la previsión y el consumo

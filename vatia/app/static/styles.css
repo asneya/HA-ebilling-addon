@@ -1555,6 +1555,32 @@ body.scrolled .scroll-top { opacity: .95; }
    primero lo que se puede mover y esto lo confirma de un vistazo. */
 .ap-fila[data-kind="continuo"] .ad-chip { opacity: .72; }
 
+/* La insignia de la forma de uso, al lado del nombre. Pequeña y en tinta suave:
+   dice de qué va la fila sin competir con el nombre ni con la cifra. Sustituye a
+   los renglones «siempre encendido» y «en marcha», que eran etiquetas ocupando el
+   sitio de los datos. */
+.ap-fila .ad-txt b { display: inline-flex; align-items: center; gap: 6px; }
+.ap-insignia { width: 14px; height: 14px; flex: none; color: var(--ink-3);
+  stroke-width: 1.9; }
+/* Y el punto que late: «en marcha» sin escribirlo, con el mismo lenguaje que la
+   pastilla de la cabecera. Va sobre el icono del aparato, así que funciona encima
+   de cualquiera de las tres formas. */
+.ad-chip { position: relative; }
+/* En `--s-batt` y no en la tinta de la pastilla: aquella está pensada para ir
+   **sobre** el verde claro de la pastilla, así que en tema oscuro es un verde casi
+   negro y encima del chip no se veía. Este token es el verde vivo de los dos temas. */
+.ap-late { position: absolute; right: -1px; top: -1px; width: 9px; height: 9px;
+  border-radius: 999px; background: var(--s-batt);
+  border: 2px solid var(--node); animation: ap-latido 1.8s ease-in-out infinite; }
+@keyframes ap-latido {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(.72); opacity: .55; }
+}
+/* Con el movimiento reducido, el punto se queda quieto: sigue diciendo lo mismo. */
+@media (prefers-reduced-motion: reduce) {
+  .ap-late { animation: none; }
+}
+
 /* ── El tiempo hora a hora ─────────────────────────────────────────────────
    Filas estrechas y no las tarjetas de `.ad-row`: son muchas —todas las horas
    de sol que quedan— y con 60 px cada una la tarjeta no cabría en la pantalla.

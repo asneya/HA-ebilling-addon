@@ -1299,6 +1299,15 @@ async def free_energy(
         "profile": perfil.payload(),
         "today": today,
         "tomorrow": tomorrow,
+        # **Si de mañana se sabe algo o no**, que no es lo mismo que si sobra.
+        # `tomorrow` en nulo tenía dos causas —la previsión no llega a mañana, o
+        # llega y no sobra— y la tarjeta las decía igual: «mañana no se espera
+        # excedente». Con un sensor de Solcast que solo publica hoy, eso salía
+        # todos los días, afirmando sobre un día del que no había ni un dato.
+        "tomorrow_forecast": any(
+            midnight + timedelta(days=1) <= t < midnight + timedelta(days=2)
+            for t, _w in points
+        ),
         "daylight": daylight,
         "state": state,
         "hours_left": round(left_h, 3),

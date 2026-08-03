@@ -76,6 +76,9 @@
       left_kwh: 9.9, left_battery_kwh: Math.min(bateria, 9.9),
       left_spendable_kwh: Math.round((9.9 - Math.min(bateria, 9.9)) * 10) / 10,
       ...(p.get("euros") === "0" ? {} : { left_saving_eur: 1.16, left_export_eur: 0.28 }),
+      // Hasta esa hora el excedente va entero a la batería: con `bat=0` no hay que
+      // esperar a nada y la frase no sale.
+      spendable_from: bateria > 0 ? iso(12.6) : null,
       spans, gaps: [{ start: iso(13.0), end: iso(14.0), hours: 1.0 }],
       shape: { t, sol: s, casa: c, real_until: null },
     };
@@ -92,13 +95,17 @@
         real_until: new Date(ahoraMs).toISOString(),
       };
     }
-    const manana = { ...hoy, kwh: 12.0, hours: 8.2, surplus_w: 1400,
-                     start: iso(9.2), end: iso(17.4), shape: undefined };
+    // `manana=0` la deja sin previsión de mañana, y `prevmanana` dice si es que no
+    // hay dato o que hay y no sobra: son dos cosas distintas y se decían igual.
+    const manana = p.get("manana") === "0" ? null
+      : { ...hoy, kwh: 12.0, hours: 8.2, surplus_w: 1400,
+          start: iso(9.2), end: iso(17.4), shape: undefined };
 
     document.getElementById("w").data = {
       baseline_w: 320, today: hoy, tomorrow: manana,
       daylight: { from: iso(7.0), to: iso(21.0) },
       state: estado, hours_left: 6.4, reopens_at: null,
+      tomorrow_forecast: p.get("prevmanana") !== "0",
       battery_room_kwh: bateria,
       bias: p.get("sesgo") === "0" ? { horas: 0, dias: 0, peor: null, factores: {} }
         : { horas: 3, dias: 11, peor: { hora: 9, factor: 0.58 },
