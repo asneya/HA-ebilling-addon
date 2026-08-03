@@ -329,6 +329,16 @@ function renderPlan(plan) {
   }).join("");
 
   const notas = [];
+  // El cielo de hoy, con las mismas palabras que la tarjeta de la ventana y
+  // desde el mismo dato: las dos tarjetas prometen horas sacadas de la misma
+  // curva, así que si esa curva va rebajada las dos tienen que decirlo. Callarlo
+  // aquí sería volver a la incoherencia de partida por la puerta de atrás.
+  const cielo = plan && plan.sky;
+  if (cielo && cielo.factor && cielo.factor <= 0.85) {
+    notas.push(`Hoy el tejado va al <b>${Math.round(cielo.factor * 100)} %</b> de
+      lo previsto, así que estas horas ya van con el sol rebajado. Si se despeja,
+      mejorarán solas.`);
+  }
   if (bat) {
     notas.push(`Compensa <b>cargar ${fmtNum.format(bat.kwh)} kWh</b> de la red
       ${cuando(bat.at)}, a ${fmtEUR.format(bat.valley_eur_kwh)}/kWh: mañana el sol

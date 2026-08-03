@@ -2,6 +2,85 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.48.0
+
+### Una sola curva de sol, y el cielo de hoy dentro
+
+La 0.47.1 arregló la redacción de la tarjeta del plan. Lo que quedaba debajo era
+peor, y salió con la segunda mitad de la misma queja: *«además está nublado ahora
+mismo y la producción real es bajísima»*. Con la tarjeta prometiendo «gratis desde
+las 10:06».
+
+**Las dos tarjetas calculaban el sol con curvas distintas.** `_fuentes` —la del
+plan— corregía la previsión con la producción real del momento. `free_energy` —la
+de la ventana— solo con el sesgo histórico del tejado, que es la sombra de la
+chimenea, no las nubes de hoy. Así que la ventana prometía una hora sacada de la
+previsión prácticamente cruda mientras el plan, mirando el tejado, ya sabía que
+no. El comentario del propio código decía *«las dos curvas son las mismas que usa
+la ventana»*: lo eran de palabra, no de hecho.
+
+Ahora hay **una** (`curva_solar`), se calcula una vez por refresco y la consumen
+las dos. Las correcciones se aplican ahí, en este orden y por este motivo:
+
+1. **El sesgo del tejado**, aprendido de los días anteriores: sistemático.
+2. **El cielo de hoy**, medido en el tejado: lo que nadie vio venir. Va después,
+   porque medirlo contra la curva cruda contaría el sesgo dos veces.
+
+Y **solo a hoy**: que hoy esté encapotado no dice nada de mañana.
+
+### El cielo de hoy se mide con dos testigos
+
+El factor viejo miraba solo la potencia de este instante, y por eso tenía que
+recortarse a **0,2** como suelo: un instante puede ser una nube de paso, y creerse
+que el día entero va a ser así sería peor. El problema es que un día encapotado de
+verdad da menos del 10 % de lo prometido, así que ese suelo seguía prometiendo
+tres o cuatro veces el sol que había — exactamente lo que pasó.
+
+Ahora se miran dos cosas, porque cada una falla donde la otra acierta:
+
+- **La última hora cerrada**, en energía. Una hora entera de kWh medidos ya lleva
+  dentro las nubes que pasaron por ella, así que no la despeina una sola. Pero
+  llega hasta una hora tarde.
+- **Este instante**, en potencia. Reacciona al segundo, y por eso mismo confunde
+  una nube con un día gris.
+
+La media de las dos reacciona en minutos sin que una nube suelta la mande al
+suelo, y por eso el suelo puede bajar a **0,05**: cuando el número viene de una
+hora de energía medida, el 6 % es el 6 %. La última hora cerrada y no la media del
+día, además: si el frente entró a las once, las horas claras de antes solo
+servirían para diluirlo.
+
+Lo que **no** hace, y conviene saberlo: adivinar cuándo se despeja. Si las nubes se
+van a mediodía, la corrección tarda hasta una hora en enterarse. Para saber que se
+van hay que mirar el cielo, y eso es trabajo de la previsión.
+
+### Y las dos tarjetas lo dicen
+
+Una cifra corregida en silencio es la misma desconfianza por otro camino: parece
+la de la previsión y no cuadra con lo que se ve por la ventana. Es la regla que la
+tarjeta ya cumplía con el sesgo del tejado y que con el cielo de hoy no cumplía —
+el factor se calculaba, se aplicaba, y no llegaba al payload.
+
+Ahora las dos enseñan **el mismo objeto**, así que no pueden discrepar: *«Hoy el
+cielo no acompaña: el tejado va al 15 % de lo previsto, así que la hora de arriba
+ya va rebajada — medido con la hora de las 10:00, en la que dio el 15 %, y con lo
+que está dando ahora mismo, el 15 %. Si se despeja, esto se corrige solo en cuanto
+el tejado lo note.»* Por encima del 85 % no se dice nada: no cambiaría ninguna
+decisión y solo sería ruido.
+
+### Banco
+
+- `tests/python/sesgo.py`, secciones 12-19: el estimador, con la nube de paso, el
+  día encapotado, el frente que entra a última hora y los dos recortes.
+- `tests/python/cielo.py` (nuevo): la invariante de verdad, extremo a extremo —
+  que el sol que usa el plan es **exactamente** el de la curva, y que las dos
+  tarjetas enseñan el mismo cielo. Verificado con dientes: devolviéndole a
+  `_fuentes` una corrección propia, el banco se pone rojo.
+- `tests/navegador/cieloui.js` (nuevo) y la sección 7 de `planui.js`: que las dos
+  tarjetas lo dicen, con un testigo o con los dos, y que se callan cuando el cielo
+  cumple.
+
+
 ## 0.47.1
 
 ### El plan y la ventana dejan de contradecirse

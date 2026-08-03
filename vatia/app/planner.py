@@ -329,4 +329,8 @@ def plan(
         "horizon_h": HORIZONTE_H,
         # Con qué se ha valorado la batería, para poder explicarlo.
         "battery_eur_kwh": None if valor_bateria is None else round(valor_bateria, 4),
+        # Y cómo está el cielo hoy respecto a lo previsto. Es el mismo objeto que
+        # enseña la tarjeta de la ventana: si esta tarjeta promete un sol que el
+        # tejado está desmintiendo, tiene que decirlo con las mismas palabras.
+        "sky": fuentes.get("sky"),
     }
