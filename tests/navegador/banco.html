@@ -59,9 +59,14 @@
         soc: 12,
       },
     };
+    // Cinco, para poder pedir de uno a cinco con `?aparatos=N`: la casa partida
+    // por dentro es donde el diagrama se salía del lienzo, y con dos no se veía.
     const APARATOS = [
       { id: "l", name: "Lavadora", color: "#4a4ee0", watts: 720 },
       { id: "h", name: "Horno", color: "#8a5a2b", watts: 1100 },
+      { id: "v", name: "Lavavajillas", color: "#0f7d8a", watts: 900 },
+      { id: "n", name: "Nevera", color: "#8a5a2b", watts: 90 },
+      { id: "c", name: "Coche", color: "#c74bd6", watts: 1200 },
     ];
     const METERS = { home: 15.47, pv: 37.08, grid_import: 5.13, grid_export: 11.6,
                      battery_discharge: 2.27, battery_charge: 17.4 };
@@ -91,7 +96,8 @@
     const p = new URLSearchParams(location.search);
     const tag = p.get("tag") || "vatia-flow";
     const escena = ESCENAS[p.get("escena") || "mediodia"];
-    const conAparatos = p.get("aparatos") === "1";
+    // `?aparatos=N`: cuántos enchufes medidos entran en el reparto.
+    const cuantosAparatos = Math.max(0, Math.min(APARATOS.length, +(p.get("aparatos") || 0)));
     const conMeters = p.get("meters") !== "0";
     if (p.get("ancho")) document.getElementById("marco").style.maxWidth = p.get("ancho") + "px";
 
@@ -106,7 +112,7 @@
     const n = document.createElement(tag);
     n.meters = conMeters;
     document.getElementById("host").appendChild(n);
-    if (conAparatos) n.split = APARATOS;
+    if (cuantosAparatos) n.split = APARATOS.slice(0, cuantosAparatos);
     n.data = payload(escena);
     window.__nodo = n;
   </script>

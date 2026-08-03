@@ -115,6 +115,8 @@ NAVEGADOR = [
     ("forma.js", ["forma.js"], {}),
     ("desvioui.js", ["desvioui.js"], {}),
     ("cinta.js", ["cinta.js"], {}),
+    ("lienzo.js", ["lienzo.js"], {}),
+    ("vuelta.js", ["vuelta.js", "http://127.0.0.1:8402/"], {}),
     ("tarjetas.js", ["tarjetas.js", "http://127.0.0.1:8404/"], {}),
     ("pulsado.js", ["pulsado.js", "http://127.0.0.1:8402/"], {}),
     ("reparto.js", ["reparto.js", "http://127.0.0.1:8402/"], {}),

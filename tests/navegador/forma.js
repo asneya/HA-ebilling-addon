@@ -90,8 +90,12 @@ const abrir = async (b, q, ancho = 414) => {
              notas: [...s.querySelectorAll(".note")]
                .map((n) => n.textContent.replace(/\s+/g, " ").trim()) };
   });
-  ok(/2,1 kW/.test(conBat.head), `el titular dice lo gastable: «${conBat.head}»`);
-  ok(!/2,4 kW/.test(conBat.head), "y no el bruto, que es lo que prometía de más");
+  // La promesa es la misma que cuando esto se escribió —no ofrecer los kWh que la
+  // batería se va a llevar— y ahora se dice en energía y no en potencia media: el
+  // titular pasó de «te sobran 2,1 kW» a «hasta las X te sobran 5,7 kWh» porque una
+  // potencia media no es de ningún aparato y no se puede decidir con ella.
+  ok(/5,7 kWh/.test(conBat.head), `el titular dice lo gastable: «${conBat.head}»`);
+  ok(!/9,9 kWh/.test(conBat.head), "y no el bruto, que es lo que prometía de más");
   const nota = conBat.notas.find((n) => /batería/.test(n));
   ok(!!nota && /4,2 kWh/.test(nota), `la nota lo explica: «${(nota || "").slice(0, 58)}…»`);
 
@@ -103,7 +107,7 @@ const abrir = async (b, q, ancho = 414) => {
              bat: [...s.querySelectorAll(".note")]
                .some((n) => /llenar la batería/.test(n.textContent)) };
   });
-  ok(/2,4 kW/.test(sinBat.head), `el titular da el excedente entero (${sinBat.head})`);
+  ok(/9,9 kWh/.test(sinBat.head), `el titular da el excedente entero (${sinBat.head})`);
   ok(!sinBat.bat, "y no hay nota de batería que no viene a cuento");
 
   console.log("\n7b · el sesgo del tejado");

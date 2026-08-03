@@ -364,6 +364,7 @@ def free_window(
     day: datetime,
     bateria_wh: float | None = None,
     medido: dict[str, Any] | None = None,
+    ahora: datetime | None = None,
 ) -> dict[str, Any] | None:
     """Ventana de un día concreto, o ``None`` si ese día no sobra nada.
 
@@ -496,6 +497,23 @@ def free_window(
     # enchufo algo no sobra nada».
     a_bateria_wh = min(max(bateria_wh or 0.0, 0.0), surplus_wh)
     gastable_wh = surplus_wh - a_bateria_wh
+
+    # Y lo que queda **de ahora al cierre**, que es lo único sobre lo que se puede
+    # decidir algo: el excedente del día entero incluye la mañana, que ya pasó.
+    # Con esto el titular de la tarjeta puede decir lo que está en juego en vez de
+    # una potencia media que no es de nadie.
+    #
+    # La batería se descuenta aquí igual que arriba y con el mismo hueco: `bateria_wh`
+    # es lo que le cabe **ahora**, así que aplicado al futuro es más correcto que
+    # aplicado al día entero.
+    resto_wh = 0.0
+    if ahora is not None:
+        for a, b in spans:
+            if b <= ahora:
+                continue
+            wh, _alto = integrar(max(a, ahora), b)
+            resto_wh += wh
+    resto_bat_wh = min(max(bateria_wh or 0.0, 0.0), resto_wh)
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -515,6 +533,13 @@ def free_window(
         "battery_kwh": round(a_bateria_wh / 1000.0, 3),
         "spendable_kwh": round(gastable_wh / 1000.0, 3),
         "spendable_w": round(gastable_wh / net_hours, 1) if net_hours > 0 else 0.0,
+        # De ahora al cierre, con la misma partición. `None` cuando no se ha dicho
+        # qué hora es: sin eso no hay «lo que queda», y devolver el día entero
+        # disfrazado de resto sería mentir por omisión.
+        "left_kwh": None if ahora is None else round(resto_wh / 1000.0, 3),
+        "left_battery_kwh": None if ahora is None else round(resto_bat_wh / 1000.0, 3),
+        "left_spendable_kwh": (None if ahora is None
+                               else round((resto_wh - resto_bat_wh) / 1000.0, 3)),
         "spans": detalle,
         "gaps": gaps,
         # La forma del día, para poder dibujarla: la previsión y el consumo

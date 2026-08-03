@@ -59,6 +59,14 @@ function hideBoot() {
 
   // Refresco en vivo: la Home cada 20 s, el resto cada minuto.
   setInterval(() => { if (currentView() === "home") loadLive(); }, 20000);
+  // Y al volver de segundo plano, en cuanto se vuelve. Un `setInterval` no corre
+  // con la aplicación dormida, así que al volver lo que se veía era la lectura de
+  // hacía horas —o el hueco de la petición que iOS cortó al dormirla— hasta que
+  // tocara el siguiente latido. Lo que uno quiere al volver a una aplicación de
+  // tiempo real es lo de ahora, y lo quiere ya.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && currentView() === "home") loadLive();
+  });
   setInterval(() => {
     if (currentView() !== "billing") return;
     loadSimulation();

@@ -71,6 +71,11 @@
       kwh: 28.6, surplus_w: 2420, peak_w: 4180, peak_at: iso(14.5),
       battery_kwh: bateria, spendable_kwh: 28.6 - bateria,
       spendable_w: Math.round(2420 * (28.6 - bateria) / 28.6),
+      // Lo que queda de ahora al cierre y lo que vale, que es de lo que habla el
+      // titular. `euros=0` lo deja sin tarifa elegida, para ver qué dice entonces.
+      left_kwh: 9.9, left_battery_kwh: Math.min(bateria, 9.9),
+      left_spendable_kwh: Math.round((9.9 - Math.min(bateria, 9.9)) * 10) / 10,
+      ...(p.get("euros") === "0" ? {} : { left_saving_eur: 1.16, left_export_eur: 0.28 }),
       spans, gaps: [{ start: iso(13.0), end: iso(14.0), hours: 1.0 }],
       shape: { t, sol: s, casa: c, real_until: null },
     };

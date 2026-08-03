@@ -2,6 +2,107 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.54.0
+
+Cuatro defectos de una lista, y ninguno estaba donde parecía.
+
+### El diagrama del caudal se salía de la pantalla
+
+*«El flujo de caudales pintado en vertical, cuando hay detalle de electrodomésticos,
+hace overflow por la derecha saliéndose de su tarjeta y de la pantalla, sin poder ver
+todo lo que representa.»*
+
+Eran **dos** cosas, y las dos medidas. El presupuesto del dibujo descontaba dos
+huecos entre segmentos, que son los que hay con los tres nodos del diseño; con la
+casa partida por dentro puede haber ocho, y los seis huecos de más se comían 84 px
+que nadie había reservado —las barras llegaban a `[-17, 365]` sobre un lienzo de
+348—. Y el antirreapilado de etiquetas, al no caber, empujaba el grupo entero a la
+derecha **sin tope**: la última acabó medida en x = 563 con la pantalla en 414. Con
+`overflow: visible` eso no se recorta, se pinta fuera de la tarjeta y del borde,
+donde no hay ni scroll con el que llegar.
+
+Ahora el presupuesto cuenta los huecos que hay, el reapilado son dos pasadas con los
+dos bordes y, cuando de verdad no caben, se reparten a partes iguales en vez de
+apilarse al final. Y las etiquetas de un lado poblado van en **dos filas alternas**,
+que dobla el sitio de cada una, con su guía a la barra; el sufijo («carga»,
+«excedente», «de la casa») se cae ahí, porque pesa el triple que la cifra y dice lo
+que ya dicen el nombre, el color y el sitio. Con tres nodos por lado no cambia nada.
+
+El banco nuevo `tests/navegador/lienzo.js` mide las barras, el texto y los solapes
+con cero, dos, tres y cinco aparatos, en las dos orientaciones.
+
+### «Load failed» al volver de segundo plano
+
+*«A veces el gráfico de flujo en tiempo real de la home no aparece al volver a la app
+de segundo plano y se ve un mensaje de Load failed.»*
+
+«Load failed» es lo que dice Safari por dentro cuando un `fetch` no llega a hablar, y
+es lo que le pasa en iOS a la petición que estaba en vuelo al dormir la aplicación.
+No era un error de la casa ni del servidor, y aun así se enseñaba **tal cual**; peor,
+el caudal que estaba pintado se tiraba entero por ese fallo de un segundo, dejando un
+hueco donde había un dibujo que veinte segundos antes era verdad. Y no se
+reintentaba: había que esperar el siguiente latido.
+
+Tres arreglos:
+
+- una lectura que falla **no borra la anterior**: el caudal se queda, atenuado, y la
+  cabecera dice «sin conexión · reintentando…»;
+- se reintenta en dos segundos, en vez de esperar los veinte del latido;
+- y **al volver de segundo plano se pide dato nuevo en cuanto se vuelve**, que es lo
+  que faltaba: un `setInterval` no corre con la aplicación dormida, así que lo que se
+  veía al volver era de hacía horas.
+
+El hueco con mensaje se queda solo para cuando no hay nada que conservar —al
+arrancar—, y con las palabras de quien lo lee: «No se ha podido hablar con Home
+Assistant. Reintentando…».
+
+### La lista de tarjetas describía la aplicación de hace tres versiones
+
+*«La lista de tarjetas en el menú de configuración de pantalla de inicio no está
+actualizada ni en ítems ni en nombre.»*
+
+Cierto: el catálogo seguía diciendo «El plan de hoy · a qué hora sale más barato cada
+electrodoméstico» desde la 0.49.0, cuando esa tarjeta ya se llama **«Tus aparatos»** y
+cuenta bastante más; y la ventana prometía «cuánto sobra y qué te cabe dentro», que es
+lo que se movió a la otra tarjeta en la 0.52.0. Nadie lo notaba porque la Home se
+pinta con los `data-card` y no con estos nombres: el catálogo solo se lee en Ajustes.
+
+Arreglados los dos, con su icono, y el banco `tarjetas.js` compara ahora cada nombre
+del catálogo con el título que la tarjeta lleva de verdad en la Home.
+
+### «Te sobran 2,7 kW durante 4 h 20 min» no era una decisión
+
+*«El mensaje de "te sobran X kW hasta las X h" no me parece nada práctico. Además,
+aburre ver siempre lo mismo.»*
+
+Las dos cosas con la misma raíz. Nadie tiene un aparato de 2,7 kW, así que para
+decidir algo había que hacer una cuenta aparte; y la frase no dependía de nada que
+cambiara salvo el número, así que se leía igual a las diez que a las siete. Aburrir
+era el síntoma, no la enfermedad: el mensaje no informaba.
+
+Ahora dice **lo que está en juego**:
+
+> **Hasta las 19:32 te sobran 8,4 kWh.**
+> Gastarlos te ahorra 1,71 €; si no, se van a la red por 0,42 €.
+
+Los kWh son los que quedan de aquí al cierre —no los del día entero, que incluyen la
+mañana— y son los **gastables**: lo que la batería se va a llevar sigue diciéndose
+aparte. Los euros salen de los precios de las horas que quedan y de la compensación de
+excedentes de la tarifa, calculados en el servidor, que es donde viven los precios. Sin
+tarifa elegida no se inventan y la tarjeta habla solo de energía.
+
+Y encoge sola con el día, así que no dice dos veces lo mismo. De paso se cae una frase
+que se contradecía con la siguiente: decía «es el mejor momento del día para gastar»
+siempre que la ventana estaba abierta y acto seguido «el mejor rato es sobre las
+14:00». A las nueve de la mañana las dos no podían ser verdad.
+
+### Y un banco que no puede volver a medir a ciegas
+
+`tests/run.py` adoptaba lo que hubiera escuchando en los puertos de los falsos.
+Ahora, además de abortar (0.53.0), la regresión trae **13 bancos de navegador**: los
+nuevos `lienzo.js` y `vuelta.js`, y el Home Assistant de mentira acepta
+`?aparatos=N` para pedir de uno a cinco enchufes medidos.
+
 ## 0.53.0
 
 ### Lo que está en marcha deja de preguntar a qué hora ponerlo

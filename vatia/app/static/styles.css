@@ -1656,6 +1656,12 @@ body.scrolled .scroll-top { opacity: .95; }
    estado que le tocara por sus datos. */
 #home-cards .card-off { display: none; }
 
+/* Un dato que ya no es de ahora: se atenúa, no se borra. Al volver de segundo
+   plano el caudal que se veía era de hace un rato y se tiraba entero por un fallo
+   de red de un segundo; ahora se queda, apagado, mientras se reintenta. Apagarlo
+   sin más sería fingir que sigue vivo; borrarlo, perder algo que casi vale. */
+#home-cards .viejo { opacity: .55; transition: opacity .3s ease; }
+
 /* La lista de Ajustes → Pantalla de inicio. */
 .cards { list-style: none; margin: 0; padding: 0; }
 .cards li + li { border-top: 1px solid var(--sep); }

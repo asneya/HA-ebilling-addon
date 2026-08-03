@@ -14,7 +14,8 @@
  *   5. un tejado que cumple no se menciona: sería ruido
  *   6. sin testigo tampoco
  *   7. la nota del sesgo del tejado sigue estando, que es otra cosa
- *   8. sin errores de consola
+ *   8. el titular dice lo que está en juego, no una potencia media
+ *   9. sin errores de consola
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = `${ficheros()}/bancoventana.html`;
@@ -74,6 +75,30 @@ const abrir = async (b, q) => {
   t = await abrir(b, "?bat=4.2&desvio=15&sesgo=0");
   ok(!/Aprendido de/.test(t) && /tu tejado va al 15 %/.test(t),
     "sin sesgo aprendido, el desvío de hoy se sigue diciendo");
+
+  console.log("\n8 · el titular dice lo que está en juego");
+  // De una queja: *«el mensaje de "te sobran X kW hasta las X h" no me parece nada
+  // práctico. Además, aburre ver siempre lo mismo»*. Las dos cosas con la misma
+  // raíz: nadie tiene un aparato de 2,7 kW, así que la cifra no era una decisión;
+  // y la frase no dependía de nada que cambiara salvo el número.
+  t = await abrir(b, "?bat=4.2");
+  ok(/te sobran [\d,]+ kWh/.test(t),
+    `habla de los kWh que quedan («${(t.match(/Hasta las[^.]*\./) || [""])[0]}»)`);
+  ok(/Gastarlos te ahorra [\d,]+\s?€/.test(t) && /se van a la red por [\d,]+\s?€/.test(t),
+    `y de lo que valen por los dos lados («${(t.match(/Gastarlos[^.]*\./) || [""])[0]}»)`);
+  ok(!/Te sobran [\d,]+ kW durante/.test(t),
+    "y ya no de una potencia media que no es de ningún aparato");
+  ok(!/[Ee]s el mejor momento del día para gastar/.test(t),
+    "sin afirmar que este es el mejor momento y decir dos frases después que es otro");
+  // La hora de cierre va en el titular: repetirla debajo no añadía nada.
+  ok(!/cada kWh lo pagas/.test(t) || /a partir del cierre/.test(t),
+    "y la hora no se dice dos veces");
+  // Sin tarifa elegida no se inventan euros: se dice en energía.
+  t = await abrir(b, "?bat=4.2&euros=0");
+  ok(/te sobran [\d,]+ kWh/.test(t) && !/te ahorra/.test(t),
+    "sin tarifa, los kWh sí y los euros no");
+  ok(/no tendrías que comprar/.test(t),
+    "y se dice por qué importan de todos modos");
 
   await b.close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

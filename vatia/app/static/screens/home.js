@@ -65,17 +65,59 @@ const PHASE_TEXT = { night: "Noche", dawn: "Amanecer", day: "Día", sunset: "Ata
 
 /* ------------- carga y pintado ------------- */
 
-export async function loadLive() {
-  try {
-    live = await api("live");
-  } catch (err) {
-    // Sin conexión con HA seguimos mostrando la interfaz; solo avisamos.
-    live = null;
-    $("#flow-empty").textContent = err.message;
+/* Una lectura que falla **no borra la anterior**.
+
+   El caso: se vuelve a la aplicación después de un rato en segundo plano y donde
+   estaba el caudal aparece «Load failed». Tres cosas iban mal a la vez, y ninguna
+   era del servidor:
+
+     · iOS corta las peticiones en vuelo al pasar a segundo plano y la primera al
+       volver puede morir antes de salir. Eso es un `TypeError` del navegador, no
+       un problema de la casa, y se enseñaba tal cual: «Load failed» es literalmente
+       lo que dice Safari por dentro y no significa nada para nadie;
+     · el dibujo bueno se tiraba a la basura (`innerHTML = ""`) por un fallo de un
+       segundo, cuando lo de hace veinte segundos sigue siendo verdad casi entera;
+     · y no se reintentaba: había que esperar el siguiente latido de veinte
+       segundos mirando un hueco.
+
+   Ahora un fallo con dibujo delante deja el dibujo, lo marca de viejo y vuelve a
+   intentarlo enseguida. El hueco con un mensaje se queda para cuando de verdad no
+   hay nada que enseñar, que es al arrancar. */
+let reintento = null;
+
+function fallo(err, primera) {
+  const red = err instanceof TypeError;      // fetch que no llegó a hablar
+  if (primera) {
+    // Al arrancar no hay nada que conservar: aquí sí toca el hueco, con las
+    // palabras de quien lo lee y no las del navegador.
+    $("#flow-empty").textContent = red
+      ? "No se ha podido hablar con Home Assistant. Reintentando…"
+      : err.message;
     $("#flow-empty").classList.remove("hidden");
     $("#flow").innerHTML = "";
+  } else {
+    // Con datos delante, el aviso va en la cabecera y el caudal se queda.
+    $("#home-sub").textContent = "sin conexión · reintentando…";
+    document.querySelector("#flow-panel")?.classList.add("viejo");
+  }
+  // Reintento corto y una sola vez en vuelo: el latido de veinte segundos es para
+  // refrescar, no para recuperarse de un tropiezo.
+  clearTimeout(reintento);
+  reintento = setTimeout(loadLive, red ? 2000 : 6000);
+}
+
+export async function loadLive() {
+  let datos;
+  try {
+    datos = await api("live");
+  } catch (err) {
+    fallo(err, !live);
     return;
   }
+  clearTimeout(reintento);
+  reintento = null;
+  document.querySelector("#flow-panel")?.classList.remove("viejo");
+  live = datos;
   renderLive();
 }
 

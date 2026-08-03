@@ -12,6 +12,14 @@
  *
  * El catálogo es la fuente del orden por defecto: `CATALOGO` está en el orden en
  * que se ven las tarjetas de fábrica.
+ *
+ * Y hay que mantenerlo al día, que es más fácil de decir que de hacer: este
+ * fichero se quedó describiendo «El plan de hoy · a qué hora sale más barato cada
+ * electrodoméstico» tres versiones después de que esa tarjeta pasara a llamarse
+ * «Tus aparatos» y a contar bastante más. Nadie lo notaba porque la Home se pinta
+ * con los `data-card` y no con estos nombres: el catálogo solo se lee en Ajustes.
+ * Por eso el banco `tarjetas.js` compara ahora cada nombre con el título que la
+ * tarjeta lleva de verdad en la Home.
  */
 
 /* Cada tarjeta con lo que hace falta para presentarla en Ajustes. `id` es lo que
@@ -34,15 +42,15 @@ export const CATALOGO = [
   {
     id: "ventana",
     name: "Ventana de energía gratis",
-    claim: "Cuánto sobra y qué te cabe dentro",
+    claim: "De cuándo a cuándo sobra sol, con la forma del día",
     icon: "i-solar",
     color: "#30d158",
   },
   {
     id: "plan",
-    name: "El plan de hoy",
-    claim: "A qué hora sale más barato cada electrodoméstico",
-    icon: "i-reloj",
+    name: "Tus aparatos",
+    claim: "De dónde sale la energía de cada uno, lo que cuesta y su mejor hora",
+    icon: "i-lavadora",
     color: "#5e5ce6",
   },
   {
@@ -87,8 +95,8 @@ export function ocultas(settings) {
 
    No mueve nodos: asigna `order` a cada elemento, que es lo que permite que los
    componentes de dentro no se enteren de nada. Los elementos que comparten
-   `data-card` —el cierre y su fila de recuperar, la ventana y su consejo—
-   reciben el mismo `order` y se quedan juntos en su orden de siempre. */
+   `data-card` —el cierre y su fila de recuperar— reciben el mismo `order` y se
+   quedan juntos en su orden de siempre. */
 export function aplicarTarjetas(settings) {
   const orden = ordenTarjetas(settings);
   const off = ocultas(settings);
