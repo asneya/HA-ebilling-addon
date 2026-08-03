@@ -382,7 +382,7 @@ body[data-view="energy"] .bg-scrim {
   margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   background: var(--glass-2); border: 1px solid var(--sep); padding: 3px 10px; border-radius: 999px;
 }
-/* Iconos del sistema: los 42 glifos del sprite, en caja de 24 y trazo de 1,75.
+/* Iconos del sistema: los glifos del sprite, en caja de 24 y trazo de 1,75.
    El color entra por `currentColor`, así que el mismo glifo vale en cualquier
    tinta y en color de estado.
 

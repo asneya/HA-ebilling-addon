@@ -2,6 +2,22 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.56.0
+
+### Diez glifos más para «Tus aparatos»
+
+El editor de electrodomésticos solo traía cinco iconos —lavadora, lavavajillas, horno,
+coche y un rayo genérico para «otro»—, los cuatro que venían dibujados en el prototipo
+del diseño más el comodín. Cualquier aparato distinto se quedaba con el rayo, así que
+un aire acondicionado y una freidora de aire se veían idénticos en la lista.
+
+Se añaden diez: aire acondicionado, ordenador, móvil, congelador, iluminación,
+cortacésped, microondas, televisión, freidora de aire y ventilador. No vienen de
+ningún handoff del diseño —el prototipo solo trae los cuatro de siempre—, así que se
+han dibujado a mano con el mismo trazo de 1,75 y la misma caja de 24, y
+`tools/generar-sprite.py` los añade después de leer los documentos para que una
+regeneración del sprite no se los lleve por delante.
+
 ## 0.55.1
 
 ### La tarjeta del cierre se quedaba pegada a la siguiente

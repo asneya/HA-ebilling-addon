@@ -22,7 +22,13 @@ import { guardando } from "../core/guardando.js";
 /* Los mismos glifos que acepta el servidor, con su nombre para el botón. */
 const ICONOS = [
   ["lavadora", "Lavadora"], ["lavavajillas", "Lavavajillas"],
-  ["horno", "Horno"], ["coche", "Coche"], ["potencia", "Otro"],
+  ["horno", "Horno"], ["coche", "Coche"],
+  ["aire-acondicionado", "Aire acondicionado"], ["ordenador", "Ordenador"],
+  ["movil", "Móvil"], ["congelador", "Congelador"],
+  ["iluminacion", "Iluminación"], ["cortacesped", "Cortacésped"],
+  ["microondas", "Microondas"], ["television", "Televisión"],
+  ["freidora", "Freidora de aire"], ["ventilador", "Ventilador"],
+  ["potencia", "Otro"],
 ];
 /* Seis tonos que **no** son los de las series. En el diagrama detallado los
    electrodomésticos se dibujan donde estaba la casa, al lado del sol (ámbar), la
