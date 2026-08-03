@@ -1521,6 +1521,10 @@ body.scrolled .scroll-top { opacity: .95; }
   font-variant-numeric: tabular-nums; }
 .ad-verdict small { display: block; font-size: 11px; color: var(--ink-3); }
 .ad-verdict .v-gratis { color: var(--good); }
+/* «De la batería» no es gratis pero tampoco es comprar ahora: lleva el color de
+   la batería, que es de dónde sale, y no el verde de lo gratuito ni el ámbar de
+   lo que hay que pagar. */
+.ad-verdict .v-bateria { color: var(--s-batt); }
 .ad-verdict .v-justo, .ad-verdict .v-parcial { color: var(--warn); }
 .ad-verdict .v-cerrada, .ad-verdict .v-aprendiendo,
 .ad-verdict .v-sin-ventana { color: var(--ink-2); }

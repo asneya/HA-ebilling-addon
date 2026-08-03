@@ -251,7 +251,7 @@ function estimacion(e, kind) {
   // Los euros solo cuando el veredicto no es ya una cifra en euros: con la
   // ventana cerrada el veredicto **es** ese mismo importe, y repetirlo en la
   // misma fila no informa de nada, solo la llena.
-  const conNumero = kind === "cerrada" || kind === "parcial";
+  const conNumero = kind === "cerrada" || kind === "parcial" || kind === "bateria";
   const eur = (e.battery_eur || 0) + (e.grid_eur || 0);
   const coste = conNumero || (e.battery_eur == null && e.grid_eur == null)
     ? "" : ` ≈ ${fmtEUR.format(eur)} si lo compraras`;
@@ -456,8 +456,22 @@ function renderAdvice(advice) {
   // La letra pequeña solo aparece cuando explica algo que se está viendo.
   const aprendiendo = rows.filter((r) => r.verdict.kind === "aprendiendo");
   const sinPrecio = rows.some((r) => r.verdict.kind === "cerrada" && r.verdict.value == null);
+  const bat = advice.battery;
   let nota = "";
-  if (aprendiendo.length) {
+  // La reserva primero, cuando está mordiendo: es lo que explica que una batería
+  // «al 21 %» no aparezca en ninguna fila. Sin esto las cifras de arriba parecen
+  // un error, que es exactamente lo que pasó.
+  if (bat && bat.at_reserve) {
+    nota = `La batería está en su reserva (${fmtNum.format(bat.soc)} % de carga,
+      mínimo ${fmtNum.format(bat.reserve_pct)} %): el inversor no baja de ahí, así
+      que ahora mismo no puede dar nada y lo que el sol no cubra sale de la red.`;
+  } else if (bat && bat.reserve_pct > 0 && bat.usable_kwh < 1) {
+    // Sin marcado: esta nota se pinta con `textContent` porque las otras llevan
+    // nombres de aparatos que teclea quien los da de alta.
+    nota = `De la batería quedan ${fmtNum.format(bat.usable_kwh)} kWh por encima de
+      su reserva (${fmtNum.format(bat.reserve_pct)} %). Lo de debajo no lo entrega
+      el inversor, así que no se cuenta.`;
+  } else if (aprendiendo.length) {
     nota = `De ${aprendiendo.map((r) => r.name).join(", ")} aún no hay dos ciclos en
       el histórico, así que no se dice lo que tarda: en cuanto los haya, aparece
       aquí sin tocar nada.`;

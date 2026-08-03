@@ -881,6 +881,24 @@
             cuánto valdría eso comprado a la red. Sin ella la estimación no puede
             separar la batería de la red y lo dice.
           </p>
+          <label class="li">
+            <span class="li-label">Reserva mínima</span>
+            <span class="unit-field"><input id="s-battery-reserve" type="number" min="0"
+              max="95" step="1" inputmode="numeric"><span class="unit">%</span></span>
+          </label>
+          <p class="li-note">
+            El porcentaje por debajo del cual <b>tu inversor no descarga</b> (el
+            «Min SOC» o la reserva de respaldo). Esa energía figura en el contador
+            y no se puede gastar: sin decirlo, Vatia contaba la batería entera y
+            llegaba a poner <b>«Gratis»</b> ofreciendo kilovatios que el inversor
+            no iba a entregar.
+          </p>
+          <p class="li-note">
+            Si tu inversor lo publica en un sensor, asígnalo arriba en
+            <b>Batería → Reserva mínima</b> y manda ese: así sigue solo cuando lo
+            cambies en el inversor. Un Sungrow lo da como
+            <code>sensor.battery_min_soc</code>.
+          </p>
         </div>
 
         <div class="panel glass group">

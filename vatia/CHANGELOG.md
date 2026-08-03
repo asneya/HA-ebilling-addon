@@ -2,6 +2,84 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.50.0
+
+### La reserva de la batería, y un «Gratis» que no lo era
+
+De una queja con tres capturas, a las 11:52:
+
+> A/C Dormitorios · 5 h 10 min · 2,76 kWh
+> 1,66 de sol · **1,1 kWh de batería** (11 % de carga)
+> ≈ 0,21 € si lo compraras — **Gratis**, ahora mismo
+
+Con el sol dando 805 W, la casa 450, y **la batería al 21 %, que es su suelo de
+protección**. *«No entiendo. Me dice que el aire acondicionado me sale gratis…»*.
+Tres cosas mal a la vez, y la tarjeta contradiciéndose consigo misma en dos líneas
+seguidas.
+
+**Esos 1,1 kWh no existían.** Ningún inversor vacía la batería: por debajo de un
+porcentaje —el «Min SOC» o la reserva de respaldo— deja de descargar. La cuenta
+era `capacidad × carga / 100`, la batería entera, como si fuera a bajar hasta cero.
+Con 10 kWh al 21 % y el suelo en el 20, lo utilizable son **0,1 kWh**, no 2,1.
+
+Se declara en **Ajustes → La batería → Reserva mínima**, o mejor: se asigna el
+sensor en **Sensores → Batería → Reserva mínima** y entonces sigue solo cuando se
+cambie en el inversor. Un Sungrow lo publica como `sensor.battery_min_soc`.
+
+**El veredicto no miraba la energía, solo el reloj.** Si el ciclo cabía en las horas
+que le quedaban a la ventana, «Gratis». De dónde iba a salir esa energía lo
+calculaba otra función, al lado, en la misma fila — y nadie las cruzaba. Es la
+misma enfermedad que el plan y la ventana tenían en la 0.48.0, dos números que se
+desmienten en la misma pantalla.
+
+Ahora el veredicto **es** el resumen de esa estimación, así que no pueden discrepar
+por construcción:
+
+| Lo que pasa | Lo que dice |
+|---|---|
+| El sol lo cubre | **Gratis** · lo pone el sol |
+| Lo cubren el sol y la batería | **De la batería**, con lo que costaría reponerla |
+| Hace falta la red | lo que cuesta, en euros, y qué % pone el sol |
+
+«De la batería» no es gratis —lo que gastes ahora lo compras esta noche— pero
+tampoco es comprar ahora, y la diferencia importa: se puede decidir gastarla a
+sabiendas. Lleva el color de la batería, no el verde de lo gratuito.
+
+El cruce vale también **antes de que abra la ventana**, donde el defecto quedaba
+aplazado: «Gratis desde las 09:00» se afirmaba sin mirar la energía de las 09:00.
+Ahora se simula esa hora y, si no da, se dice igual.
+
+**Y la reserva se explica.** Una batería «al 21 %» que no aparece en ninguna cuenta
+parece un error de la aplicación. Cuando la reserva es la que manda, la tarjeta lo
+dice: *«La batería está en su reserva (21 % de carga, mínimo 20 %): el inversor no
+baja de ahí, así que ahora mismo no puede dar nada y lo que el sol no cubra sale de
+la red.»*
+
+### Y que no se pueda perder el reparto en silencio
+
+Al pasar de «la batería entera» a «lo de encima de la reserva», los dos sitios que
+simulan un ciclo —la tarjeta y el plan— empezaron a leer el valor ya calculado.
+Quien no lo trajera se quedaba sin poder separar la batería de la red, y lo decía
+como si no hubiera capacidad configurada: otra cosa muy distinta. Un banco lo cazó,
+pero podría no haberlo hecho.
+
+Ahora la fórmula vive en un solo sitio (`planner.guardado_utilizable`) con respaldo:
+unas fuentes con carga y capacidad siempre dan un reparto. Tener la misma cuenta
+escrita dos veces es exactamente de donde han salido las incoherencias de esta
+aplicación.
+
+### Banco
+
+- `tests/python/reserva.py` (nuevo): la instalación de la queja con sus números
+  exactos —10 kWh al 21 % con el suelo en el 20— y el veredicto que ya no miente.
+  Con una comprobación de fondo: **256 combinaciones** de hora, batería utilizable
+  y sol, y en ninguna puede salir «Gratis» si la estimación de ese mismo momento
+  pide batería o red.
+- `tests/python/ciclos.py`: que la reserva se respeta también por el camino del
+  respaldo, y que en la reserva la batería no pone nada sin dejar de poder
+  separarse de la red.
+
+
 ## 0.49.0
 
 ### El tiempo hora a hora, en la Home

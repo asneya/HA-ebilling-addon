@@ -177,6 +177,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # un electrodoméstico. 0 = sin configurar: entonces no se puede separar lo que
     # saldría de la batería de lo que saldría de la red, y se dice así.
     "battery_kwh": 0.0,
+    # Reserva del inversor, en % de carga: por debajo de ahí **no descarga**, y
+    # esa energía figura en el contador pero no se puede usar. Sin esto, Vatia
+    # contaba como disponible la batería entera y decía «Gratis» ofreciendo
+    # kilovatios que el inversor no iba a entregar. 0 = sin reserva declarada.
+    #
+    # Si el inversor publica su mínimo en un sensor (un Sungrow lo hace, en
+    # `sensor.battery_min_soc`), se asigna en Sensores → Batería y manda ese: así
+    # sigue solo cuando se cambia en el inversor. Este número es el respaldo.
+    "battery_reserve_pct": 0.0,
     # Meteorología del fondo de la Home: dos sensores independientes, uno con
     # la condición (texto) y otro con la temperatura exterior.
     "condition_sensor": "",

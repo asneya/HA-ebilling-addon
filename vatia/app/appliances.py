@@ -23,6 +23,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Any
 
+import planner
 import series as series_mod
 
 _LOGGER = logging.getLogger(__name__)
@@ -238,17 +239,84 @@ async def learn(
     return out
 
 
+# Por debajo de esto, lo que no pone el sol no cambia el veredicto: son decenas
+# de vatios-hora de redondeo entre dos maneras de contar la misma cosa.
+_MIGAJA_KWH = 0.05
+
+
+def _gratis_de_verdad(
+    est: dict[str, Any] | None, price: float | None
+) -> dict[str, Any]:
+    """El veredicto de un ciclo puesto **ahora**, según de dónde saldría la energía.
+
+    Existe por una queja con tres capturas. La tarjeta decía «A/C Dormitorios ·
+    **Gratis** · ahora mismo» y dos líneas más arriba, ella misma: «1,66 de sol ·
+    **1,1 kWh de batería**». Con la batería al 21 % y el inversor sin bajar del 20.
+    Ni era gratis ni esos 1,1 kWh existían.
+
+    El veredicto se decidía **solo con el reloj**: si el ciclo cabía en las horas
+    que le quedaban a la ventana, «Gratis». La energía la calculaba `estimate`, al
+    lado, y nadie las cruzaba — la misma enfermedad que el plan y la ventana tenían
+    en la 0.48.0, en la misma pantalla y con dos números que se desmienten.
+
+    Ahora el veredicto **es** el resumen de esa estimación:
+
+      · el sol lo cubre → «Gratis», que es verdad
+      · lo cubre el sol y la batería → «De la batería», con lo que costaría
+        reponerla: gastarla ahora es comprarla esta noche
+      · hace falta la red → lo que cuesta, en euros
+
+    Sin estimación —sin previsión solar o sin perfil de la casa— no se puede
+    contestar, y entonces se conserva el veredicto de siempre en vez de callar: que
+    el ciclo quepa en la ventana sigue siendo cierto y sigue sirviendo.
+    """
+    if not est:
+        return {"kind": "gratis", "value": "Gratis", "sub": "ahora mismo"}
+    de_red = float(est.get("grid_kwh") or 0.0)
+    de_bat = float(est.get("battery_kwh") or 0.0)
+    total = float(est.get("total_kwh") or 0.0)
+    del_sol = float(est.get("sun_kwh") or 0.0)
+    pct_sol = round(del_sol / total * 100) if total > 0 else 0
+
+    if de_red <= _MIGAJA_KWH and de_bat <= _MIGAJA_KWH:
+        return {"kind": "gratis", "value": "Gratis", "sub": "lo pone el sol"}
+    if de_red > _MIGAJA_KWH:
+        # Hay que comprar. El precio de la batería es el mismo: lo que se saque de
+        # ella hay que reponerlo, así que se suma en la cifra que se enseña.
+        coste = None
+        if price is not None:
+            coste = round((de_red + de_bat) * price, 2)
+        return {"kind": "parcial", "value": coste,
+                "sub": (f"{pct_sol} % lo pone el sol" if pct_sol
+                        else "el sol no llega a cubrirlo")}
+    # Solo batería. No es gratis —se repone comprando— pero tampoco es comprar
+    # ahora, y la diferencia importa: se puede decidir gastarla a sabiendas.
+    return {
+        "kind": "bateria",
+        "value": None if price is None else round(de_bat * price, 2),
+        "sub": (f"{pct_sol} % el sol, el resto de la batería" if pct_sol
+                else "entero de la batería"),
+    }
+
+
 def verdict(
     cycle: dict[str, Any] | None,
     window: dict[str, Any] | None,
     now: datetime,
     price: float | None,
+    est: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """¿Cabe el ciclo en la ventana? Los tres veredictos del diseño.
+    """¿Cabe el ciclo en la ventana, y de dónde saldría su energía?
 
-    Portado tal cual de la maqueta, incluidas las copias y el margen de quince
-    minutos entre «Gratis» y «Cabe justo». Lo único que cambia es de dónde salen
-    la duración y los kWh: allí se teclean, aquí se han medido.
+    Las copias y el margen de quince minutos entre «Gratis» y «Cabe justo» son los
+    de la maqueta. Lo que se ha añadido después es que **cuando la ventana ya está
+    abierta, el veredicto lo decide la energía** (ver `_gratis_de_verdad`) y no solo
+    que el ciclo quepa en el tiempo que queda.
+
+    ``est`` es la estimación **del momento del que habla el veredicto**: si la
+    ventana ya está abierta es la de ahora, y si abre más tarde es la de esa hora.
+    Da igual cuál sea: lo que no puede volver a pasar es prometer «Gratis» sin
+    haber mirado de dónde saldría la energía, ni antes ni dentro de dos horas.
     """
     if not cycle:
         return {"kind": "aprendiendo", "value": "—",
@@ -271,8 +339,15 @@ def verdict(
     desde = max(now, inicio)
     queda = max(0.0, (fin - desde).total_seconds() / 3600.0)
     if dur <= queda - _MARGEN_H:
-        return {"kind": "gratis", "value": "Gratis",
-                "sub": "ahora mismo" if now >= inicio else f"desde las {inicio:%H:%M}"}
+        fallo = _gratis_de_verdad(est, price)
+        if now < inicio:
+            # Cabe, pero desde que abra. Si la energía de esa hora no da para
+            # llamarlo gratis, se dice igual: lo único que cambia es el «cuándo».
+            if fallo["kind"] == "gratis":
+                return {"kind": "gratis", "value": "Gratis",
+                        "sub": f"desde las {inicio:%H:%M}"}
+            return {**fallo, "sub": f"{fallo['sub']} · desde las {inicio:%H:%M}"}
+        return fallo
     if dur <= queda:
         return {"kind": "justo", "value": "Cabe justo",
                 "sub": "empieza ya" if now >= inicio else "sal puntual"}
@@ -307,26 +382,68 @@ def advice(
     hoy = (window or {}).get("today") or {}
     fin = datetime.fromisoformat(hoy["end"]) if hoy.get("end") else None
     cerrada = bool(fin and now >= fin)
+    # El momento del que habla el veredicto: ahora si la ventana está abierta, y
+    # la hora de apertura si abre más tarde. Es el instante que hay que simular
+    # para poder decir «Gratis» sin mentir.
+    abre = datetime.fromisoformat(hoy["start"]) if hoy.get("start") else None
+    del_veredicto = max(now, abre) if abre and abre > now else now
     filas = []
     for a in lista:
         datos = aprendido.get(a["id"]) or {}
         ciclo = datos.get("cycle")
+        # La estimación **primero**, y el veredicto a partir de ella: así no pueden
+        # discrepar por construcción, que es de lo que venía la queja.
+        #
+        # Dos, cuando la ventana abre más tarde: la de la fila habla de ponerlo
+        # ahora —es lo que dice su renglón— y la del veredicto, de la hora que
+        # propone. Con una sola, una de las dos frases sería falsa.
+        est = estimate(ciclo, now, price, fuentes)
+        est_ver = (est if del_veredicto == now
+                   else estimate(ciclo, del_veredicto, price, fuentes))
         filas.append({
             "id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
             "cycle": ciclo,
             "today_kwh": datos.get("today_kwh"),
             "runs_today": len(datos.get("today") or []),
-            "verdict": verdict(ciclo, window, now, price),
-            "estimate": estimate(ciclo, now, price, fuentes),
+            "verdict": verdict(ciclo, window, now, price, est_ver),
+            "estimate": est,
         })
     # Primero lo que cabe gratis: es la respuesta que se ha venido a buscar.
-    orden = {"gratis": 0, "justo": 1, "parcial": 2, "cerrada": 3, "sin-ventana": 4,
-             "aprendiendo": 5}
+    orden = {"gratis": 0, "bateria": 1, "justo": 2, "parcial": 3, "cerrada": 4,
+             "sin-ventana": 5, "aprendiendo": 6}
     filas.sort(key=lambda f: (orden.get(f["verdict"]["kind"], 9), f["name"]))
     return {
         "title": "Lo que te costaría ahora" if cerrada else "Cabe en la ventana",
         "closed": cerrada,
         "rows": filas,
+        # La reserva del inversor, para poder decirlo cuando está mordiendo. Es la
+        # explicación de por qué una batería «al 21 %» no puede dar nada, y sin
+        # enseñarla las cifras de arriba parecen equivocadas.
+        "battery": _estado_bateria(fuentes),
+    }
+
+
+def _estado_bateria(fuentes: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Carga, reserva y lo que queda por encima de ella. ``None`` si no se sabe."""
+    if not fuentes:
+        return None
+    soc = fuentes.get("soc")
+    usable = fuentes.get("usable_kwh")
+    if soc is None or usable is None:
+        return None
+    reserva = float(fuentes.get("reserve_pct") or 0.0)
+    return {
+        "soc": round(float(soc), 1),
+        "reserve_pct": round(reserva, 1),
+        "usable_kwh": round(float(usable), 2),
+        # `True` cuando la reserva es la que manda: la batería figura con carga y
+        # no puede entregar nada. Es el caso que hacía falta explicar.
+        # Se mide en puntos de carga y no en kilovatios: el suelo está puesto en
+        # porcentaje, y «al 21 % con el mínimo en el 20» es lo que cualquiera lee
+        # como «está en su reserva». Un umbral en kWh diría otra cosa según la
+        # capacidad. El caso de «queda poco pero algo» lo cuenta la propia cifra
+        # de `usable_kwh`, que es más precisa que una etiqueta.
+        "at_reserve": reserva > 0 and float(soc) <= reserva + 1.0,
     }
 
 
@@ -379,12 +496,16 @@ def estimate(
     aparato_w = kwh * 1000.0 / horas
 
     capacidad = float(fuentes.get("capacity_kwh") or 0.0)
-    soc = fuentes.get("soc")
-    # Energía guardada ahora, en kWh. Sin capacidad configurada no se puede saber,
-    # y entonces la batería y la red van juntas en el resultado.
-    guardado = None
-    if capacidad > 0 and soc is not None:
-        guardado = capacidad * max(0.0, min(float(soc), 100.0)) / 100.0
+    # Lo que la batería puede dar ahora, en kWh: lo que hay **por encima de su
+    # reserva**, que es lo único que el inversor va a entregar. Antes era la batería
+    # entera, y con el estado de carga en la reserva se ofrecían kilovatios que no
+    # existen: de ahí salía un «Gratis» con 1,1 kWh de una batería al 21 % que no
+    # baja del 20. `None` = no se puede saber, y entonces batería y red van juntas.
+    guardado = planner.guardado_utilizable(fuentes)
+    reserva = float(fuentes.get("reserve_pct") or 0.0)
+    # Y el techo de la batería para lo que se recargue durante el ciclo también
+    # baja: por debajo de la reserva no se puede contar con nada.
+    tope = capacidad * max(0.0, 100.0 - reserva) / 100.0
 
     del_sol = de_bat = de_red = 0.0
     restante = guardado
@@ -404,7 +525,7 @@ def estimate(
         if falta <= 0:
             # Lo que sobre por encima del aparato carga la batería.
             if restante is not None and capacidad > 0:
-                restante = min(capacidad, restante + (sobra - sol_ap) * paso_h / 1000.0)
+                restante = min(tope, restante + (sobra - sol_ap) * paso_h / 1000.0)
             continue
         pide = falta * paso_h / 1000.0
         if restante is None:

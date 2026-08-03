@@ -1005,6 +1005,46 @@ def _anotar_prevision(
     _anotado.update({"dia": now.date(), "at": time.monotonic()})
 
 
+def reserva_pct(settings: dict[str, Any], states: dict[str, Any]) -> float:
+    """La reserva del inversor, en % de carga. 0 si no se sabe.
+
+    Manda el sensor si está asignado —así sigue solo cuando se cambia el mínimo en
+    el inversor— y si no, el número de Ajustes. Se recorta a [0, 95]: una reserva
+    del 100 % sería una batería que no se puede usar, y eso es un dato mal puesto,
+    no una configuración.
+    """
+    entidad = (settings.get("flow_sensors") or {}).get("battery_reserve_soc") or ""
+    del_sensor = _num((states.get(entidad) or {}).get("state")) if entidad else None
+    valor = del_sensor if del_sensor is not None else settings.get("battery_reserve_pct")
+    return max(0.0, min(float(valor or 0.0), 95.0))
+
+
+def bateria_usable(
+    settings: dict[str, Any], states: dict[str, Any], soc: float | None
+) -> tuple[float | None, float]:
+    """Lo que la batería puede dar **de verdad** ahora, en kWh, y su reserva en %.
+
+    Existe por una queja con tres capturas: la tarjeta decía «A/C · Gratis» y dos
+    líneas más arriba, ella misma, «1,1 kWh de batería» — con la batería al 21 % y
+    el inversor sin descargar por debajo del 20 %. Esos 1,1 kWh no existían.
+
+    La cuenta de antes era ``capacidad × soc / 100``: la batería entera, como si el
+    inversor la fuera a vaciar hasta cero. Ninguno lo hace. Lo utilizable es lo que
+    hay **por encima de la reserva**, y cuando el estado de carga está en la
+    reserva —o por debajo— la respuesta correcta es **cero**, no «poca».
+
+    Devuelve ``(None, reserva)`` cuando no se puede saber: sin capacidad tecleada o
+    sin sensor de carga no hay manera, y entonces quien lo use no puede separar la
+    batería de la red y tiene que decirlo así.
+    """
+    reserva = reserva_pct(settings, states)
+    capacidad = float(settings.get("battery_kwh") or 0.0)
+    if capacidad <= 0 or soc is None:
+        return None, reserva
+    encima = max(0.0, min(float(soc), 100.0) - reserva)
+    return capacidad * encima / 100.0, reserva
+
+
 def _hueco_bateria(
     settings: dict[str, Any], states: dict[str, Any]
 ) -> float | None:
@@ -1578,11 +1618,18 @@ async def _fuentes(
     perfil = await _house_profile(settings, states, tz, now)
     if perfil is None:
         return None
+    usable, reserva = bateria_usable(settings, states, soc)
     return {
         "sol_at": lambda momento: series_mod.forecast_at(puntos, momento),
         "casa_at": perfil.at,
         "soc": soc,
         "capacity_kwh": float(settings.get("battery_kwh") or 0.0),
+        # Lo que la batería puede dar **por encima de su reserva**, que es lo que
+        # hay que gastar en las simulaciones. Se calcula aquí y una sola vez: con
+        # cada consumidor haciendo su cuenta volvería a pasar lo de siempre, que
+        # dos partes de la misma pantalla dicen cifras distintas.
+        "usable_kwh": usable,
+        "reserve_pct": reserva,
         # Se lleva al plan para poder decirlo en la tarjeta: es el mismo objeto
         # que enseña la ventana, así que las dos no pueden discrepar.
         "sky": curva["sky"],
@@ -1838,6 +1885,7 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
     ]},
     {"key": "battery", "name": "Batería", "icon": "bateria", "rows": [
         ("flow", "battery_soc", "Estado de carga", "percent", ("soc", "bateria", "battery")),
+        ("flow", "battery_reserve_soc", "Reserva mínima (%)", "percent", ("min soc", "min_soc", "reserved soc", "reserva")),
         ("flow", "battery_charge", "Potencia de carga", "power", ("charg", "carga", "bateria", "battery")),
         ("flow", "battery_discharge", "Potencia de descarga", "power", ("discharg", "descarga", "bateria", "battery")),
         ("energy", "battery_charge_energy", "Energía cargada", "energy", ("charg", "carga", "bateria", "battery")),
@@ -1863,13 +1911,19 @@ SENSOR_GROUPS: list[dict[str, Any]] = [
 # todas, la casilla del estado de carga parecía resuelta y no había motivo para
 # tocarla, cuando en realidad sin ella falta su gráfico.
 OPTIONAL_SLOTS = {
-    "home", "home_energy", "battery_soc",
+    "home", "home_energy", "battery_soc", "battery_reserve_soc",
     "battery_charge_pv_energy", "grid_export_pv_energy",
 }
 OPTIONAL_NOTES = {
     "home": "Opcional · se deduce del balance",
     "home_energy": "Opcional · se deduce del balance",
     "battery_soc": "Opcional · sin él no hay gráfico de carga",
+    # La reserva del inversor: por debajo de ese porcentaje **no descarga**, así
+    # que esa energía existe en el contador y no en la práctica. Se puede teclear
+    # en Ajustes, pero teniendo el sensor se sigue sola cuando se cambia en el
+    # inversor. Un Sungrow la da como `sensor.battery_min_soc`.
+    "battery_reserve_soc":
+        "Opcional · si no, se teclea en Ajustes → Batería",
     # Estas dos no arreglan un hueco: **sustituyen una deducción por una
     # medida**. Vatia sabe repartir sin ellas, pero teniéndolas no tiene que
     # adivinar cuánto de la carga vino de la red, que es lo que más veces ha
