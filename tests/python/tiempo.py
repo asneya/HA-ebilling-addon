@@ -230,18 +230,28 @@ ok(suyas[0].hour == ahora.hour,
 ok(all(h.date() == ahora.date() for h in suyas), "todas de hoy")
 ok(any(h["cloud_pct"] is not None for h in api["hours"]),
    "con la nubosidad que da el fake")
-# El sol no puede pasarse del techo de esa hora en la curva que dibuja Energía.
-solar = pide("/api/series?view=solar&range=day")
-serie = next((s for s in solar.get("series") or [] if s["key"] == "forecast"), None)
-if serie:
-    techo = {}
-    for iso, w in zip(solar["x"], serie["values"]):
-        if w is not None:
-            techo[iso[:13]] = max(techo.get(iso[:13], 0.0), w)
-    excesos = [(h["at"][11:16], h["sun_w"], round(techo[h["at"][:13]], 1))
-               for h in api["hours"]
-               if h["at"][:13] in techo and h["sun_w"] > techo[h["at"][:13]] * 1.02 + 1]
-    ok(not excesos, f"y ninguna promete más sol que la curva ({excesos[:3]})")
+
+# El sol de esta tarjeta y el que dibuja la de la ventana tienen que ser el mismo
+# número: las dos salen de `curva_solar`, y esa es la invariante que costó la 0.48.0.
+#
+# **No** se compara con la serie `forecast` de `/api/series`, que fue el primer
+# intento y se puso rojo con razón: esa serie es la previsión **cruda** del sensor,
+# sin el sesgo del tejado ni el cielo de hoy. Con el tejado dando más de lo
+# prometido, esta tarjeta se pasa de esa cifra con todo el derecho, así que la
+# comparación no medía una incoherencia sino una corrección funcionando.
+forma = ((d.get("window") or {}).get("today") or {}).get("shape") or {}
+en_la_ventana = {}
+for iso, w in zip(forma.get("t") or [], forma.get("sol") or []):
+    # Solo el tramo previsto: en el medido la ventana dibuja lo que pasó, y esta
+    # tarjeta habla del futuro, así que ahí no hay nada que comparar.
+    if not forma.get("real_until") or iso >= forma["real_until"]:
+        en_la_ventana[iso] = w
+comunes = [(h, en_la_ventana[h["at"]]) for h in api["hours"] if h["at"] in en_la_ventana]
+ok(bool(comunes), f"hay instantes en las dos tarjetas ({len(comunes)})")
+discrepan = [(h["at"][11:16], h["sun_w"], w) for h, w in comunes
+             if abs(h["sun_w"] - w) > 0.15]
+ok(not discrepan,
+   f"y el sol es el mismo en las dos ({discrepan[:3] or 'sin discrepancias'})")
 grupos = pide("/api/entities/grouped")
 ok(any(e["entity_id"] == api["entity"] for e in grupos.get("weather", [])),
    "la entidad sale en el grupo «weather» de los desplegables")

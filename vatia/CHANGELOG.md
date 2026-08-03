@@ -65,6 +65,14 @@ aplicación de verdad con lo que marcaba el diagrama del caudal —26,7 W de cas
 había 320—. El banco pasaba porque le estaba dando un bucket por hora; ahora se le
 dan de cinco minutos, como los de verdad.
 
+Y una comprobación del banco que estaba mal planteada, que el CI destapó: la sección
+del servidor de `tiempo.py` comparaba el sol de la tarjeta del tiempo con la serie
+`forecast` de `/api/series`, que es la previsión **cruda del sensor** —sin el sesgo
+del tejado ni el cielo de hoy—. Con el tejado dando más de lo prometido, la tarjeta
+se pasa de esa cifra con todo el derecho: el banco no medía una incoherencia, medía
+una corrección funcionando. Ahora se compara con la tarjeta de la **ventana**, que sí
+sale de la misma curva, y esa sí es la invariante que importa.
+
 
 ## 0.50.0
 
