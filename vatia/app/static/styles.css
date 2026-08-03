@@ -1675,7 +1675,21 @@ body.scrolled .scroll-top { opacity: .95; }
    Sankey vuelve a medir, el cierre pierde su estado). Las tarjetas conservan su
    `margin-bottom` de siempre, que en flex no se colapsa y da la misma
    separación que había. */
-#home-cards { display: flex; flex-direction: column; }
+/* La separación entre tarjetas la pone el **contenedor**, no cada tarjeta.
+
+   Antes la ponía el `margin-bottom` de `.panel`, y eso se rompía por dos sitios a
+   la vez. Uno: la tarjeta del cierre no es un `.panel` —es el componente con su
+   propio fondo de degradado—, así que no tenía hueco debajo, y en cuanto alguien la
+   subía del último puesto se quedaba pegada a la siguiente. Dos: un margen del hijo
+   se cuenta en el orden del documento, y aquí las tarjetas se reordenan con `order`,
+   así que hacer depender el hueco de quién es cada una es pedirle problemas.
+
+   Con `gap` el hueco es el mismo entre cualesquiera dos vecinas visibles, en el
+   orden que sea; las ocultas (`display: none`) no dejan hueco; y la última no arrastra
+   un margen que sobra. Los márgenes de los hijos se anulan aquí para que no se sumen
+   —`.panel` los sigue necesitando en las otras pantallas—. */
+#home-cards { display: flex; flex-direction: column; gap: 14px; }
+#home-cards > * { margin-bottom: 0; }
 /* Ocultada por quien mira. Va con más peso que `.hidden` —que es la que usa la
    app para «ahora mismo no hay nada que enseñar aquí»— porque son dos cosas
    distintas y no deben pisarse: al dejar de ocultarla, la tarjeta vuelve al
