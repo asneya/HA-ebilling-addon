@@ -61,6 +61,34 @@ MIN_GANANCIA_SOL_PCT = 20
 MIN_AHORRO_BATERIA_EUR = 0.15
 
 
+def guardado_utilizable(fuentes: dict[str, Any]) -> float | None:
+    """Lo que la batería puede dar ahora, en kWh. ``None`` si no se puede saber.
+
+    Lo normal es que venga ya calculado en ``usable_kwh`` (lo hace
+    `live.bateria_usable`, que es quien tiene los sensores delante) y entonces se
+    usa ese, sin recalcular nada.
+
+    El respaldo existe para que **no se pueda perder el reparto en silencio**. Al
+    pasar de «la batería entera» a «lo de encima de la reserva», los dos sitios que
+    simulan un ciclo empezaron a leer `usable_kwh`; quien no lo trajera se quedaba
+    sin poder separar la batería de la red y lo decía como si no hubiera capacidad
+    configurada, que es otra cosa. Un banco lo cazó, pero podría no haberlo hecho.
+    Con el respaldo, unas fuentes con carga y capacidad siempre dan un reparto.
+
+    Vive aquí y no en los dos módulos que la usan porque tener la misma fórmula
+    escrita dos veces es exactamente de donde han salido las incoherencias de esta
+    aplicación.
+    """
+    if fuentes.get("usable_kwh") is not None:
+        return float(fuentes["usable_kwh"])
+    capacidad = float(fuentes.get("capacity_kwh") or 0.0)
+    soc = fuentes.get("soc")
+    if capacidad <= 0 or soc is None:
+        return None
+    reserva = float(fuentes.get("reserve_pct") or 0.0)
+    return capacidad * max(0.0, min(float(soc), 100.0) - reserva) / 100.0
+
+
 def _simular(
     inicio: datetime,
     horas: float,
@@ -69,6 +97,7 @@ def _simular(
     casa_at: Callable[[datetime], float],
     guardado: float | None,
     capacidad: float,
+    reserva: float = 0.0,
 ) -> tuple[float, float, float]:
     """Un ciclo puesto a `inicio`: (kWh de sol, de batería, de red).
 
@@ -76,9 +105,15 @@ def _simular(
     tarjeta: el sol cubre primero, lo que falte lo pone la batería mientras le
     quede y el resto la red; el sol que sobre por encima del aparato carga la
     batería, que es lo que pasaría de verdad.
+
+    ``guardado`` es lo **utilizable**, por encima de la reserva del inversor, y
+    ``reserva`` baja también el techo de lo que se recargue durante el ciclo: por
+    debajo de ese porcentaje el inversor no descarga, así que esa energía figura en
+    el contador y no se puede gastar.
     """
     del_sol = de_bat = de_red = 0.0
     restante = guardado
+    tope = capacidad * max(0.0, 100.0 - reserva) / 100.0
     pasos = max(1, int(round(horas / _PASO_SIM_H)))
     # El paso sale de repartir el ciclo, no al revés. Con un paso fijo, un ciclo
     # de 1,9 h se simulaba en ocho cuartos de hora —2,0 h— y la energía del
@@ -93,7 +128,7 @@ def _simular(
         if falta <= 0:
             if restante is not None and capacidad > 0:
                 restante = min(
-                    capacidad, restante + (sobra - sol_ap) * paso_h / 1000.0
+                    tope, restante + (sobra - sol_ap) * paso_h / 1000.0
                 )
             continue
         pide = falta * paso_h / 1000.0
@@ -145,11 +180,12 @@ def _mejor_hora(
         return None
     aparato_w = kwh * 1000.0 / horas
     capacidad = float(fuentes.get("capacity_kwh") or 0.0)
-    soc = fuentes.get("soc")
-    guardado = (
-        capacidad * max(0.0, min(float(soc), 100.0)) / 100.0
-        if capacidad > 0 and soc is not None else None
-    )
+    # Lo utilizable, por encima de la reserva del inversor: viene calculado en
+    # `live.bateria_usable` y no se rehace aquí. Contando la batería entera, el
+    # plan prometía horas «con sol» sostenidas por kilovatios que el inversor no
+    # iba a entregar.
+    guardado = guardado_utilizable(fuentes)
+    reserva = float(fuentes.get("reserve_pct") or 0.0)
     sol_at, casa_at = fuentes["sol_at"], fuentes["casa_at"]
 
     opciones = []
@@ -161,7 +197,7 @@ def _mejor_hora(
         if inicio + timedelta(hours=horas) > now + timedelta(hours=HORIZONTE_H):
             break
         sol, bat, red = _simular(
-            inicio, horas, aparato_w, sol_at, casa_at, guardado, capacidad
+            inicio, horas, aparato_w, sol_at, casa_at, guardado, capacidad, reserva
         )
         opciones.append({
             "at": inicio, "sun_kwh": sol, "battery_kwh": bat, "grid_kwh": red,

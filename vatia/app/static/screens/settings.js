@@ -303,6 +303,7 @@ function fillSettings() {
   $("#s-sensor-minutes").value = s.sensor_update_minutes ?? 5;
   $("#s-energy-counters").value = s.energy_counters || "auto";
   $("#s-battery-kwh").value = s.battery_kwh || "";
+  $("#s-battery-reserve").value = s.battery_reserve_pct || "";
   renderSettingsIndex(s);
   const ifx = s.influx || {};
   $("#s-ifx-version").value = String(ifx.version ?? 2);
@@ -1056,6 +1057,28 @@ $("#s-battery-kwh").addEventListener("change", async (ev) => {
     nota.textContent = kwh > 0
       ? `Guardado · con ${fmtNum.format(kwh)} kWh ya se puede decir cuánta batería se lleva cada ciclo.`
       : "Sin capacidad: la estimación no podrá separar la batería de la red.";
+    emit("datos");
+  } catch (err) {
+    nota.textContent = `No se ha podido guardar: ${err.message}`;
+  }
+});
+
+/* La reserva, en la misma página y con el mismo trato. Comparte el renglón de
+   estado con la capacidad: las dos hablan de lo mismo —cuánta batería se puede
+   contar— y dos avisos separados en dos líneas seguidas serían ruido. */
+$("#s-battery-reserve").addEventListener("change", async (ev) => {
+  const nota = $("#bat-kwh-state");
+  const pct = Math.max(0, Math.min(Number(ev.target.value) || 0, 95));
+  ev.target.value = pct || "";
+  nota.textContent = "Guardando…";
+  try {
+    await api("settings", {
+      method: "PUT", body: JSON.stringify({ battery_reserve_pct: pct }),
+    });
+    await reloadConfig();
+    nota.textContent = pct > 0
+      ? `Guardado · por debajo del ${fmtNum.format(pct)} % no se cuenta como disponible.`
+      : "Sin reserva declarada: se cuenta la batería entera como utilizable.";
     emit("datos");
   } catch (err) {
     nota.textContent = `No se ha podido guardar: ${err.message}`;

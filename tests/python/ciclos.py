@@ -140,9 +140,18 @@ AHORA = datetime.fromisoformat("2026-07-20T12:00:00+02:00")
 ciclo2h = {"hours": 2.0, "kwh": 2.0}          # 1.000 W de media
 
 
-def fuentes(sol, casa=300.0, soc=100.0, cap=7.5):
+def fuentes(sol, casa=300.0, soc=100.0, cap=7.5, reserva=0.0):
+    """Unas fuentes **sin** `usable_kwh`, a propósito.
+
+    Las de verdad lo traen calculado (`live.bateria_usable`), pero aquí se dejan
+    fuera para que este banco compruebe el respaldo de
+    `planner.guardado_utilizable`: unas fuentes con carga y capacidad tienen que
+    dar un reparto igualmente. Sin el respaldo, quien no trajera esa clave se
+    quedaba sin poder separar la batería de la red y lo decía como si no hubiera
+    capacidad configurada, que es otra cosa muy distinta.
+    """
     return {"sol_at": lambda m: sol, "casa_at": lambda m: casa,
-            "soc": soc, "capacity_kwh": cap}
+            "soc": soc, "capacity_kwh": cap, "reserve_pct": reserva}
 
 
 e = A.estimate(ciclo2h, AHORA, 0.20, fuentes(sol=3000.0))
@@ -166,6 +175,17 @@ ok(abs(e["sun_kwh"] - 1.0) < 0.03 and abs(e["battery_kwh"] - 1.0) < 0.03,
 e = A.estimate(ciclo2h, AHORA, 0.20, fuentes(sol=0.0, soc=6.0))
 ok(abs(e["battery_kwh"] - 0.45) < 0.03 and abs(e["grid_kwh"] - 1.55) < 0.03,
    f"con la batería casi vacía entra la red ({e['battery_kwh']} bat · {e['grid_kwh']} red)")
+
+# Y la reserva del inversor se respeta también por este camino, sin `usable_kwh`:
+# al 30 % con el suelo en el 20 solo se puede contar con el 10 %, 0,75 kWh.
+e = A.estimate(ciclo2h, AHORA, 0.20, fuentes(sol=0.0, soc=30.0, reserva=20.0))
+ok(abs(e["battery_kwh"] - 0.75) < 0.03 and abs(e["grid_kwh"] - 1.25) < 0.03,
+   f"la reserva del inversor se respeta ({e['battery_kwh']} bat · {e['grid_kwh']} red)")
+e = A.estimate(ciclo2h, AHORA, 0.20, fuentes(sol=0.0, soc=20.0, reserva=20.0))
+ok(e["battery_kwh"] == 0.0 and abs(e["grid_kwh"] - 2.0) < 0.03,
+   f"y en la reserva la batería no pone nada ({e['battery_kwh']} bat · {e['grid_kwh']} red)")
+ok(e["split"] is True,
+   "sin dejar de poder separar la batería de la red, que es otra cosa")
 ok(abs((e["battery_eur"] + e["grid_eur"]) - 0.40) < 0.02,
    f"y el total en euros no cambia: {e['battery_eur']} + {e['grid_eur']}")
 

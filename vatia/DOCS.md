@@ -185,9 +185,19 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 |---|---|
 | Flujo de energía (W/kW) | producción solar, importación y exportación de red, carga y descarga de batería, consumo de la casa (opcional) y % de batería (opcional) |
 | Contadores de energía (kWh) | solar, importada, exportada, carga, descarga y **casa** (opcional) |
+| Batería (opcional) | **reserva mínima (%)**: el porcentaje por debajo del cual tu inversor no descarga. Un Sungrow lo publica en `sensor.battery_min_soc` |
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
 | Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
 | El tiempo hora a hora (opcional) | una entidad **`weather.*`** (AEMET, Met.no, OpenWeatherMap…) para la tarjeta del tiempo de la Home |
+
+La **reserva mínima** importa más de lo que parece. Ningún inversor vacía la
+batería: por debajo de un porcentaje —el «Min SOC» o la reserva de respaldo— deja
+de descargar. Esa energía figura en el contador y **no se puede gastar**. Sin
+declararla, Vatia contaba la batería entera como disponible y llegaba a decir
+«Gratis» ofreciendo kilovatios que el inversor no iba a entregar: con la batería
+al 21 % y el suelo en el 20, lo utilizable son 0,1 kWh de un depósito de 10, no
+2,1. Se teclea en *Ajustes → La batería*, o se asigna el sensor en *Sensores →
+Batería* y entonces sigue solo cuando lo cambies en el inversor.
 
 La entidad `weather.*` es **otra cosa** que los dos sensores de meteorología:
 aquellos dicen cómo está *ahora* —son los que ponen el fondo y la pastilla de la
@@ -243,6 +253,7 @@ publican todo lo que Vatia necesita. La correspondencia:
 | Batería · energía descargada | `sensor.daily_battery_discharge` | 13026 |
 | Casa · consumo instantáneo | `sensor.load_power` | 13008 |
 | Batería · estado de carga | `sensor.battery_level` | 13023 |
+| Batería · reserva mínima | `sensor.battery_min_soc` | (holding) |
 
 Y dos opcionales que **sustituyen una deducción por una medida**:
 
