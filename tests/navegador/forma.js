@@ -9,7 +9,9 @@
  *   7. sin batería, ni nota ni descuento
  *   8. la leyenda dice qué es cada cosa
  *   9. cabe a 320 px sin que nada se salga
- *  10. sin errores de consola
+ *  10. lo medido va con trazo continuo y lo previsto a rayas
+ *  11. sin nada medido, una sola línea y sin leyenda de «previsto»
+ *  12. sin errores de consola
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = `${ficheros()}/bancoventana.html`;
@@ -120,7 +122,7 @@ const abrir = async (b, q, ancho = 414) => {
   console.log("\n8 · la leyenda");
   const ley = await p.evaluate(() => [...document.querySelector("vatia-window")
     .shadowRoot.querySelectorAll(".leyenda span")].map((s) => s.textContent.trim()));
-  ok(ley.join(" · ") === "Sobra · Sol previsto · Tu casa",
+  ok(ley.join(" · ") === "Sobra · Sol · Tu casa",
     `dice qué es cada cosa (${ley.join(" · ")})`);
 
   console.log("\n9 · a 320 px");
@@ -137,6 +139,44 @@ const abrir = async (b, q, ancho = 414) => {
   });
   ok(desborde.fuera.length === 0, `nada se sale (${desborde.fuera.join(", ") || "todo dentro"})`);
   ok(desborde.doc <= 0, `y la página no pide scroll horizontal (${desborde.doc} px)`);
+
+  /* De una pregunta: «¿no debería la forma de hoy representar la realidad hasta el
+     momento actual y la previsión desde el momento actual?». Sí — y para que se
+     entienda al mirarla, el trazo tiene que decir cuál es cuál. */
+  console.log("\n10-11 · lo que fue y lo que se espera");
+  const trazos = (pg) => pg.evaluate(() => {
+    const root = document.querySelector("vatia-window").shadowRoot;
+    const de = (sel) => [...root.querySelectorAll(sel)].map((el) => ({
+      clase: el.getAttribute("class"),
+      raya: getComputedStyle(el).strokeDasharray,
+      largo: (el.getAttribute("d") || "").length,
+    }));
+    return {
+      lineas: de("path.sol, path.casa"),
+      leyenda: [...root.querySelectorAll(".leyenda span")].map((x) => x.textContent.trim()),
+    };
+  });
+  const conMedida = await trazos(await abrir(b, "?bat=4.2&medido=1"));
+  const solidas = conMedida.lineas.filter((l) => !/\bprev\b/.test(l.clase));
+  const rayadas = conMedida.lineas.filter((l) => /\bprev\b/.test(l.clase));
+  ok(solidas.length === 2 && rayadas.length === 2,
+    `hay dos tramos de cada serie (${conMedida.lineas.map((l) => l.clase).join(" | ")})`);
+  ok(solidas.every((l) => l.largo > 10) && rayadas.every((l) => l.largo > 10),
+    "y los cuatro tienen recorrido, no son trazos vacíos");
+  ok(solidas.every((l) => l.raya === "none" || l.raya === ""),
+    `lo medido va continuo (${solidas.map((l) => l.raya).join(" · ")})`);
+  ok(rayadas.every((l) => /\d/.test(l.raya)),
+    `y lo previsto a rayas (${rayadas.map((l) => l.raya).join(" · ")})`);
+  ok(conMedida.leyenda.includes("previsto"),
+    `con la leyenda que lo explica (${conMedida.leyenda.join(" · ")})`);
+
+  const sinMedida = await trazos(await abrir(b, "?bat=4.2"));
+  ok(sinMedida.lineas.length === 2,
+    `sin nada medido, una línea por serie (${sinMedida.lineas.length})`);
+  ok(sinMedida.lineas.every((l) => /\bprev\b/.test(l.clase)),
+    "y las dos son previsión, que es lo único que hay");
+  ok(!sinMedida.leyenda.includes("previsto"),
+    `sin leyenda de «previsto», que no distingue nada (${sinMedida.leyenda.join(" · ")})`);
 
   await b.close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

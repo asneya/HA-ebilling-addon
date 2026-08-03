@@ -9,6 +9,16 @@
   7. `kwh` sigue siendo el bruto, para poder comparar hoy con mañana
   8. el hueco de la batería sale de capacidad y SOC
   9. y no se calcula sin una de las dos
+
+Y lo que se dibuja del día que ya ha pasado:
+
+ 10. con lo medido, las horas cerradas llevan **su medida** y no la previsión
+ 11. la potencia media de una hora va en el centro de la hora
+ 12. la curva acaba en el instante de ahora, y con lo que marcan los sensores
+ 13. desde ahora en adelante, previsión
+ 14. `real_until` dice dónde está la costura
+ 15. sin nada medido, todo previsión y ninguna costura
+ 16. y los números de la ventana **no** cambian: siguen siendo del día previsto
 """
 import sys
 from datetime import datetime, timedelta
@@ -56,7 +66,9 @@ PUNTOS = curva()
 print("1-2 · la forma del día")
 w = S.free_window(PUNTOS, casa, DIA)
 forma = w["shape"]
-ok(set(forma) == {"t", "sol", "casa"}, f"trae las tres columnas ({sorted(forma)})")
+ok(set(forma) == {"t", "sol", "casa", "real_until"},
+   f"trae las tres columnas y la costura ({sorted(forma)})")
+ok(forma["real_until"] is None, "sin nada medido no hay costura")
 ok(len(forma["t"]) == len(forma["sol"]) == len(forma["casa"]),
    f"del mismo largo ({len(forma['t'])})")
 ok(2 <= len(forma["t"]) <= 96, f"y con puntos suficientes, sin pasarse ({len(forma['t'])})")
@@ -110,6 +122,74 @@ ok(L._hueco_bateria(cfg, {"sensor.soc": {"state": "100"}}) == 0.0,
    "llena, no le cabe nada")
 ok(L._hueco_bateria(cfg, {"sensor.soc": {"state": "unknown"}}) is None,
    "un SOC ilegible es no saberlo, no un cero")
+
+# ── 10-16 · lo que fue y lo que se espera ───────────────────────────────────
+#
+# De una pregunta: «¿no debería la forma de hoy representar la realidad hasta el
+# momento actual y la previsión desde el momento actual, a pesar de que el pasado
+# ya ha pasado y lo conocemos?». Pues sí: la tarjeta dibujaba previsión las
+# veinticuatro horas, también las que ya habían pasado y de las que hay medida.
+
+print("\n10-14 · lo medido hasta ahora")
+AHORA = DIA.replace(hour=12, minute=20)
+# Los buckets vienen en tramos de **cinco minutos**, que es como los pide
+# `daily_energy`, y no uno por hora. Se le dan así a propósito: con uno por hora el
+# banco pasaba igual y no habría cazado que el código se quedaba con el último tramo
+# de cada hora en vez de sumarlos —doce veces menos, y la mañana dibujada plana—.
+# Doce tramos de 1/12 kWh son 1 kWh a la hora: 1.000 W de media.
+medido = L.lo_medido(
+    {DIA.replace(hour=h, minute=m).isoformat():
+        {"pv_energy": 1.0 / 12, "home_energy": 0.4 / 12}
+     for h in range(8, 12) for m in range(0, 60, 5)},
+    {"pv": 900.0}, 500.0, AHORA,
+)
+wm = S.free_window(PUNTOS, casa, DIA, medido=medido)
+fm = wm["shape"]
+ok(fm["real_until"] == AHORA.isoformat(),
+   f"la costura está en ahora ({fm['real_until']})")
+
+horas = [datetime.fromisoformat(x) for x in fm["t"]]
+antes = [(t, s, c) for t, s, c in zip(horas, fm["sol"], fm["casa"]) if t < AHORA]
+ok(all(t.minute == 30 for t, _s, _c in antes[:-1] if t != AHORA),
+   f"las horas medidas van en el centro de su hora ({[f'{t:%H:%M}' for t, _s, _c in antes]})")
+ok(all(abs(s - 1000.0) < 0.1 for _t, s, _c in antes),
+   f"con la potencia media del bucket, 1.000 W ({[s for _t, s, _c in antes]})")
+ok(all(abs(c - 400.0) < 0.1 for _t, _s, c in antes),
+   f"y el consumo medido, no el perfil ({[c for _t, _s, c in antes]})")
+# Sin lo medido, esas mismas horas llevaban la previsión. Es la comprobación que
+# da sentido a las de arriba: si la previsión y la medida coincidieran, dibujar una
+# u otra daría igual y este banco no estaría comprobando nada.
+i830 = [i for i, iso in enumerate(forma["t"]) if iso[11:16] == "08:30"][0]
+previsto830 = forma["sol"][i830]
+ok(previsto830 > 1500.0,
+   f"la previsión de esa hora era otra cosa ({previsto830} W a las 08:30)")
+ok(abs(previsto830 - 1000.0) > 500.0,
+   f"y se separa de lo medido de sobra ({previsto830} previsto · 1.000 medido)")
+
+ultimo = horas[[i for i, t in enumerate(horas) if t <= AHORA][-1]]
+ok(ultimo == AHORA, f"la curva llega hasta ahora ({ultimo:%H:%M})")
+i_ahora = horas.index(AHORA)
+ok(fm["sol"][i_ahora] == 900.0 and fm["casa"][i_ahora] == 500.0,
+   f"con lo que marcan los sensores ({fm['sol'][i_ahora]} W · {fm['casa'][i_ahora]} W)")
+despues = [t for t in horas if t > AHORA]
+ok(despues and despues[0] > AHORA, f"y sigue con la previsión ({despues[0]:%H:%M})")
+i15 = [i for i, t in enumerate(horas) if t.hour == 15 and t.minute == 0]
+ok(i15 and fm["sol"][i15[0]] > 3000.0,
+   f"que a las 15:00 sigue siendo la campana ({fm['sol'][i15[0]] if i15 else None} W)")
+ok(horas == sorted(horas), "los instantes van en orden")
+
+print("\n15 · mañana, todo previsión")
+manana = S.free_window(PUNTOS, casa, DIA)
+ok(manana["shape"]["real_until"] is None,
+   "un día sin medida no tiene costura y se dibuja entero previsto")
+
+print("\n16 · los números de la ventana no cambian")
+# A propósito: `kwh` es con lo que se compara hoy con mañana en la nota de la
+# tarjeta, y mezclando medida y previsión dejaría de ser comparable. El dibujo
+# dice lo que ha pasado; el titular, lo que se espera del día.
+ok(wm["kwh"] == w["kwh"] and wm["start"] == w["start"] and wm["end"] == w["end"],
+   f"start, end y kwh siguen siendo los del día previsto ({wm['kwh']} kWh)")
+ok(wm["peak_at"] == w["peak_at"], "y el pico también")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

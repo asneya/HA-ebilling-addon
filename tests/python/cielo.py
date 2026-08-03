@@ -117,7 +117,12 @@ live._house_profile = _perfil_de_banco
 print("1-2 · una curva, y ninguna si no hay previsión")
 c = curva(4200, 1.0)
 ok(c is not None and c["points"], f"la curva sale ({c and len(c['points'])} puntos)")
-ok(set(c) == {"points", "bias", "sky"}, f"con lo que hace falta y nada más ({sorted(c)})")
+ok(set(c) == {"points", "bias", "sky", "medido"},
+   f"con lo que hace falta y nada más ({sorted(c)})")
+# `medido` es lo que ya ha pasado, para dibujarlo en vez de predecirlo. La curva de
+# previsión sigue entera al lado: el plan simula horas futuras y la necesita.
+ok(set(c["medido"]) == {"sol", "casa", "ahora", "at"},
+   f"y lo medido trae lo suyo ({sorted(c['medido'])})")
 vacia = live.curva_solar(
     {**AJUSTES, "solar_forecast_sensor": "sensor.no_existe"},
     estados(0), {"pv": 0.0}, {}, TZ, AHORA,

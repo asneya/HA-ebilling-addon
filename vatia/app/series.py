@@ -363,6 +363,7 @@ def free_window(
     baseline: float | Callable[[datetime], float],
     day: datetime,
     bateria_wh: float | None = None,
+    medido: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Ventana de un día concreto, o ``None`` si ese día no sobra nada.
 
@@ -386,10 +387,18 @@ def free_window(
     —sin batería, o sin saber cómo está— deja el excedente entero como gastable,
     que es lo que se hacía antes.
 
-    Además del resumen se devuelve ``shape``: la previsión y el consumo típico
-    en los mismos instantes, para poder **dibujar** el día. Una sola cifra media
-    no distingue una meseta de una punta de veinte minutos, y esa es justo la
-    diferencia que decide a qué hora se pone la lavadora.
+    Además del resumen se devuelve ``shape``: la forma del día para poder
+    **dibujarlo**. Una sola cifra media no distingue una meseta de una punta de
+    veinte minutos, y esa es justo la diferencia que decide a qué hora se pone la
+    lavadora. Con ``medido``, las horas que ya han pasado se dibujan con su medida
+    en vez de con la previsión (ver `_forma`).
+
+    Lo que **no** cambia con ``medido`` son los números de la ventana: `start`,
+    `end`, `kwh` y los `spans` siguen saliendo de la curva de previsión —ya
+    corregida con el tejado y el cielo de hoy—. Es a propósito y tiene una razón:
+    `kwh` es la magnitud con la que se compara hoy con mañana en la nota de la
+    tarjeta, y mezclando medida y previsión dejaría de ser comparable. El dibujo
+    dice lo que ha pasado; el titular, lo que se espera del día.
     """
     umbral = baseline if callable(baseline) else (lambda _t: float(baseline))
     end_of_day = day + timedelta(days=1)
@@ -511,7 +520,7 @@ def free_window(
         # La forma del día, para poder dibujarla: la previsión y el consumo
         # típico en los mismos instantes. En columnas y no en objetos porque va
         # en cada `/api/live` y son tres veces menos bytes.
-        "shape": _forma(curve, umbral),
+        "shape": _forma(curve, umbral, medido),
     }
 
 
@@ -540,30 +549,81 @@ _MAX_FORMA = 96
 
 
 def _forma(
-    curve: list[tuple[datetime, float]], umbral: Callable[[datetime], float]
+    curve: list[tuple[datetime, float]],
+    umbral: Callable[[datetime], float],
+    medido: dict[str, Any] | None = None,
 ) -> dict[str, list[Any]]:
-    """La previsión y el consumo típico, hora a hora, para dibujar el día.
+    """La forma del día para dibujarlo: **lo que fue hasta ahora y lo que se espera
+    desde ahora**.
 
     Solo las horas de luz, con un punto a cero a cada lado. El eje del dibujo es
     el día de luz —la madrugada no aporta nada y comprimiría lo que sí importa—,
     así que mandar las veinticuatro horas serviría para que la mitad de los
     puntos se amontonaran en los dos extremos.
+
+    ``medido`` es lo que de verdad ha hecho el día (ver `live.lo_medido`). Con él,
+    las horas que ya han pasado se dibujan con **su medida** en vez de con la
+    previsión: el pasado ya pasó y se conoce, y enseñar ahí una predicción es la
+    misma clase de error que enseñar un cociente donde hay un contador. Sin él —el
+    día de mañana, el eje de luz— sale la previsión entera, que es lo correcto
+    porque no hay otra cosa.
+
+    ``real_until`` dice dónde acaba lo medido, para que quien lo dibuje pueda
+    distinguirlo: una línea que cambia de significado a mitad de camino tiene que
+    cambiar de trazo.
     """
     luz = [i for i, (_t, w) in enumerate(curve) if w > 0]
     if luz:
         # Un punto antes y uno después: así la curva arranca y acaba en el
         # suelo en vez de empezar cortada a media altura.
         curve = curve[max(0, luz[0] - 1):min(len(curve), luz[-1] + 2)]
+    if not curve:
+        return {"t": [], "sol": [], "casa": [], "real_until": None}
+    ahora = medido.get("at") if medido else None
+
+    # Lo previsto que **queda**: desde ahora en adelante. Antes de ahora hay medida
+    # y no hace falta predecir.
+    futuro = [(t, w) for t, w in curve if ahora is None or t >= ahora]
     # División hacia arriba: con la de abajo el paso se queda corto y salen más
     # muestras que el tope (720 puntos con paso 7 dan 103, no 96).
-    paso = max(1, -(-len(curve) // _MAX_FORMA))
-    muestras = curve[::paso]
-    if muestras[-1] is not curve[-1]:
-        muestras.append(curve[-1])
+    paso = max(1, -(-len(futuro) // _MAX_FORMA)) if futuro else 1
+    muestras = [(t, round(w, 1), round(umbral(t), 1)) for t, w in futuro[::paso]]
+    if futuro and muestras[-1][0] != futuro[-1][0]:
+        t, w = futuro[-1]
+        muestras.append((t, round(w, 1), round(umbral(t), 1)))
+
+    pasado: list[tuple[datetime, float, float]] = []
+    if ahora is not None:
+        desde, hasta = curve[0][0], curve[-1][0]
+        # Una muestra por hora cerrada, colocada en el **centro** de la hora: los
+        # buckets son energía por hora, y la potencia media de una hora no vive en
+        # su filo sino en su mitad.
+        for hora in sorted(set(medido["sol"]) | set(medido["casa"])):
+            centro = ahora.replace(hour=hora, minute=30, second=0, microsecond=0)
+            if not (desde <= centro <= hasta):
+                continue
+            pasado.append((
+                centro,
+                round(medido["sol"].get(hora, 0.0), 1),
+                round(medido["casa"].get(hora, umbral(centro)), 1),
+            ))
+        # Y el instante, que es lo que hace que esta curva acabe donde el diagrama
+        # del caudal dice que está la casa.
+        sol_ahora, casa_ahora = medido["ahora"]
+        if desde <= ahora <= hasta:
+            pasado.append((ahora, round(sol_ahora, 1), round(casa_ahora, 1)))
+            # Sin el punto de ahora, la primera muestra del futuro cae después y
+            # entre las dos quedaría un salto sin dibujar.
+            muestras = [m for m in muestras if m[0] > ahora]
+
+    todo = pasado + muestras
     return {
-        "t": [t.isoformat() for t, _w in muestras],
-        "sol": [round(w, 1) for _t, w in muestras],
-        "casa": [round(umbral(t), 1) for t, _w in muestras],
+        "t": [t.isoformat() for t, _s, _c in todo],
+        "sol": [s for _t, s, _c in todo],
+        "casa": [c for _t, _s, c in todo],
+        # Hasta aquí es medida; de aquí en adelante, previsión. `None` = todo
+        # previsión (mañana, o sin nada medido todavía).
+        "real_until": ahora.isoformat() if ahora is not None and pasado else None,
     }
 
 
