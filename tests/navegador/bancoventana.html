@@ -72,8 +72,21 @@
       battery_kwh: bateria, spendable_kwh: 28.6 - bateria,
       spendable_w: Math.round(2420 * (28.6 - bateria) / 28.6),
       spans, gaps: [{ start: iso(13.0), end: iso(14.0), hours: 1.0 }],
-      shape: { t, sol: s, casa: c },
+      shape: { t, sol: s, casa: c, real_until: null },
     };
+    /* `medido=1` parte la forma en dos, como la sirve el servidor: las horas que
+       ya han pasado con su medida —a la mitad de lo prometido, para que el salto
+       se vea y el banco pueda comprobar que los dos tramos son distintos— y el
+       resto con la previsión. La costura va en el instante de ahora. */
+    if (p.get("medido") === "1") {
+      const ahoraMs = Date.now();
+      hoy.shape = {
+        t: [...t],
+        sol: s.map((w, i) => new Date(t[i]) < ahoraMs ? Math.round(w * 0.5) : w),
+        casa: c.map((w, i) => new Date(t[i]) < ahoraMs ? 420 : w),
+        real_until: new Date(ahoraMs).toISOString(),
+      };
+    }
     const manana = { ...hoy, kwh: 12.0, hours: 8.2, surplus_w: 1400,
                      start: iso(9.2), end: iso(17.4), shape: undefined };
 

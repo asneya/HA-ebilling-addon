@@ -1063,6 +1063,61 @@ def _hueco_bateria(
     return max(0.0, min(100.0 - soc, 100.0)) / 100.0 * capacidad * 1000.0
 
 
+def lo_medido(
+    buckets: dict[str, dict[str, float]] | None,
+    power: dict[str, float],
+    casa_w: float,
+    now: datetime,
+) -> dict[str, Any]:
+    """Lo que de verdad ha hecho el día hasta ahora: sol y casa, en W.
+
+    De una pregunta que hacía falta: *«¿no debería la forma de hoy representar la
+    realidad hasta el momento actual y la previsión desde el momento actual, a pesar
+    de que el pasado ya ha pasado y lo conocemos?»*. Pues sí. La tarjeta dibujaba
+    **previsión las veinticuatro horas**, también las que ya habían pasado y de las
+    que hay medida — que es la misma clase de error que enseñar un cociente donde
+    hay un contador.
+
+    Dos resoluciones, y las dos son las que hay:
+
+      · **las horas cerradas**, de los `buckets` que la Home ya se ha descargado.
+        Vienen en tramos de **cinco minutos** —así los pide `daily_energy`— y hay
+        que **sumarlos** dentro de su hora: quedándose con el último de cada hora, la
+        cifra sale doce veces más pequeña y la mañana se dibuja plana. Sumados, los
+        Wh de la hora son su potencia media, que va colocada en el **centro** de la
+        hora porque es donde vive una media;
+      · **este instante**, de los sensores de potencia. Sirve para que la curva
+        acabe exactamente donde el diagrama del caudal dice que está la casa: dos
+        dibujos de la misma pantalla no pueden discrepar sobre *ahora*.
+
+    La hora en curso no tiene bucket cerrado, así que entre la última hora medida y
+    ahora la curva simplemente une los dos puntos. No se inventa nada en medio.
+    """
+    sol: dict[int, float] = {}
+    casa: dict[int, float] = {}
+    for iso, valores in (buckets or {}).items():
+        try:
+            momento = datetime.fromisoformat(iso)
+        except ValueError:
+            continue
+        if momento.date() != now.date() or momento.hour >= now.hour:
+            continue
+        pv = valores.get("pv_energy")
+        if pv is not None:
+            sol[momento.hour] = sol.get(momento.hour, 0.0) + max(pv, 0.0) * 1000.0
+        de_la_casa = _bucket_home_kwh(valores)
+        if de_la_casa is not None:
+            casa[momento.hour] = (
+                casa.get(momento.hour, 0.0) + max(de_la_casa, 0.0) * 1000.0
+            )
+    return {
+        "sol": sol,
+        "casa": casa,
+        "ahora": (max(power.get("pv") or 0.0, 0.0), max(casa_w, 0.0)),
+        "at": now,
+    }
+
+
 def curva_solar(
     settings: dict[str, Any],
     states: dict[str, Any],
@@ -1070,6 +1125,7 @@ def curva_solar(
     buckets: dict[str, dict[str, float]] | None,
     tz,
     now: datetime,
+    casa_w: float = 0.0,
 ) -> dict[str, Any] | None:
     """La curva de sol de la que salen **todas** las respuestas del día.
 
@@ -1118,7 +1174,15 @@ def curva_solar(
         puntos = [
             (t, w * factor if t.date() == now.date() else w) for t, w in puntos
         ]
-    return {"points": puntos, "bias": sesgo.payload(), "sky": cielo}
+    return {
+        "points": puntos,
+        "bias": sesgo.payload(),
+        "sky": cielo,
+        # Y lo que ya ha pasado, medido. La curva de previsión sigue entera —el plan
+        # simula horas futuras y la necesita— y esto se usa solo para **dibujar** el
+        # día: hasta ahora, lo que fue; desde ahora, lo que se espera.
+        "medido": lo_medido(buckets, power, casa_w, now),
+    }
 
 
 async def free_energy(
@@ -1145,7 +1209,11 @@ async def free_energy(
 
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     hueco = _hueco_bateria(settings, states)
-    today = series_mod.free_window(points, perfil.at, midnight, hueco)
+    # Solo hoy lleva lo medido: de mañana no hay nada que medir, y el eje de luz
+    # es la geometría del día, que no la cambia lo que haya hecho el tejado.
+    today = series_mod.free_window(
+        points, perfil.at, midnight, hueco, curva.get("medido")
+    )
     # Mañana **sin** descontar la batería: cómo estará mañana por la mañana no
     # se sabe, y suponerlo sería inventar. Así además `kwh` de hoy y de mañana
     # siguen siendo la misma magnitud y se pueden comparar en la nota.
@@ -1523,7 +1591,9 @@ async def build(
     # Una sola curva de sol para todo el payload. Los buckets entran aquí porque
     # es donde se compara lo previsto de hoy con lo producido de verdad: de ahí
     # sale el sesgo del tejado y también el cielo de hoy.
-    curva = curva_solar(settings, states, power, buckets, now.tzinfo, now)
+    curva = curva_solar(
+        settings, states, power, buckets, now.tzinfo, now, home_power
+    )
     # La ventana y el tiempo, a la vez: la ventana espera al perfil de la casa y
     # el tiempo a Home Assistant, y son esperas independientes. En serie, la más
     # lenta se suma a la otra en un endpoint que se pide cada veinte segundos.

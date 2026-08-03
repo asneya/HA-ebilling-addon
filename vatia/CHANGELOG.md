@@ -2,6 +2,70 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.51.0
+
+### La forma de hoy: lo que fue hasta ahora, lo previsto desde ahora
+
+De una pregunta que hacía falta: *«¿no debería la forma de hoy representar la
+realidad hasta el momento actual y la previsión desde el momento actual, a pesar de
+que el pasado ya ha pasado y lo conocemos?»*.
+
+Pues sí. La tarjeta dibujaba **previsión las veinticuatro horas**, también las que
+ya habían pasado y de las que hay medida. Es la misma clase de error que enseñar un
+cociente donde hay un contador — y el dato estaba ya en casa: los mismos `buckets`
+horarios que la tarjeta recibe para aprender el sesgo del tejado.
+
+Ahora el dibujo tiene dos mitades y ninguna finge ser la otra:
+
+- **Las horas cerradas**, con lo que de verdad dieron el sol y gastó la casa. Son
+  energía por tramo, así que su potencia media va colocada en el **centro** de la
+  hora, que es donde vive una media.
+- **Este instante**, de los sensores de potencia. Sirve para que la curva acabe
+  exactamente donde el diagrama del caudal dice que está la casa: dos dibujos de la
+  misma pantalla no pueden discrepar sobre *ahora*.
+- **Desde ahora**, la previsión, que es lo único que hay.
+
+### El trazo dice de dónde sale el número
+
+Continuo lo medido, a rayas lo previsto. Antes la raya significaba «la casa» y el
+continuo «el sol», así que no había manera de distinguir una medida de una
+predicción; ahora la raya significa **una sola cosa** y el sol y la casa se
+distinguen por color y grosor, que es lo que ya hacían las leyendas. La leyenda de
+«previsto» solo sale cuando hay las dos mitades: si todo es previsión, no distingue
+nada.
+
+Y el punto del pico desaparece cuando ya ha pasado. Sale de la curva de previsión,
+así que un pico pasado se dibujaría a la altura que se **predijo** encima de una
+línea que ahora enseña lo que **ocurrió**: dos alturas para el mismo instante. La
+etiqueta ya se callaba por eso; el punto seguía ahí.
+
+### Lo que a propósito no cambia
+
+`start`, `end`, `kwh` y los tramos de la ventana siguen saliendo de la curva de
+previsión —ya corregida con el tejado y con el cielo de hoy—. `kwh` es la magnitud
+con la que la nota de la tarjeta compara hoy con mañana, y mezclando medida y
+previsión dejaría de ser comparable. **El dibujo dice lo que ha pasado; el titular,
+lo que se espera del día.** Está escrito en el código y comprobado en el banco, no
+dejado a la suerte.
+
+### Banco
+
+- `tests/python/forma.py`, secciones 10-16: que las horas cerradas llevan su medida
+  y no la previsión, que la media va en el centro de la hora, que la curva acaba en
+  el instante con lo que marcan los sensores, y que los números de la ventana no se
+  mueven.
+- `tests/navegador/forma.js`, secciones 10-11: los cuatro trazos, cuál va continuo y
+  cuál a rayas, y la leyenda que solo sale cuando hay algo que distinguir.
+
+Con un fallo encontrado a mano y no por el banco, que conviene contar: los
+`buckets` vienen en tramos de **cinco minutos**, no uno por hora. La primera versión
+se quedaba con el último tramo de cada hora, así que las cifras salían **doce veces
+más pequeñas** y la mañana se dibujaba plana. Se vio comparando la salida de la
+aplicación de verdad con lo que marcaba el diagrama del caudal —26,7 W de casa donde
+había 320—. El banco pasaba porque le estaba dando un bucket por hora; ahora se le
+dan de cinco minutos, como los de verdad.
+
+
 ## 0.50.0
 
 ### La reserva de la batería, y un «Gratis» que no lo era

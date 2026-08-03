@@ -87,10 +87,17 @@
     /* El sol y la casa: dos curvas, y el excedente es el área de entre las dos.
        Un riel plano decía «de 11:40 a 17:20» y nada más; la forma dice a qué
        hora sobra de verdad, que es lo que se viene a decidir. */
+    /* El trazo dice **de dónde sale el número**: continuo lo que ya ha pasado y
+       se ha medido, a rayas lo que se espera. Antes la raya significaba «la casa»
+       y el continuo «el sol», así que no quedaba manera de distinguir la medida de
+       la predicción — y la mitad del dibujo era una predicción de horas que ya
+       habían pasado. Ahora la raya significa una sola cosa, y el sol y la casa se
+       distinguen por color y grosor, que es lo que hacen las dos leyendas. */
     .sol { fill: none; stroke: var(--s-solar); stroke-width: 1.75;
            stroke-linejoin: round; }
-    .casa { fill: none; stroke: var(--ink-3); stroke-width: 1.4;
-            stroke-dasharray: 3 3; opacity: .8; }
+    .sol.prev { stroke-dasharray: 4 3; opacity: .85; }
+    .casa { fill: none; stroke: var(--ink-3); stroke-width: 1.4; opacity: .8; }
+    .casa.prev { stroke-dasharray: 3 3; }
     .sobra { fill: url(#vw-grad); }
     /* El mejor momento del día, señalado: es la respuesta corta a «¿cuándo?». */
     .pico { position: absolute; width: 7px; height: 7px; border-radius: 999px;
@@ -112,8 +119,10 @@
     .leyenda span { display: inline-flex; align-items: center; gap: 5px; }
     .leyenda i { width: 12px; height: 2px; border-radius: 2px; flex: none; }
     .leyenda .l-sol { background: var(--s-solar); height: 2px; }
-    .leyenda .l-casa { background: var(--ink-3); height: 0;
-                       border-top: 1.5px dashed var(--ink-3); }
+    .leyenda .l-casa { background: var(--ink-3); height: 2px; opacity: .8; }
+    /* La muestra del trazo previsto: la misma raya que se dibuja arriba. */
+    .leyenda .l-prev { background: none; height: 0;
+                       border-top: 2px dashed var(--ink-3); }
     .leyenda .l-sobra { background: var(--free-to); height: 9px; border-radius: 3px; }
     .note { margin: 12px 0 0; padding: 13px 15px; border-radius: 16px;
             background: var(--node); border: 1px solid var(--hair);
@@ -341,8 +350,10 @@
         </div>
         <p class="leyenda">
           <span><i class="l-sobra"></i>Sobra</span>
-          <span><i class="l-sol"></i>Sol previsto</span>
+          <span><i class="l-sol"></i>Sol</span>
           <span><i class="l-casa"></i>Tu casa</span>
+          ${t.shape && t.shape.real_until
+            ? `<span><i class="l-prev"></i>previsto</span>` : ""}
         </p>
       </div>`;
     }
@@ -368,6 +379,26 @@
       const y = (w) => 96 - (Math.max(w, 0) / techo) * 92;
       const linea = (serie) => serie
         .map((w, i) => `${i ? "L" : "M"}${x(i).toFixed(2)},${y(w).toFixed(2)}`).join("");
+      /* Lo medido y lo previsto son la misma línea con dos significados, así que
+         se dibujan con dos trazos: continuo lo que pasó, discontinuo lo que se
+         espera. Los dos tramos comparten el punto de la unión —de ahí el `+1`—
+         porque si no quedaría un hueco justo en «ahora».
+
+         `real_until` es null cuando todo es previsión: entonces se dibuja una
+         sola línea discontinua, que es lo honesto. */
+      const corteReal = s.real_until
+        ? s.t.findIndex((iso) => new Date(iso).getTime()
+            >= new Date(s.real_until).getTime())
+        : -1;
+      const tramos = (serie) => {
+        if (corteReal < 1) return { fue: "", sera: linea(serie) };
+        return {
+          fue: linea(serie.slice(0, corteReal + 1)),
+          sera: serie.slice(corteReal)
+            .map((w, i) => `${i ? "L" : "M"}${x(i + corteReal).toFixed(2)},${
+              y(w).toFixed(2)}`).join(""),
+        };
+      };
 
       /* El área de excedente. Se recorre el día y se acumula un polígono por
          tramo en el que el sol va por encima de la casa; los cortes de entrada
@@ -422,7 +453,13 @@
          lo que no sea un trazo: el punto saldría ovalado y la hora, ancha. Los
          trazos se salvan con `vector-effect`; un círculo y un texto, no. */
       let pico = "";
-      if (t.peak_at && t.peak_w > 0) {
+      // Y solo si aún no ha pasado. El pico sale de la curva de **previsión**, así
+      // que un pico ya pasado se dibujaría a la altura que se predijo encima de una
+      // línea que ahora enseña lo que de verdad ocurrió: dos alturas distintas para
+      // el mismo instante. Además de que recomendar una hora que ya fue no sirve —la
+      // etiqueta ya se callaba por eso (`_cuando`), pero el punto seguía ahí.
+      const pasado = t.peak_at && new Date(t.peak_at).getTime() < Date.now();
+      if (t.peak_at && t.peak_w > 0 && !pasado) {
         const cuando = new Date(t.peak_at).getTime();
         const px = at(cuando) * 100;
         const cerca = s.t.reduce((mejor, iso, i) =>
@@ -443,9 +480,12 @@
             transform:${empuje}">${esc(hhmm(t.peak_at))}</span>`;
       }
 
+      const sol = tramos(s.sol), casa = tramos(s.casa);
       return `<div class="plot">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img"
-             aria-label="Previsión de sol y consumo típico de la casa a lo largo del día">
+             aria-label="${esc(s.real_until
+               ? "Lo que ha dado el sol y ha gastado la casa hasta ahora, y lo previsto para el resto del día"
+               : "Previsión de sol y consumo típico de la casa a lo largo del día")}">
           <defs>
             <linearGradient id="vw-grad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="var(--free-to)" stop-opacity=".55"/>
@@ -453,8 +493,10 @@
             </linearGradient>
           </defs>
           ${relleno}
-          <path class="casa" d="${linea(s.casa)}" vector-effect="non-scaling-stroke"/>
-          <path class="sol" d="${linea(s.sol)}" vector-effect="non-scaling-stroke"/>
+          ${casa.fue ? `<path class="casa" d="${casa.fue}" vector-effect="non-scaling-stroke"/>` : ""}
+          ${sol.fue ? `<path class="sol" d="${sol.fue}" vector-effect="non-scaling-stroke"/>` : ""}
+          <path class="casa prev" d="${casa.sera}" vector-effect="non-scaling-stroke"/>
+          <path class="sol prev" d="${sol.sera}" vector-effect="non-scaling-stroke"/>
           ${ahora != null ? `<line class="now" x1="${(ahora * 100).toFixed(2)}" y1="4"
              x2="${(ahora * 100).toFixed(2)}" y2="96" vector-effect="non-scaling-stroke"/>` : ""}
         </svg>
