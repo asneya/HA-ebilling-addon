@@ -187,7 +187,7 @@ En **Ajustes** pulsa **Buscar entidades** y asigna:
 | Contadores de energía (kWh) | solar, importada, exportada, carga, descarga y **casa** (opcional) |
 | Batería (opcional) | **reserva mínima (%)**: el porcentaje por debajo del cual tu inversor no descarga. Un Sungrow lo publica en `sensor.battery_min_soc` |
 | Meteorología | **dos sensores independientes**: uno con la **condición** (acepta los estados de HA como `sunny`/`partlycloudy`/`rainy`, o texto en castellano como «Parcialmente nuboso») y otro con la **temperatura exterior** |
-| Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar** para dibujar la previsión de generación |
+| Previsión solar (opcional) | sensor de **Solcast** o **Forecast.Solar**. Admite **varios separados por comas**: muchas integraciones publican hoy y mañana en dos sensores distintos, y sin el de mañana la ventana no puede comparar los dos días |
 | El tiempo hora a hora (opcional) | una entidad **`weather.*`** (AEMET, Met.no, OpenWeatherMap…) para la tarjeta del tiempo de la Home |
 
 La **reserva mínima** importa más de lo que parece. Ningún inversor vacía la
@@ -302,9 +302,12 @@ Mientras está abierta, la tarjeta dice **lo que queda por sobrar de aquí al ci
 > **Hasta las 19:32 te sobran 8,4 kWh.**
 > Gastarlos te ahorra 1,71 €; si no, se van a la red por 0,42 €.
 
-Los kWh son los **gastables**: si a la batería le cabe algo, se carga con lo que
-sobra antes de exportar, así que ese trozo no se puede gastar en otra cosa y se dice
-aparte al pie. Los euros salen de los precios de las horas que quedan (no del precio
+**«Sobra» es lo que no consume la casa y tampoco hace falta para llenar la batería
+al 100 %.** Después de servir a la casa, la prioridad del inversor es cargar, así
+que ese trozo no se puede gastar en otra cosa: se descuenta y se dice aparte al pie,
+con la hora a partir de la cual empieza a sobrar de verdad («no sobra nada que gastar
+hasta las 12:40»). El hueco de la batería sale de su capacidad y del estado de carga
+de **ahora**, así que la cifra crece a medida que la batería se llena. Los euros salen de los precios de las horas que quedan (no del precio
 de este minuto, que la ventana puede cruzar un cambio de periodo) y de la
 compensación de excedentes de tu tarifa. **Sin tarifa elegida** en Ajustes no se
 inventan: la tarjeta habla solo de energía.
@@ -323,6 +326,17 @@ Cada fila lleva una **barra segmentada del origen** de su energía (sol, baterí
 red, con los mismos colores que el resumen del día) y, a la derecha, **lo que
 cuesta** en euros o «Gratis» si no hay que comprar nada. Barra e importe salen del
 mismo reparto: si la barra no tiene rojo, el importe es cero.
+
+Al lado del nombre, un **glifo dice de qué va la fila** —pasa el dedo o el ratón por
+encima y lo pone en palabras—, y un **punto verde que late** sobre el icono señala lo
+que está funcionando ahora mismo:
+
+| | Qué dice |
+|---|---|
+| 🕐 reloj | hay una hora que elegir (movible) |
+| 🏠 casa | la hora la manda la casa, no el sol (fijo) |
+| ⚡ rayo | siempre encendido (continuo) |
+| · punto verde | en marcha ahora mismo |
 
 Lo que cambia de una fila a otra es **la pregunta que contesta**, y eso depende de
 la forma de uso:

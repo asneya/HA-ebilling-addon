@@ -265,12 +265,18 @@ function dur(horas) {
 }
 
 /* La hora de un ISO, y si es de mañana se dice: «a las 03:00» a secas, cuando
-   son las once de la noche, se lee como dentro de cuatro minutos. */
-function cuando(iso) {
+   son las once de la noche, se lee como dentro de cuatro minutos.
+
+   `corto` deja el «a las» fuera. En las filas de los aparatos el renglón se iba a
+   tres líneas en un móvil —«2 h · mejor mañana a las 08:55, 100 % con sol»— y de
+   las tres palabras que se pueden quitar sin perder nada, «a las» es la primera:
+   delante de un reloj de cuatro cifras no añade sentido. */
+function cuando(iso, corto) {
   const t = new Date(iso);
   const hoy = new Date();
   const manana = t.getDate() !== hoy.getDate();
   const hhmm = t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+  if (corto) return manana ? `mañana ${hhmm}` : hhmm;
   return manana ? `mañana a las ${hhmm}` : `a las ${hhmm}`;
 }
 
@@ -311,6 +317,30 @@ function barraOrigen(o, pct) {
     relleno}>${trozos}</span></span>`;
 }
 
+/* La forma de uso, en un glifo en vez de en un renglón.
+
+   De una queja: *«tiene mucha información larga y pequeña. Quedaría mejor
+   reemplazar algunos mensajes por iconos»*. Y tenía razón: «siempre encendido» y
+   «en marcha» son etiquetas, no datos, y ocupaban lo mismo que las cifras.
+
+   Los glifos son los del sistema de diseño —no se inventa ninguno: el sprite se
+   extrae del propio documento de diseño— y cada uno dice **la pregunta** de su
+   fila, que es lo que de verdad distingue a los tres:
+
+     · el reloj, en los que hay una hora que elegir;
+     · la casa, en los que la hora la manda la casa y no el sol —el aire lo quieres
+       cuando hace calor—, que es exactamente por lo que «fijo» no se detecta;
+     · y el rayo, en los que están enchufados y no se apagan nunca.
+
+   «En marcha» no lleva glifo sino un **punto que late** sobre el icono del aparato:
+   es el mismo lenguaje que la pastilla de «ahora mismo» de la cabecera, se ve sin
+   leer y funciona encima de cualquiera de las tres formas. */
+const INSIGNIA = {
+  movible: ["reloj", "Puedes elegir la hora"],
+  fijo: ["casa", "Lo pones cuando hace falta, no cuando pica el sol"],
+  continuo: ["potencia", "Siempre encendido"],
+};
+
 /* Una tarjeta para los aparatos, con una fila por pregunta:
 
      · movible  — «¿a qué hora?». Barra del origen si se pone ahora, lo que
@@ -350,13 +380,16 @@ function renderPlan(plan) {
     let sub, pie;
     if (r.running) {
       // Lo medido delante: lo que lleva puesto sale del reloj, no de una mediana.
+      // «En marcha» ya no se escribe: lo dice el punto que late en su icono, que se
+      // ve de un vistazo y no gasta renglón. De una queja: *«tiene mucha información
+      // larga y pequeña»*.
       const p = r.running;
-      sub = `en marcha · lleva ${dur(p.elapsed_h)}`;
+      sub = `lleva ${dur(p.elapsed_h)}`;
       // Y lo único de esta fila que un medidor de enchufe no sabe decir: de dónde
       // va a salir lo que le queda. En «% con sol» —la misma cifra y la misma
       // cuenta que las horas que propone el plan, hecha en el backend— y solo
       // cuando hay una duración en la que confiar.
-      if (r.tail) sub += ` · lo que queda, ${r.tail.sun_pct} % con sol`;
+      if (r.tail) sub += ` · queda ${r.tail.sun_pct} % con sol`;
       // Y detrás lo estimado, en este orden de preferencia: la hora de fin si sus
       // ciclos se parecen lo bastante para prometerla; si no, lo que sí se sabe,
       // que es entre cuánto y cuánto suele durar; y si se ha pasado de lo habitual,
@@ -366,18 +399,19 @@ function renderPlan(plan) {
         : p.range_h ? `suele durar ${dur(p.range_h[0])}–${dur(p.range_h[1])}`
         : "aún aprendiendo su ciclo";
     } else if (r.kind === "continuo") {
+      // «Siempre encendido» tampoco se escribe: es la insignia de la fila.
       const t = r.today || {};
-      sub = `${fmtNum.format(t.kwh || 0)} kWh hoy · siempre encendido`;
+      sub = `${fmtNum.format(t.kwh || 0)} kWh hoy`;
       pie = v.sub || "";
     } else if (r.kind === "fijo") {
-      sub = `${dur(r.hours)} · ahora mismo ${r.now.sun_pct} % con sol`;
+      sub = `${dur(r.hours)} · ahora mismo · ${r.now.sun_pct} % con sol`;
       pie = v.sub || "";
     } else {
       // **El porcentaje es del momento del que se habla.** Con `worth_waiting` en
       // falso la fila decía «ahora mismo» y enseñaba el sol de la mejor hora.
       sub = r.worth_waiting
-        ? `${dur(r.hours)} · mejor ${cuando(r.best.at)}, ${r.best.sun_pct} % con sol`
-        : `${dur(r.hours)} · ahora mismo ${r.now.sun_pct} % con sol`;
+        ? `${dur(r.hours)} · mejor ${cuando(r.best.at, true)} · ${r.best.sun_pct} % con sol`
+        : `${dur(r.hours)} · ahora mismo · ${r.now.sun_pct} % con sol`;
       pie = r.saving_eur >= 0.01 ? `ahorras ${fmtEUR.format(r.saving_eur)} esperando`
         : r.worth_waiting ? `esperando pasa a ${r.best.sun_pct} % con sol`
         : r.best && r.best.at > r.now.at ? "esperar apenas cambia nada"
@@ -390,14 +424,18 @@ function renderPlan(plan) {
     // barra sale entonces como la de los demás, llena, y no fingiendo un carril.
     const barra = r.running ? barraOrigen(r.so_far, r.running.pct)
       : barraOrigen(r.kind === "continuo" ? r.today : r.now);
+    const [glifo, queEs] = INSIGNIA[r.kind] || [];
     return `
       <div class="ad-row ap-fila" data-kind="${esc(r.kind)}"${
         r.running ? ' data-running="1"' : ""}>
         <span class="ad-chip" style="--ap:${esc(r.color)}">
           <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
+          ${r.running ? '<i class="ap-late" title="En marcha"></i>' : ""}
         </span>
         <span class="ad-txt">
-          <b>${esc(r.name)}</b>
+          <b>${esc(r.name)}${glifo ? `<svg class="ap-insignia i" role="img"
+            aria-label="${esc(queEs)}"><title>${esc(queEs)}</title><use
+            href="#i-${glifo}"/></svg>` : ""}</b>
           <small>${esc(sub)}</small>
           ${barra}
         </span>
@@ -440,13 +478,14 @@ function renderPlan(plan) {
   }
   // Y los aparatos cuya forma de uso ha decidido la aplicación, para que se pueda
   // corregir. Detectar y callarlo es lo que hace que una fila rara parezca un fallo.
+  // Recortada a lo que hay que saber: quién y dónde se cambia. Lo que antes
+  // explicaba la frase —«siempre encendido», «no se le propone hora»— lo dice ahora
+  // la insignia de la fila, con su rótulo al pasar por encima. Era el renglón que
+  // peor pagaba el sitio que ocupaba.
   const adivinados = rows.filter((r) => r.kind_auto && r.kind === "continuo");
   if (adivinados.length) {
-    notas.push(`${adivinados.map((r) => esc(r.name)).join(", ")} ${
-      adivinados.length === 1 ? "está" : "están"} como <b>siempre encendido</b>
-      porque así lo dice su histórico: no se ${
-      adivinados.length === 1 ? "le" : "les"} propone hora porque no hay ninguna que
-      elegir. Se cambia en Ajustes → Electrodomésticos.`);
+    notas.push(`La forma de uso de ${adivinados.map((r) => esc(r.name)).join(", ")} la
+      ha deducido Vatia de su histórico. Se cambia en Ajustes → Electrodomésticos.`);
   }
   if (rows.length && rows.some((r) => r.priced === false)) {
     notas.push(`Sin tu tarifa elegida en Ajustes esto va por lo que no tendrías

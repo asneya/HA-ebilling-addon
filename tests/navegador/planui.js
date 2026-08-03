@@ -21,7 +21,8 @@
  *   9. un aparato de siempre encendido no trae hora, trae lo que lleva hoy
  *  10. y uno en marcha dice por dónde va, sin proponerle una hora ya pasada
  *  11. la barra del progreso es la misma del origen, y puede pasarse
- *  12. sin errores de consola
+ *  12. la forma de uso va en un glifo, y «en marcha» en un punto que late
+ *  13. sin errores de consola
  */
 const { abrirNavegador, base } = require("./camino");
 const BASE = base("http://127.0.0.1:8402/");
@@ -76,6 +77,11 @@ async function abrir(plan) {
       // Y hasta dónde llega el relleno, que en un aparato en marcha es el
       // progreso del ciclo: la barra del origen y la del progreso son la misma.
       relleno: f.querySelector(".ap-barra.ap-progreso > span")?.style.width || null,
+      // La insignia de la forma de uso y el punto de «en marcha», que sustituyen
+      // a dos renglones de texto.
+      insignia: f.querySelector(".ap-insignia use")?.getAttribute("href") || null,
+      rotulo: f.querySelector(".ap-insignia title")?.textContent || null,
+      late: !!f.querySelector(".ap-late"),
       sub: f.querySelector(".ad-txt small")?.textContent.trim(),
       valor: f.querySelector(".ad-verdict b")?.textContent.trim(),
       porque: f.querySelector(".ad-verdict small")?.textContent.trim(),
@@ -183,11 +189,13 @@ let navegador;
     today: { kwh: 0.67, sun_kwh: 0.31, battery_kwh: 0.3, grid_kwh: 0.06, eur: 0.01 },
     verdict: { kind: "parcial", value: 0.01, sub: "46 % lo pone el sol" },
   }] });
-  ok(/0,67 kWh hoy/.test(v.filas[0].sub) && /siempre encendido/.test(v.filas[0].sub),
+  // «Siempre encendido» ya no es un renglón: es la insignia de la fila (§12).
+  ok(/0,67 kWh hoy/.test(v.filas[0].sub),
     `dice lo que lleva hoy, no una hora («${v.filas[0].sub}»)`);
   ok(!/mejor/.test(v.filas[0].sub), "y no propone ninguna hora");
   ok(v.filas[0].barra.length === 3, "con su barra del origen igual que los demás");
-  ok(/siempre encendido/.test(v.nota), `y se dice que lo ha decidido la app («${v.nota}»)`);
+  ok(/deducido Vatia/.test(v.nota) && /Ajustes → Electrodomésticos/.test(v.nota),
+    `y se dice que lo ha decidido la app, y dónde se cambia («${v.nota}»)`);
 
   console.log("\n10 · un aparato en marcha");
   // La lavadora puesta hace 40 minutos, de un ciclo de 1 h 30 que siempre dura lo
@@ -206,14 +214,15 @@ let navegador;
   });
   v = await abrir({ battery: null, rows: [enMarcha({})] });
   ok(v.filas[0].marcha, "la fila se sabe en marcha");
-  ok(/en marcha/.test(v.filas[0].sub) && /lleva 40 min/.test(v.filas[0].sub),
+  // Sin escribir «en marcha»: eso lo dice el punto que late sobre su icono (§12).
+  ok(/lleva 40 min/.test(v.filas[0].sub),
     `dice lo que lleva puesto, que es lo medido («${v.filas[0].sub}»)`);
   // La hora sale en la zona del navegador, que aquí es UTC: las 11:50 de Madrid.
   ok(/~termina a las 09:50/.test(v.filas[0].porque),
     `y la hora de fin, que es el número accionable («${v.filas[0].porque}»)`);
   ok(!/mejor/.test(v.filas[0].sub) && !/mejor/.test(v.filas[0].porque),
     "sin proponer una hora óptima de algo que ya está puesto");
-  ok(/lo que queda, 100 % con sol/.test(v.filas[0].sub),
+  ok(/queda 100 % con sol/.test(v.filas[0].sub),
     "y de dónde va a salir lo que le queda, que es lo que nadie más dice");
   // Con \s, que `Intl` separa el € con espacio duro.
   ok(/^0,02\s€$/.test(v.filas[0].valor),
@@ -231,7 +240,7 @@ let navegador;
   ok(/suele durar 55 min–2 h 25 min/.test(v.filas[0].porque),
     `una lavadora con varios programas dice el recorrido («${v.filas[0].porque}»)`);
   ok(!/termina/.test(v.filas[0].porque), "y no una hora de fin que no se sostiene");
-  ok(!/lo que queda/.test(v.filas[0].sub),
+  ok(!/queda \d+ % con sol/.test(v.filas[0].sub),
     "ni de dónde saldrá una cola cuyo final no se sabe");
 
   console.log("\n11 · la barra del progreso");
@@ -263,6 +272,39 @@ let navegador;
     "sin ciclo aprendido no se dibuja un progreso inventado");
   ok(/aprendiendo su ciclo/.test(v.filas[0].porque),
     `y se dice que aún se está aprendiendo («${v.filas[0].porque}»)`);
+
+  console.log("\n12 · la forma de uso, en un glifo");
+  // De una queja: *«tiene mucha información larga y pequeña. Quedaría mejor
+  // reemplazar algunos mensajes por iconos»*. «Siempre encendido» y «en marcha» eran
+  // etiquetas ocupando el sitio de los datos.
+  v = await abrir({ battery: null, rows: [
+    fila({ worth_waiting: false, saving_eur: 0 }),
+    { ...fila({}), id: "aire", name: "Aire", kind: "fijo", best: null,
+      saving_eur: null, worth_waiting: false },
+    { id: "nev", name: "Nevera", icon: "potencia", color: "#08f",
+      kind: "continuo", kind_auto: true,
+      today: { kwh: 0.67, sun_kwh: 0.31, battery_kwh: 0.3, grid_kwh: 0.06, eur: 0.01 },
+      verdict: { kind: "parcial", value: 0.01, sub: "46 % lo pone el sol" } },
+  ] });
+  const [mov, fij, con] = v.filas;
+  ok(mov.insignia === "#i-reloj" && /elegir la hora/.test(mov.rotulo),
+    `el movible lleva un reloj, que es la pregunta de su fila («${mov.rotulo}»)`);
+  ok(fij.insignia === "#i-casa" && /no cuando pica el sol/.test(fij.rotulo),
+    `el fijo, la casa: la hora la manda la casa («${fij.rotulo}»)`);
+  ok(con.insignia === "#i-potencia" && /Siempre encendido/.test(con.rotulo),
+    `y el continuo, el rayo («${con.rotulo}»)`);
+  ok(!/siempre encendido/i.test(con.sub),
+    `y ya no se escribe en el renglón («${con.sub}»)`);
+  ok(v.filas.every((f) => !f.late), "sin nada en marcha, ningún punto");
+  ok(!/a las \d\d:\d\d/.test(mov.sub) || /mejor \d\d:\d\d|mejor mañana \d\d:\d\d/.test(mov.sub),
+    `y la hora va sin «a las», que se iba a tres líneas («${mov.sub}»)`);
+
+  v = await abrir({ battery: null, rows: [enMarcha({})] });
+  ok(v.filas[0].late, "en marcha, el punto que late sobre su icono");
+  ok(!/en marcha/i.test(v.filas[0].sub),
+    `y tampoco se escribe («${v.filas[0].sub}»)`);
+  ok(v.filas[0].insignia === "#i-reloj",
+    "sigue siendo un movible: la insignia no cambia por estar puesto");
 
   await (await navegador).close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

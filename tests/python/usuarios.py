@@ -14,6 +14,7 @@ distinto componente sin pisarse. Todo lo demás sigue siendo de la instalación.
   8. la copia de seguridad se lleva las preferencias de todos
   9. restaurar deja los valores compartidos donde se ven
  10. un cajón que se vacía no queda como basura en el fichero
+ 11. y el nombre llega con sus tildes, no como «VÃ­ctor»
 """
 import json
 import os
@@ -149,6 +150,31 @@ ajustes(nuevo)
 ficha = (fichero().get("users") or {}).get(nuevo) or {}
 ok(bool(ficha), "entrar deja huella, que es lo que lista la sección de usuarios")
 ok(ficha.get("role") == "viewer", f"y se entra sin permisos ({ficha.get('role')})")
+
+print("\n11 · el nombre con sus tildes")
+# Una cabecera HTTP es latin-1 por norma (RFC 7230) y Home Assistant manda el
+# nombre en UTF-8, así que «Víctor» llegaba leído byte a byte y se enseñaba
+# **«VÃ­ctor»**. Se manda aquí tal cual lo manda Ingress —los bytes UTF-8 de la í
+# metidos en una cabecera— y se comprueba que la aplicación lo recompone.
+VICTOR = "03cc8877665544332211aabbccddeeff"
+req = urllib.request.Request(BASE + "/api/config")
+req.add_header("X-Remote-User-Id", VICTOR)
+# `latin-1` sobre los bytes UTF-8 es exactamente lo que hace el proxy de Ingress.
+req.add_header("X-Remote-User-Display-Name", "Víctor".encode("utf-8").decode("latin-1"))
+with urllib.request.urlopen(req, timeout=20) as r:
+    quien = json.load(r)["user"]
+ok(quien["name"] == "Víctor", f"se recompone la tilde («{quien['name']}»)")
+ok("Ã" not in quien["name"], "y no se cuela el destrozo")
+# Y en el fichero, que es de donde lo lee la lista de Ajustes.
+guardado = json.load(open(CONFIG))
+ok((guardado.get("users") or {}).get(VICTOR, {}).get("name") == "Víctor",
+   "y se guarda bien, que es lo que enseña la lista de usuarios")
+# Un nombre en ASCII no se toca, y uno que ya llegara bien tampoco.
+req = urllib.request.Request(BASE + "/api/config")
+req.add_header("X-Remote-User-Id", ANA)
+req.add_header("X-Remote-User-Display-Name", "Ana")
+with urllib.request.urlopen(req, timeout=20) as r:
+    ok(json.load(r)["user"]["name"] == "Ana", "un nombre sin tildes sale igual")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

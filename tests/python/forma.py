@@ -233,6 +233,28 @@ ok(conbat["left_spendable_kwh"] < mitad["left_spendable_kwh"],
 ok(w["left_kwh"] is None and w["left_spendable_kwh"] is None,
    "y sin decir qué hora es no se devuelve un «resto» inventado")
 
+print("\n22-24 · desde cuándo sobra algo que gastar")
+# La batería no se lleva su parte a prorrata: después de servir a la casa el
+# inversor la lleva al 100 % cuanto antes, así que las primeras horas de excedente
+# van enteras ahí. El total ya lo descontaba; la hora es lo que faltaba.
+antes = S.free_window(PUNTOS, casa, DIA, bateria_wh=6000.0, ahora=abre)
+libre = datetime.fromisoformat(antes["spendable_from"])
+ok(abre < libre < cierra,
+   f"la hora cae dentro de la ventana ({libre:%H:%M} entre {abre:%H:%M} y {cierra:%H:%M})")
+# Comprobado contra la propia integral: hasta esa hora tiene que haber sobrado
+# exactamente el hueco de la batería, ni más ni menos.
+hasta = S.free_window(PUNTOS, casa, DIA, ahora=abre)["left_kwh"] \
+    - S.free_window(PUNTOS, casa, DIA, ahora=libre)["left_kwh"]
+ok(abs(hasta - 6.0) < 0.05,
+   f"y hasta ella ha sobrado justo el hueco de la batería ({hasta:.2f} de 6,0 kWh)")
+mas = S.free_window(PUNTOS, casa, DIA, bateria_wh=12000.0, ahora=abre)
+ok(datetime.fromisoformat(mas["spendable_from"]) > libre,
+   "con más hueco que llenar, se tarda más en empezar a sobrar")
+ok(S.free_window(PUNTOS, casa, DIA, bateria_wh=0.0, ahora=abre)["spendable_from"] is None,
+   "con la batería llena no hay que esperar a nada")
+ok(S.free_window(PUNTOS, casa, DIA, bateria_wh=None, ahora=abre)["spendable_from"] is None,
+   "y sin saber cómo está la batería no se dice una hora")
+
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")
 sys.exit(1 if fallos else 0)

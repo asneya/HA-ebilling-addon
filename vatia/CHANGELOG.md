@@ -2,6 +2,92 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.55.0
+
+### «VÃ­ctor»
+
+Una cabecera HTTP es **latin-1** por norma (RFC 7230), y Home Assistant manda el
+nombre de la persona en UTF-8. Así que la í de «Víctor» —los bytes `C3 AD`— llegaba
+leída como dos caracteres latin-1 y se enseñaba **«VÃ­ctor»**, tanto en la cabecera
+de Ajustes como en la lista de usuarios.
+
+Se rehace el camino: a bytes con latin-1 y a texto con UTF-8, que es lo que eran. Y
+es seguro porque falla justo cuando no toca —un nombre en ASCII sale igual, uno que
+de verdad viniera en latin-1 no es UTF-8 válido, y uno que ya llegara bien no cabe en
+latin-1—, así que en los tres casos se devuelve lo que había. El nombre guardado se
+corrige solo en la siguiente visita.
+
+### «Siempre encendido» y «en marcha» eran etiquetas ocupando el sitio de los datos
+
+De una queja: *«la nueva sección de "Tus Aparatos" tiene mucha información larga y
+pequeña. Quedaría mejor reemplazar algunos mensajes por iconos»*.
+
+Ahora, al lado del nombre, **un glifo dice de qué va la fila** —y lo pone en palabras
+al pasar por encima—, con los iconos del propio sistema de diseño y eligiendo en cada
+caso **la pregunta** de esa fila, que es lo que de verdad las distingue:
+
+| | Qué dice |
+|---|---|
+| reloj | hay una hora que elegir (movible) |
+| casa | la hora la manda la casa, no el sol (fijo) |
+| rayo | siempre encendido (continuo) |
+
+Y «en marcha» pasa a ser un **punto verde que late** sobre el icono del aparato: el
+mismo lenguaje que la pastilla de la cabecera, se ve sin leer y funciona encima de
+cualquiera de las tres formas.
+
+Con eso se caen dos renglones y se recorta el tercero: la nota de los continuos
+detectados pasa de tres líneas a una («la forma de uso de Nevera la ha deducido Vatia
+de su histórico»), porque lo que explicaba ya lo dice la insignia. Y la hora propuesta
+pierde el «a las», que delante de un reloj de cuatro cifras no añade nada y era lo que
+mandaba el renglón a una tercera línea.
+
+### «Mañana no se espera excedente», todos los días
+
+De una queja: *«siempre aparece en la sección de Hoy un mensaje de que mañana no habrá
+excedentes que no tengo idea de a qué se refiere porque todos los días se exporta
+algo»*. Tenía razón, y no era una previsión: era un hueco.
+
+Sin datos de mañana la tarjeta decía lo mismo que cuando sí los hay y no sobra, y con
+un sensor de previsión que solo publica el día en curso eso salía **cada día**. Ahora
+son dos cosas distintas:
+
+> De **mañana todavía no hay previsión**. Si tu integración publica el día siguiente
+> en otro sensor, puedes poner los dos separados por comas en Ajustes → Previsión
+> solar.
+
+Y de paso se leen también los atributos `detailedForecastTomorrow` y compañía, que es
+como algunas integraciones de Solcast publican el día siguiente **en el mismo sensor**;
+con ese montaje la aplicación no tenía ni un punto de mañana.
+
+### Qué es «sobra», y desde cuándo
+
+De una duda: *«cuando dices que sobran, espero que estés contemplando que sobra todo
+aquello que no consume la casa y que excede el 100 % de la batería, porque la prioridad
+después de servir a la casa es llevar la batería a ese 100 % antes de que se ponga el
+sol»*.
+
+Sí: se descuenta el hueco que le queda a la batería hasta el 100 %, calculado con su
+capacidad y el estado de carga de ahora. Lo que **no** se decía es *cuándo*: el total
+estaba bien, pero restarlo del día entero deja creer que se puede gastar un poco a
+todas horas, cuando en realidad las primeras horas de excedente van enteras a cargar.
+Ahora se dice:
+
+> No sobra nada que gastar **hasta las 12:40**: hasta esa hora el sol que pasa de la
+> casa va entero a la batería.
+
+La hora sale de recorrer la curva dando prioridad a la batería y buscando el instante
+en que se llena, no de una regla de tres.
+
+### Y un error de cálculo que encontró el banco al comprobarlo
+
+Midiendo lo anterior salió que la integral del excedente ponía **el umbral** en los
+extremos del tramo que se le pedía. En un corte de la ventana eso es correcto —ahí la
+curva vale exactamente el umbral—, pero en un instante cualquiera de en medio fuerza
+excedente cero justo ahí y pierde medio paso de área: «lo que queda de ahora al cierre»
+salía **0,8 kWh corto** de lo que decía la propia integral. Los extremos van ahora con
+la previsión interpolada.
+
 ## 0.54.0
 
 Cuatro defectos de una lista, y ninguno estaba donde parecía.

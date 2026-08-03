@@ -294,6 +294,29 @@ async def get_config(request: Request):
     }
 
 
+def _de_cabecera(texto: str) -> str:
+    """Deshace el destrozo de las tildes que traen las cabeceras HTTP.
+
+    Una cabecera HTTP es, por norma (RFC 7230), **latin-1**, así que el servidor
+    la decodifica con ese juego. Home Assistant manda el nombre de la persona en
+    UTF-8, y entonces «Víctor» —cuya í son los dos bytes `C3 AD`— llega leído como
+    dos caracteres latin-1 y se enseña **«VÃ­ctor»**.
+
+    El arreglo es rehacer el camino: volver a bytes con latin-1 y leerlos con
+    UTF-8, que es lo que eran. Y es seguro precisamente porque falla cuando no
+    toca: un nombre en ASCII sale igual; uno que de verdad viniera en latin-1 no
+    es UTF-8 válido y salta `UnicodeDecodeError`; y uno que ya llegara bien tiene
+    caracteres que no caben en latin-1 y salta `UnicodeEncodeError`. En los tres
+    casos se devuelve lo que había.
+    """
+    if not texto or texto.isascii():
+        return texto
+    try:
+        return texto.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return texto
+
+
 def _nombre_usuario(request: Request) -> str:
     """Cómo llamar a quien mira. El nombre es un adorno; el id es lo que manda.
 
@@ -301,8 +324,8 @@ def _nombre_usuario(request: Request) -> str:
     de la cuenta, pero ninguno de los dos está garantizado: con un proveedor de
     autenticación que no sea el de Home Assistant puede llegar solo el id.
     """
-    return (request.headers.get("X-Remote-User-Display-Name")
-            or request.headers.get("X-Remote-User-Name") or "")
+    return _de_cabecera(request.headers.get("X-Remote-User-Display-Name")
+                        or request.headers.get("X-Remote-User-Name") or "")
 
 
 @app.put("/api/settings")
