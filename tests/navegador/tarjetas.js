@@ -17,6 +17,7 @@
  *  10. ocultarlo todo avisa en vez de dejar la pantalla en blanco
  *  11. cabe a 320 px
  *  12. y el catálogo llama a cada tarjeta como se llama de verdad en la Home
+ *  13. el hueco entre tarjetas es el mismo en cualquier orden
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = base("http://127.0.0.1:8404/");
@@ -251,6 +252,61 @@ const catalogo = (p) => p.evaluate(() =>
   });
   ok(nombres.every((x) => x.claim && x.claim.length > 12 && x.name),
     "y ninguna se queda sin nombre ni sin lo que hace");
+
+  console.log("\n13 · el hueco entre tarjetas, en cualquier orden");
+  // De una queja, con la tarjeta del cierre puesta arriba: *«parece que le falta el
+  // margen inferior con la siguiente tarjeta»*. Y le faltaba: la separación la ponía
+  // el `margin-bottom` de `.panel`, y la del cierre es la única que **no** es un
+  // `.panel` —lleva su propio fondo de degradado—, así que nunca tuvo hueco debajo.
+  // Mientras estaba la última no se notaba.
+  //
+  // Se mide de verdad, del borde de una al borde de la siguiente y **en el orden en
+  // que se ven**: un margen del hijo se cuenta en el orden del documento, y aquí las
+  // tarjetas se reordenan con `order`, así que leer el DOM en orden no valdría.
+  const huecos = (pag) => pag.evaluate(() => {
+    const cont = document.querySelector("#home-cards");
+    const vistas = [...cont.children]
+      .filter((el) => !el.classList.contains("card-off")
+        && el.getBoundingClientRect().height > 4
+        && getComputedStyle(el).display !== "none")
+      .map((el) => ({ id: el.dataset.card || el.id, r: el.getBoundingClientRect() }))
+      .sort((a, b) => a.r.top - b.r.top);
+    return vistas.slice(1).map((v, i) => ({
+      de: vistas[i].id, a: v.id,
+      hueco: Math.round((v.r.top - vistas[i].r.bottom) * 10) / 10,
+    }));
+  });
+  await p.evaluate((todas) => fetch("api/settings", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ home_order: todas, home_hidden: [] }),
+  }), TODAS);
+  await p.goto(BASE);
+  await p.waitForFunction(() => !document.querySelector("#boot"), { timeout: 25000 });
+  await p.waitForTimeout(1500);
+  // La tarjeta del cierre solo sale tras la puesta de sol: se fuerza para poder
+  // medirla a cualquier hora, que es cuando pasa el banco.
+  await p.evaluate(() => document.querySelector("#close-panel")?.classList.remove("hidden"));
+  await p.waitForTimeout(300);
+  let pares = await huecos(p);
+  ok(pares.length >= 2, `hay tarjetas seguidas que medir (${pares.length} pares)`);
+  const iguales = (lista) => new Set(lista.map((x) => x.hueco)).size === 1;
+  ok(iguales(pares) && pares[0].hueco > 1,
+    `todas separadas lo mismo (${[...new Set(pares.map((x) => x.hueco))].join(", ")} px)`);
+  // Y con el cierre arriba, que es el caso de la queja: el orden no puede cambiar
+  // los huecos.
+  await p.evaluate(() => {
+    document.querySelectorAll("#home-cards [data-card]").forEach((el) => {
+      el.style.order = el.dataset.card === "cierre" ? "-1" : "1";
+    });
+  });
+  await p.waitForTimeout(300);
+  pares = await huecos(p);
+  const pegadas = pares.filter((x) => x.hueco <= 1);
+  ok(!pegadas.length,
+    `con el cierre arriba tampoco se pegan${pegadas.length
+      ? ` (${pegadas.map((x) => `${x.de}→${x.a}`).join(", ")})` : ""}`);
+  ok(iguales(pares),
+    `y siguen todas iguales (${[...new Set(pares.map((x) => x.hueco))].join(", ")} px)`);
 
   // Se deja como estaba, que el banco se puede repetir.
   await p.evaluate((todas) => fetch("api/settings", {

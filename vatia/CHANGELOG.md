@@ -2,6 +2,38 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.55.1
+
+### La tarjeta del cierre se quedaba pegada a la siguiente
+
+De una queja, con esa tarjeta puesta arriba: *«parece que le falta el margen inferior
+con la siguiente tarjeta»*.
+
+Le faltaba, y la causa es una sola línea de hace muchas versiones: la separación entre
+tarjetas la ponía el `margin-bottom` de `.panel`, y **la del cierre es la única que no
+es un `.panel`** —lleva su propio fondo de degradado—, así que nunca ha tenido hueco
+debajo. Con ella en el último puesto no se notaba; en cuanto tiene una tarjeta detrás,
+sí. En el orden de fábrica el cierre va segundo, así que al ponerse el sol se pegaba a
+«Tus aparatos» igual, solo que menos a la vista.
+
+Ahora el hueco lo pone el **contenedor** (`gap`), no cada tarjeta. Además de arreglar
+el caso, quita dos trampas de las que la primera ya había saltado: que el hueco dependa
+de qué clase lleve cada tarjeta, y que dependa del **orden del documento** cuando las
+tarjetas se reordenan con `order` —un margen de un hijo se cuenta en el orden en que
+está escrito, no en el que se ve—. De paso, la última ya no arrastra un margen que
+sobra.
+
+### Y las demás, medidas
+
+Se han medido de verdad, del borde de una al borde de la siguiente y en el orden en que
+se ven, las cuatro pantallas: **todos los pares tarjeta-tarjeta están a 14 px**. Los
+únicos ceros son cabecera→primera tarjeta, que es como manda la maqueta («el caudal va
+pegado a la cabecera»). Y con el scroll al final queda entre 30 y 44 px por encima de
+la barra de pestañas en todas, así que no hay nada que se quede tapado.
+
+El banco `tarjetas.js` §13 mide esos huecos con la tarjeta del cierre forzada y en dos
+órdenes distintos; sin el arreglo sale en rojo con el par exacto de la queja.
+
 ## 0.55.0
 
 ### «VÃ­ctor»
