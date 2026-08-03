@@ -117,10 +117,10 @@ def falso_ha(nubes=True):
 
 
 def curva(ahora):
-    """La curva del día, con el cielo cumpliendo lo prometido.
+    """La curva del día, con el tejado cumpliendo lo prometido.
 
     La potencia solar que se pasa **importa**: `curva_solar` corrige la previsión
-    con lo que el tejado está dando (el «cielo de hoy» de la 0.48.0), así que con
+    con lo que el tejado está dando (el desvio de hoy de la 0.48.0), así que con
     `pv: 0` el factor se iría al suelo y toda la curva quedaría al 5 %. El banco
     seguiría en verde, pero midiendo un día encapotado que aquí no se ha pedido:
     se le da la potencia que la previsión promete para esa hora, y así el sol de
@@ -183,10 +183,10 @@ print("\n9 · el pico declarado")
 ok(abs(t["peak_w"] - max(h["sun_w"] for h in t["hours"])) < 0.01,
    f"es el de lo que queda ({t['peak_w']} W)")
 # Y es el pico de la campana de verdad, no una curva machacada: si esta cifra
-# saliera en centenares de vatios con 5 kW previstos, sería que el cielo de hoy
+# saliera en centenares de vatios con 5 kW previstos, sería que el desvio de hoy
 # está corrigiendo cuando no se le ha pedido.
 ok(t["peak_w"] > 4000,
-   f"y con el cielo cumpliendo, es el de la campana ({t['peak_w']} W de 5.000)")
+   f"y con el tejado cumpliendo, es el de la campana ({t['peak_w']} W de 5.000)")
 # A última hora el pico es pequeño: si fuera el del día, las barras de la tarjeta
 # serían todas un hilo y no se compararía nada con nada.
 tarde = tarjeta(DIA.replace(hour=18, minute=10))
@@ -236,7 +236,7 @@ ok(any(h["cloud_pct"] is not None for h in api["hours"]),
 #
 # **No** se compara con la serie `forecast` de `/api/series`, que fue el primer
 # intento y se puso rojo con razón: esa serie es la previsión **cruda** del sensor,
-# sin el sesgo del tejado ni el cielo de hoy. Con el tejado dando más de lo
+# sin el sesgo del tejado ni el desvio de hoy. Con el tejado dando más de lo
 # prometido, esta tarjeta se pasa de esa cifra con todo el derecho, así que la
 # comparación no medía una incoherencia sino una corrección funcionando.
 forma = ((d.get("window") or {}).get("today") or {}).get("shape") or {}

@@ -395,7 +395,7 @@ def free_window(
 
     Lo que **no** cambia con ``medido`` son los números de la ventana: `start`,
     `end`, `kwh` y los `spans` siguen saliendo de la curva de previsión —ya
-    corregida con el tejado y el cielo de hoy—. Es a propósito y tiene una razón:
+    corregida con el tejado y con el desvío de hoy—. Es a propósito y tiene una razón:
     `kwh` es la magnitud con la que se compara hoy con mañana en la nota de la
     tarjeta, y mezclando medida y previsión dejaría de ser comparable. El dibujo
     dice lo que ha pasado; el titular, lo que se espera del día.

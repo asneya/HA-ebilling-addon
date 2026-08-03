@@ -98,12 +98,12 @@
       bias: p.get("sesgo") === "0" ? { horas: 0, dias: 0, peor: null, factores: {} }
         : { horas: 3, dias: 11, peor: { hora: 9, factor: 0.58 },
             factores: { 9: 0.58, 10: 0.81, 19: 1.14 } },
-      // `cielo` es el factor de hoy, en tanto por ciento: `cielo=15` es un día
-      // encapotado, `cielo=100` uno que cumple la previsión, y sin el parámetro
+      // `desvio` es el factor de hoy, en tanto por ciento: `desvio=15` es un día
+      // encapotado, `desvio=100` uno que cumple la previsión, y sin el parámetro
       // no hay testigo ninguno (de noche, o antes de la primera hora cerrada).
       // `testigo` elige con qué se ha medido: `hora`, `ahora` o los dos.
-      sky: p.get("cielo") === null ? null : (() => {
-        const f = Number(p.get("cielo")) / 100;
+      roof_today: p.get("desvio") === null ? null : (() => {
+        const f = Number(p.get("desvio")) / 100;
         const q = p.get("testigo") || "ambos";
         return {
           factor: f,

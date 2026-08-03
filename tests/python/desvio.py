@@ -1,4 +1,4 @@
-"""Una sola curva de sol para toda la pantalla, y el cielo de hoy dentro.
+"""Una sola curva de sol para toda la pantalla, y el desvio de hoy dentro.
 
 De una queja del 3 de agosto, con dos capturas de la misma pantalla: la tarjeta
 de la ventana decía «Lavadora · gratis **desde las 10:06**» y la del plan decía
@@ -16,12 +16,12 @@ Lo que se comprueba aquí:
 
   1. la curva se construye una vez y las dos consumidoras leen esa
   2. sin previsión no hay curva, y las dos tarjetas desaparecen en vez de inventar
-  3. un cielo encapotado rebaja la curva de hoy
+  3. un tejado por debajo de lo previsto rebaja la curva de hoy
   4. y **no** la de mañana, que hoy no se sabe
   5. el sol que ve el plan es exactamente el de la curva, sin correcciones propias
-  6. la ventana y el plan enseñan el mismo `sky`: no pueden discrepar
-  7. con el cielo despejado no se corrige nada y no se dice nada
-  8. la ventana se acorta cuando el cielo la desmiente
+  6. la ventana y el plan enseñan el mismo `roof_today`: no pueden discrepar
+  7. con el tejado cumpliendo no se corrige nada y no se dice nada
+  8. la ventana se acorta cuando el tejado la desmiente
 """
 import asyncio
 import sys
@@ -117,7 +117,7 @@ live._house_profile = _perfil_de_banco
 print("1-2 · una curva, y ninguna si no hay previsión")
 c = curva(4200, 1.0)
 ok(c is not None and c["points"], f"la curva sale ({c and len(c['points'])} puntos)")
-ok(set(c) == {"points", "bias", "sky", "medido"},
+ok(set(c) == {"points", "bias", "roof_today", "medido"},
    f"con lo que hace falta y nada más ({sorted(c)})")
 # `medido` es lo que ya ha pasado, para dibujarlo en vez de predecirlo. La curva de
 # previsión sigue entera al lado: el plan simula horas futuras y la necesita.
@@ -133,19 +133,19 @@ ok(asyncio.run(live.free_energy(None, AJUSTES, estados(0), TZ, AHORA)) is None,
 ok(asyncio.run(live._fuentes(None, AJUSTES, estados(0), None, TZ, AHORA)) is None,
    "ni el plan se planifica")
 
-print("\n3-4 · el cielo de hoy rebaja hoy, no mañana")
-# Encapotado: hoy se ha producido el 15 % de lo previsto, y ahora mismo también.
+print("\n3-4 · el desvio de hoy rebaja hoy, no mañana")
+# El tejado va al 15 % de lo previsto, hoy y ahora mismo.
 previsto_ahora = S.forecast_at(
     S.forecast_power([estados(0)["sensor.prevision"]], TZ), AHORA
 )
 gris = curva(round(previsto_ahora * 0.15), 0.15)
-ok(gris["sky"] and gris["sky"]["factor"] <= 0.2,
-   f"el factor baja al {gris['sky'] and gris['sky']['factor']}")
-ok(gris["sky"]["hour_ratio"] is not None and gris["sky"]["now_ratio"] is not None,
-   f"con los dos testigos ({gris['sky']})")
+ok(gris["roof_today"] and gris["roof_today"]["factor"] <= 0.2,
+   f"el factor baja al {gris['roof_today'] and gris['roof_today']['factor']}")
+ok(gris["roof_today"]["hour_ratio"] is not None and gris["roof_today"]["now_ratio"] is not None,
+   f"con los dos testigos ({gris['roof_today']})")
 # El viejo suelo era 0,2: un 15 % real se quedaba prometiendo el 20 %.
-ok(gris["sky"]["factor"] < 0.2,
-   f"y pasa por debajo del suelo viejo de 0,2 ({gris['sky']['factor']})")
+ok(gris["roof_today"]["factor"] < 0.2,
+   f"y pasa por debajo del suelo viejo de 0,2 ({gris['roof_today']['factor']})")
 
 
 def a_las(puntos, momento):
@@ -175,19 +175,19 @@ desvios = [
 ok(max(desvios) < 1e-9,
    f"y su sol es exactamente el de la curva (desvío máximo {max(desvios):.2e} W)")
 ventana = asyncio.run(live.free_energy(gris, AJUSTES, estados(0), TZ, AHORA))
-ok(ventana is not None and ventana["sky"] == gris["sky"],
-   f"la ventana enseña el cielo de la curva ({ventana and ventana['sky']})")
-ok(fuentes["sky"] == ventana["sky"],
+ok(ventana is not None and ventana["roof_today"] == gris["roof_today"],
+   f"la ventana enseña el desvio de la curva ({ventana and ventana['roof_today']})")
+ok(fuentes["roof_today"] == ventana["roof_today"],
    "y es el mismo que se lleva el plan: no pueden discrepar")
 
-print("\n7 · con el cielo despejado no se inventa nada")
-ok(claro["sky"] is not None and claro["sky"]["factor"] >= 0.95,
-   f"el factor se queda en uno ({claro['sky'] and claro['sky']['factor']})")
+print("\n7 · con el tejado cumpliendo no se inventa nada")
+ok(claro["roof_today"] is not None and claro["roof_today"]["factor"] >= 0.95,
+   f"el factor se queda en uno ({claro['roof_today'] and claro['roof_today']['factor']})")
 sin_nada = live.curva_solar(AJUSTES, estados(0), {"pv": 0.0}, {}, TZ, AHORA)
-ok(sin_nada["sky"] is None or sin_nada["sky"]["hour_ratio"] is None,
+ok(sin_nada["roof_today"] is None or sin_nada["roof_today"]["hour_ratio"] is None,
    "y sin horas cerradas medidas no hay testigo de la hora")
 
-print("\n8 · la ventana se acorta cuando el cielo la desmiente")
+print("\n8 · la ventana se acorta cuando el tejado la desmiente")
 v_claro = asyncio.run(live.free_energy(claro, AJUSTES, estados(0), TZ, AHORA))
 kwh_claro = (v_claro["today"] or {}).get("kwh")
 kwh_gris = (ventana["today"] or {}).get("kwh", 0.0) if ventana["today"] else 0.0

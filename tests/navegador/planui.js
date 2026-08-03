@@ -16,7 +16,7 @@
  *   4. y el titular tampoco lo afirma
  *   5. si la mejor hora es de verdad ahora, sí se dice
  *   6. el motivo de esperar por el sol se explica con el sol, no con céntimos
- *   7. y si el cielo de hoy desmiente a la previsión, se dice aquí también
+ *   7. y si el tejado se desvía de la previsión, se dice aquí también
  *   8. sin errores de consola
  */
 const { abrirNavegador, base } = require("./camino");
@@ -107,22 +107,22 @@ let navegador;
     `«${v.filas[0].porque}» y no un ahorro de cero`);
   ok(!/0,00/.test(v.filas[0].porque), "sin prometer céntimos que no hay");
 
-  console.log("\n7 · el cielo de hoy, con las mismas palabras que la ventana");
+  console.log("\n7 · el desvío de hoy, con las mismas palabras que la ventana");
   // La segunda mitad de la queja: «además está nublado ahora mismo y la
   // producción real es bajísima». Las horas de esta tarjeta salen de la misma
   // curva que la de la ventana, así que si esa curva va rebajada, esta tarjeta
   // tiene que decirlo igual que la otra. Callarlo aquí sería volver a la
   // incoherencia por la puerta de atrás.
   v = await abrir({ rows: [fila({})], battery: null,
-                    sky: { factor: 0.2, hour: 10, hour_ratio: 0.18, now_ratio: 0.22 } });
-  ok(/el tejado va al 20 % de lo previsto/.test(v.nota),
+                    roof_today: { factor: 0.2, hour: 10, hour_ratio: 0.18, now_ratio: 0.22 } });
+  ok(/tu tejado va al 20 % de lo previsto/.test(v.nota),
     `se dice en la nota («${v.nota}»)`);
   ok(/estas horas ya van con el sol rebajado/.test(v.nota),
     "y que las horas de arriba ya lo llevan puesto");
   v = await abrir({ rows: [fila({})], battery: null,
-                    sky: { factor: 0.95, hour: 10, hour_ratio: 0.95, now_ratio: 0.95 } });
-  ok(!/tejado va al/.test(v.nota || ""), "un cielo que cumple no se menciona");
-  v = await abrir({ rows: [fila({})], battery: null, sky: null });
+                    roof_today: { factor: 0.95, hour: 10, hour_ratio: 0.95, now_ratio: 0.95 } });
+  ok(!/tejado va al/.test(v.nota || ""), "un tejado que cumple no se menciona");
+  v = await abrir({ rows: [fila({})], battery: null, roof_today: null });
   ok(!/tejado va al/.test(v.nota || ""), "y sin testigo tampoco");
 
   await (await navegador).close();

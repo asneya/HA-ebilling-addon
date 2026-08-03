@@ -2,6 +2,52 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.51.1
+
+### «Hoy el cielo no acompaña» era afirmar lo que no se sabe
+
+De una corrección, y con razón: *«la producción prevista por Solcast ya tiene
+información de mi tejado (azimut, inclinación, capacidad nominal) y de mi ubicación
+por lo que tiene en cuenta la meteorología, así que no es "en crudo"»*.
+
+Exacto, y eso cambia lo que significa la corrección que la 0.48.0 introdujo. Si la
+previsión **ya lleva las nubes dentro**, entonces un tejado al 60 % de lo previsto
+no dice que haya nubes —ya estaban contadas— sino que **algo se desvía de un modelo
+que ya las tenía en cuenta**. Puede ser suciedad, una sombra nueva, un panel o un
+string caído, el inversor recortando, o la previsión equivocándose hoy. Vatia mide
+el cuánto; el por qué no lo puede saber desde dos sensores.
+
+Y la tarjeta lo estaba afirmando: *«Hoy el cielo no acompaña…»*. Ahora dice lo que
+mide y nada más:
+
+> Hoy **tu tejado** va al **15 %** de lo previsto, así que la hora de arriba ya va
+> rebajada — medido con la hora de las 10:00, en la que dio el 15 %, y con lo que
+> está dando ahora mismo, el 15 %. Si remonta, esto se corrige solo en cuanto el
+> tejado lo note.
+
+Lo mismo en la tarjeta del plan. Los números no cambian: cambia lo que se afirma
+sobre ellos.
+
+### Y el nombre, en el código también
+
+Un nombre que miente vuelve a generar la copia que miente, así que la clave del
+payload pasa de `sky` a **`roof_today`**, la función de la tarjeta de `_cielo` a
+`_desvio`, y los bancos de `cielo.py` / `cieloui.js` a `desvio.py` / `desvioui.js`
+(con `git mv`, para no perder la historia). Los docstrings de `prevision.py`,
+`live.py`, `series.py` y `appliances.py` que hablaban de «las nubes que la previsión
+no vio» dicen ahora lo que ocurre, y llevan la advertencia explícita de que **este
+número no es un factor de nubosidad**.
+
+También se corrige la cabecera de `prevision.py`, que empezaba diciendo «ninguna
+previsión solar sabe de tu casa». Sí sabe: la ubicación, el azimut, la inclinación,
+la potencia nominal y la meteorología del sitio. Lo que no sabe es la chimenea que
+da sombra hasta las diez ni los paneles sin limpiar — que es exactamente lo que el
+sesgo aprende, y el motivo de que el sesgo tenga sentido.
+
+Sin cambios de comportamiento: mismas cifras, mismas decisiones, y la regresión
+completa en verde (22 bancos de Python y 11 de navegador).
+
+
 ## 0.51.0
 
 ### La forma de hoy: lo que fue hasta ahora, lo previsto desde ahora
