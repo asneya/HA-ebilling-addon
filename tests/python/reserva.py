@@ -103,8 +103,15 @@ casa_at = lambda _t: CASA        # noqa: E731
 AC = {"hours": 5.17, "kwh": 2.76}
 aparato_w = AC["kwh"] * 1000.0 / AC["hours"]
 
-sol_e, bat_e, red_e = P._simular(
-    AHORA, AC["hours"], aparato_w, sol_at, casa_at, 0.1, 10.0, 20.0)
+def fisica(sol, usable, reserva=20.0, horas=AC["hours"], w=None, capacidad=10.0):
+    """`planner.simular` con estas fuentes. Una sola física en toda la aplicación."""
+    f = {"sol_at": (lambda _t: sol), "casa_at": casa_at,
+         "capacity_kwh": capacidad, "usable_kwh": usable, "reserve_pct": reserva,
+         "soc": reserva + usable / capacidad * 100.0}
+    return P.simular(AHORA, horas, w if w is not None else aparato_w, f, P.PASO_FINO)
+
+
+sol_e, bat_e, red_e = fisica(SOL, 0.1)
 ok(bat_e <= 0.11,
    f"con 0,1 kWh utilizables, la batería pone 0,1 y no 1,1 ({bat_e:.2f})")
 ok(red_e > 0.7, f"y el resto lo pone la red, que es la verdad ({red_e:.2f} kWh)")
@@ -112,18 +119,32 @@ ok(abs(sol_e + bat_e + red_e - AC["kwh"]) < 0.02,
    f"y las tres suman el ciclo ({sol_e + bat_e + red_e:.2f} de {AC['kwh']})")
 
 # Antes: con la batería entera (2,1 kWh) la red no aparecía casi.
-_s, bat_viejo, red_viejo = P._simular(
-    AHORA, AC["hours"], aparato_w, sol_at, casa_at, 2.1, 10.0, 0.0)
+_s, bat_viejo, red_viejo = fisica(SOL, 2.1, reserva=0.0)
 ok(bat_viejo > bat_e and red_viejo < red_e,
    f"contando la batería entera salía otra cosa ({bat_viejo:.2f} de batería, "
    f"{red_viejo:.2f} de red)")
 
 # El techo de la recarga también baja: con sol de sobra, la batería no puede
 # subir por encima de lo que el inversor va a poder devolver.
-mucho_sol = lambda _t: 6000.0    # noqa: E731
-_s2, bat2, red2 = P._simular(
-    AHORA, 1.0, 300.0, mucho_sol, casa_at, 8.0, 10.0, 20.0)
+_s2, bat2, red2 = fisica(6000.0, 8.0, horas=1.0, w=300.0)
 ok(bat2 == 0.0 and red2 == 0.0, "con sol de sobra no se toca la batería")
+
+# Y la tarjeta y el plan tienen que dar **lo mismo** para el mismo instante: es
+# la contradicción que se midió antes de fusionarlos (0,36 kWh de red en una y
+# 0,24 en la otra para el mismo horno). Si alguien vuelve a copiar la física, aquí
+# se ve.
+# Con la batería casi vacía, para que las tres partes salgan del cero: si el sol
+# lo cubriera todo, las dos coincidirían sin haber comprobado nada.
+f_mismo = {"sol_at": (lambda _t: 1800.0), "casa_at": casa_at, "capacity_kwh": 10.0,
+           "usable_kwh": 0.1, "reserve_pct": 20.0, "soc": 21.0}
+horno = {"hours": 1.0, "kwh": 1.6}
+e_tarjeta = A.estimate(horno, AHORA, None, f_mismo)   # sin precio: se comparan kWh
+s_plan, b_plan, r_plan = P.simular(
+    AHORA, horno["hours"], horno["kwh"] * 1000.0, f_mismo, P.PASO_FINO)
+ok(abs(e_tarjeta["sun_kwh"] - round(s_plan, 2)) < 0.01
+   and abs(e_tarjeta["grid_kwh"] - round(r_plan, 2)) < 0.01,
+   f"la tarjeta y el plan simulan lo mismo (sol {e_tarjeta['sun_kwh']}/{s_plan:.2f}, "
+   f"red {e_tarjeta['grid_kwh']}/{r_plan:.2f})")
 
 print("\n8-9 · el veredicto de la queja")
 VENTANA = {"today": {"start": AHORA.replace(hour=9, minute=0).isoformat(),

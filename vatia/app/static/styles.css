@@ -1532,6 +1532,20 @@ body.scrolled .scroll-top { opacity: .95; }
   text-wrap: pretty; }
 .ad-note:empty { display: none; }
 
+/* ── La barra del origen, en la tarjeta de los aparatos ────────────────────
+   De qué depósito sale la energía de este aparato, con los colores del resumen
+   de energía: así «verde es batería» significa lo mismo en las dos tarjetas.
+   Sustituye a un renglón de texto que decía «1,66 de sol · 1,1 kWh de batería». */
+.ap-barra { display: flex; height: 5px; border-radius: 3px; overflow: hidden;
+  margin-top: 7px; background: var(--hair); }
+.ap-barra i { display: block; height: 100%; }
+/* Las filas de los aparatos son algo más altas que las del consejo de antes: la
+   barra necesita su renglón y apretarla contra el nombre no se lee. */
+.ap-fila { min-height: 66px; }
+/* Un continuo no lleva decisión, así que su chip va apagado: la tarjeta ordena
+   primero lo que se puede mover y esto lo confirma de un vistazo. */
+.ap-fila[data-kind="continuo"] .ad-chip { opacity: .72; }
+
 /* ── El tiempo hora a hora ─────────────────────────────────────────────────
    Filas estrechas y no las tarjetas de `.ad-row`: son muchas —todas las horas
    de sol que quedan— y con 60 px cada una la tarjeta no cabría en la pantalla.

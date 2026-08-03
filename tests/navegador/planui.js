@@ -17,7 +17,9 @@
  *   5. si la mejor hora es de verdad ahora, sí se dice
  *   6. el motivo de esperar por el sol se explica con el sol, no con céntimos
  *   7. y si el tejado se desvía de la previsión, se dice aquí también
- *   8. sin errores de consola
+ *   8. la barra del origen dice de qué depósito sale, con los colores del resumen
+ *   9. un aparato de siempre encendido no trae hora, trae lo que lleva hoy
+ *  10. sin errores de consola
  */
 const { abrirNavegador, base } = require("./camino");
 const BASE = base("http://127.0.0.1:8402/");
@@ -33,6 +35,10 @@ const fila = (extra) => ({
   best: { at: "2026-08-03T10:17:00+02:00", sun_pct: 100, sun_kwh: 0.32,
           battery_kwh: 0, grid_kwh: 0, eur: 0.0 },
   saving_eur: 0.013, sun_gain_pct: 40, worth_waiting: true, priced: true,
+  // La forma de uso y la etiqueta las pone el servidor desde la fusión de las dos
+  // tarjetas: el número de la derecha es lo que cuesta, no la hora.
+  kind: "movible", kind_auto: true,
+  verdict: { kind: "gratis", value: "Gratis", sub: "lo pone el sol" },
   ...extra,
 });
 
@@ -57,6 +63,13 @@ async function abrir(plan) {
     aside: document.querySelector("#plan-aside")?.textContent.trim(),
     nota: document.querySelector("#plan-note")?.textContent.replace(/\s+/g, " ").trim(),
     filas: [...document.querySelectorAll("#plan-rows .ad-row")].map((f) => ({
+      kind: f.dataset.kind,
+      // Los trozos de la barra del origen: su color y su anchura, que es lo que
+      // sustituye al renglón de texto de la tarjeta retirada.
+      barra: [...f.querySelectorAll(".ap-barra i")].map((x) => ({
+        color: x.style.background, ancho: parseFloat(x.style.width),
+        titulo: x.getAttribute("title"),
+      })),
       sub: f.querySelector(".ad-txt small")?.textContent.trim(),
       valor: f.querySelector(".ad-verdict b")?.textContent.trim(),
       porque: f.querySelector(".ad-verdict small")?.textContent.trim(),
@@ -96,8 +109,12 @@ let navegador;
             battery_kwh: 0.13, grid_kwh: 0, eur: 0.02 },
   });
   v = await abrir({ rows: [yaEsta], battery: null });
-  ok(v.filas[0].valor === "ahora" && /es su mejor hora/.test(v.filas[0].porque),
-    `ahí sí («${v.filas[0].valor}» · «${v.filas[0].porque}»)`);
+  ok(/es su mejor hora/.test(v.filas[0].porque),
+    `ahí sí lo dice («${v.filas[0].porque}»)`);
+  // Y el número de la derecha es lo que cuesta, que desde la fusión es la
+  // respuesta: la hora vive en el renglón de debajo del nombre.
+  ok(v.filas[0].valor === "Gratis",
+    `con lo que cuesta a la derecha («${v.filas[0].valor}»)`);
   ok(/ya están en su mejor hora/.test(v.aside), `y el titular también («${v.aside}»)`);
   ok(/60 % con sol/.test(v.filas[0].sub), "con el sol de ahora, que es el mismo");
 
@@ -124,6 +141,47 @@ let navegador;
   ok(!/tejado va al/.test(v.nota || ""), "un tejado que cumple no se menciona");
   v = await abrir({ rows: [fila({})], battery: null, roof_today: null });
   ok(!/tejado va al/.test(v.nota || ""), "y sin testigo tampoco");
+
+  console.log("\n8 · la barra del origen");
+  // Tres depósitos con partes distintas: la barra tiene que llevar los tres, en
+  // proporción, y con su cifra en el título para quien la mire de cerca.
+  v = await abrir({ battery: null, rows: [fila({
+    now: { at: "2026-08-03T11:00:00+02:00", sun_pct: 50, sun_kwh: 1.0,
+           battery_kwh: 0.6, grid_kwh: 0.4, eur: 0.08 },
+    worth_waiting: false, saving_eur: 0,
+    verdict: { kind: "parcial", value: 0.08, sub: "50 % lo pone el sol" },
+  })] });
+  const b = v.filas[0].barra;
+  ok(b.length === 3, `tres trozos, uno por depósito (${b.length})`);
+  ok(Math.abs(b[0].ancho - 50) < 1 && Math.abs(b[1].ancho - 30) < 1
+     && Math.abs(b[2].ancho - 20) < 1,
+    `en proporción a los kWh (${b.map((x) => x.ancho).join(" / ")} %)`);
+  ok(b.every((x) => x.color), `con color cada uno (${b.map((x) => x.color).join(" · ")})`);
+  ok(new Set(b.map((x) => x.color)).size === 3, "y los tres distintos");
+  ok(/del sol/.test(b[0].titulo) && /de la batería/.test(b[1].titulo)
+     && /de la red/.test(b[2].titulo),
+    `y su cifra en el título («${b[0].titulo}»)`);
+  // Un trozo de migaja no se dibuja: a esa anchura no se ve y ensucia el borde.
+  v = await abrir({ battery: null, rows: [fila({
+    now: { at: "2026-08-03T11:00:00+02:00", sun_pct: 99, sun_kwh: 2.0,
+           battery_kwh: 0.01, grid_kwh: 0, eur: 0 },
+    worth_waiting: false, saving_eur: 0,
+  })] });
+  ok(v.filas[0].barra.length === 1,
+    `un trozo por debajo del 4 % no se dibuja (${v.filas[0].barra.length})`);
+
+  console.log("\n9 · un aparato de siempre encendido");
+  v = await abrir({ battery: null, rows: [{
+    id: "nev", name: "Nevera", icon: "potencia", color: "#08f",
+    kind: "continuo", kind_auto: true,
+    today: { kwh: 0.67, sun_kwh: 0.31, battery_kwh: 0.3, grid_kwh: 0.06, eur: 0.01 },
+    verdict: { kind: "parcial", value: 0.01, sub: "46 % lo pone el sol" },
+  }] });
+  ok(/0,67 kWh hoy/.test(v.filas[0].sub) && /siempre encendido/.test(v.filas[0].sub),
+    `dice lo que lleva hoy, no una hora («${v.filas[0].sub}»)`);
+  ok(!/mejor/.test(v.filas[0].sub), "y no propone ninguna hora");
+  ok(v.filas[0].barra.length === 3, "con su barra del origen igual que los demás");
+  ok(/siempre encendido/.test(v.nota), `y se dice que lo ha decidido la app («${v.nota}»)`);
 
   await (await navegador).close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

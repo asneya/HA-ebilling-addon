@@ -120,7 +120,6 @@ function renderLive() {
   // pregunta —«Lo que te costaría ahora»—, que es el estado `post` del propio
   // diseño, y es justo cuando más sirve: de noche lo que pongas sale de la
   // batería o de la red, y eso es lo que dice su renglón de estimación.
-  renderAdvice(live.advice);
   renderPlan(live.plan);
   renderTiempo(live.weather_hours);
   // Lo que está haciendo cada electrodoméstico va en este payload, y su sección
@@ -223,46 +222,6 @@ function dur(horas) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
-/* De dónde saldría la energía si se pusiera ahora. Lo que el veredicto no dice:
-   «cabe en la ventana» habla de horas de sol, y esto habla de **de qué depósito
-   sale** lo que el sol no cubra. En una casa con batería no es lo mismo que
-   comprarlo — sale de lo que tenías guardado para la noche—, así que se pone en
-   kWh de batería y en euros al precio de importar, que es lo que ese kilovatio
-   vale: el que gastes ahora lo tendrás que comprar luego. */
-function estimacion(e, kind) {
-  if (!e) return "";
-  const sol = e.sun_kwh || 0, bat = e.battery_kwh || 0, red = e.grid_kwh || 0;
-  if (bat < 0.01 && red < 0.01) {
-    return `<small class="ad-est sol">lo pone el sol entero</small>`;
-  }
-  const trozos = [];
-  if (sol >= 0.01) trozos.push(`${fmtNum.format(sol)} de sol`);
-  if (!e.split) {
-    // Sin capacidad de batería configurada no se puede separar una de otra, y
-    // decir «batería» a secas sería afirmar más de lo que se sabe.
-    trozos.push(`${fmtNum.format(bat + red)} kWh de batería o red`);
-  } else {
-    if (bat >= 0.01) {
-      const pct = e.battery_pct != null ? ` (${e.battery_pct} % de carga)` : "";
-      trozos.push(`${fmtNum.format(bat)} kWh de batería${pct}`);
-    }
-    if (red >= 0.01) trozos.push(`${fmtNum.format(red)} kWh de red`);
-  }
-  // Los euros solo cuando el veredicto no es ya una cifra en euros: con la
-  // ventana cerrada el veredicto **es** ese mismo importe, y repetirlo en la
-  // misma fila no informa de nada, solo la llena.
-  const conNumero = kind === "cerrada" || kind === "parcial" || kind === "bateria";
-  const eur = (e.battery_eur || 0) + (e.grid_eur || 0);
-  const coste = conNumero || (e.battery_eur == null && e.grid_eur == null)
-    ? "" : ` ≈ ${fmtEUR.format(eur)} si lo compraras`;
-  return `<small class="ad-est">${esc(trozos.join(" · ") + coste)}</small>`;
-}
-
-/* La tarjeta del prototipo, con una diferencia de fondo: allí la duración y los
-   kWh de cada electrodoméstico se teclean, y aquí se han medido. Del histórico
-   del propio enchufe, así que el consejo habla de *tu* lavadora. */
-/* ------------- «El plan de hoy» ------------- */
-
 /* La hora de un ISO, y si es de mañana se dice: «a las 03:00» a secas, cuando
    son las once de la noche, se lee como dentro de cuatro minutos. */
 function cuando(iso) {
@@ -273,58 +232,99 @@ function cuando(iso) {
   return manana ? `mañana a las ${hhmm}` : `a las ${hhmm}`;
 }
 
-/* A qué hora sale más barato cada aparato, y si compensa cargar la batería.
-   Es la pregunta que viene después de «Cabe en la ventana»: aquella dice qué
-   entra ahora, y esta a qué hora conviene de aquí a mañana. */
+/* La barra del origen: de qué depósito sale la energía de este aparato.
+
+   Es lo que antes decía un renglón de texto —«1,66 de sol · 1,1 kWh de batería
+   (11 % de carga)»— y en una barra se lee de un vistazo. Los colores son los del
+   resumen de energía, así que «verde es batería» significa lo mismo en las dos
+   tarjetas.
+
+   Los trozos por debajo del 4 % no se dibujan: a esa anchura no se ven y solo
+   ensucian el borde entre los dos vecinos. La cifra sigue estando en el título. */
+function barraOrigen(o) {
+  if (!o) return "";
+  const partes = [
+    ["from_solar", o.sun_kwh || 0, "del sol"],
+    ["from_battery", o.battery_kwh || 0, "de la batería"],
+    ["from_grid", o.grid_kwh || 0, "de la red"],
+  ];
+  const total = partes.reduce((a, [, v]) => a + v, 0);
+  if (total <= 0) return "";
+  const trozos = partes
+    .filter(([, v]) => v / total >= 0.04)
+    .map(([clave, v, texto]) =>
+      `<i style="width:${((v / total) * 100).toFixed(1)}%;background:${
+        SUM_COLORS[clave]}" title="${esc(`${fmtNum.format(v)} kWh ${texto}`)}"></i>`)
+    .join("");
+  return `<span class="ap-barra">${trozos}</span>`;
+}
+
+/* Una tarjeta para los aparatos, con tres formas de fila porque son tres
+   preguntas distintas:
+
+     · movible  — «¿a qué hora?». Barra del origen si se pone ahora, lo que
+       cuesta, y la mejor hora con lo que se gana.
+     · fijo     — «¿cuánto me cuesta ahora?». Igual, pero sin proponer hora: el
+       aire lo quieres cuando hace calor, no cuando pica el sol.
+     · continuo — «¿cuánto lleva hoy y de dónde salió?». Una nevera no tiene hora
+       que elegir, y hasta ahora se le calculaba una.
+
+   Antes eran dos tarjetas con dos simulaciones distintas del mismo instante. */
 function renderPlan(plan) {
   const rows = (plan && plan.rows) || [];
   const bat = plan && plan.battery;
   $("#plan-panel").classList.toggle("hidden", !rows.length && !bat);
   if (!rows.length && !bat) return;
 
-  // Solo se cuentan los que de verdad ganan algo esperando: decir «3 aparatos»
-  // cuando dos ya están en su mejor hora es inflar el titular.
-  const mueven = rows.filter((r) => r.worth_waiting);
+  // El titular habla solo de los que se pueden mover: es lo único sobre lo que hay
+  // una decisión que tomar.
+  const movibles = rows.filter((r) => r.kind === "movible");
+  const mueven = movibles.filter((r) => r.worth_waiting);
   const ahorro = mueven.reduce((a, r) => a + (r.saving_eur || 0), 0);
-  // Y cuando no se pide mover nada, hay que decir la verdad. «Ya están en su
-  // mejor hora» era falso siempre que el mejor momento fuera más tarde y la
-  // diferencia solo no llegara al umbral: contradecía a la tarjeta de la ventana,
-  // que en la misma pantalla decía «gratis desde las 10:06».
-  const luego = rows.some((r) => r.best.at > r.now.at);
-  $("#plan-aside").textContent = !rows.length ? ""
+  const luego = movibles.some((r) => r.best && r.best.at > r.now.at);
+  $("#plan-aside").textContent = !movibles.length ? ""
     : mueven.length && ahorro > 0 ? `ahorras ${fmtEUR.format(ahorro)} moviéndolos`
     : mueven.length ? "mejor esperar"
     : luego ? "da casi igual cuándo"
     : "ya están en su mejor hora";
 
   $("#plan-rows").innerHTML = rows.map((r) => {
-    const b = r.best;
-    // **El porcentaje tiene que ser del momento del que se habla.** Con
-    // `worth_waiting` en falso la fila decía «ahora mismo» y enseñaba el sol de
-    // la mejor hora: a las 9:47 ponía «ahora mismo · 100 % con sol» cuando ahora
-    // el sol cubría el 60 % y el 100 % era de las 10:17.
-    const sub = r.worth_waiting
-      ? `${b.sun_pct} % con sol · ${dur(r.hours)}`
-      : `ahora mismo · ${r.now.sun_pct} % con sol`;
-    // El valor de la derecha es la hora, que es la respuesta; el porqué va
-    // debajo.
-    const valor = r.worth_waiting ? cuando(b.at) : "ahora";
-    const clase = r.worth_waiting ? "v-justo" : "v-gratis";
-    // Y el porqué, también cierto. Si esperar cambia el sol pero no el dinero,
-    // eso es lo que hay que decir: es el motivo de verdad y se entiende.
-    const porque = r.saving_eur >= 0.01 ? `ahorras ${fmtEUR.format(r.saving_eur)}`
-      : r.worth_waiting ? `pasa a ${b.sun_pct} % con sol`
-      : b.at > r.now.at ? "esperar apenas cambia nada"
-      : "es su mejor hora";
+    const v = r.verdict || {};
+    // El número de la derecha es lo que cuesta —o «Gratis», que es un coste de
+    // cero dicho en palabras—, y sale del mismo reparto que dibuja la barra.
+    const importe = typeof v.value === "number" ? fmtEUR.format(v.value) : (v.value || "—");
+    let sub, pie;
+    if (r.kind === "continuo") {
+      const t = r.today || {};
+      sub = `${fmtNum.format(t.kwh || 0)} kWh hoy · siempre encendido`;
+      pie = v.sub || "";
+    } else if (r.kind === "fijo") {
+      sub = `${dur(r.hours)} · ahora mismo ${r.now.sun_pct} % con sol`;
+      pie = v.sub || "";
+    } else {
+      // **El porcentaje es del momento del que se habla.** Con `worth_waiting` en
+      // falso la fila decía «ahora mismo» y enseñaba el sol de la mejor hora.
+      sub = r.worth_waiting
+        ? `${dur(r.hours)} · mejor ${cuando(r.best.at)}, ${r.best.sun_pct} % con sol`
+        : `${dur(r.hours)} · ahora mismo ${r.now.sun_pct} % con sol`;
+      pie = r.saving_eur >= 0.01 ? `ahorras ${fmtEUR.format(r.saving_eur)} esperando`
+        : r.worth_waiting ? `esperando pasa a ${r.best.sun_pct} % con sol`
+        : r.best && r.best.at > r.now.at ? "esperar apenas cambia nada"
+        : "es su mejor hora";
+    }
     return `
-      <div class="ad-row">
+      <div class="ad-row ap-fila" data-kind="${esc(r.kind)}">
         <span class="ad-chip" style="--ap:${esc(r.color)}">
           <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
         </span>
-        <span class="ad-txt"><b>${esc(r.name)}</b><small>${esc(sub)}</small></span>
+        <span class="ad-txt">
+          <b>${esc(r.name)}</b>
+          <small>${esc(sub)}</small>
+          ${barraOrigen(r.kind === "continuo" ? r.today : r.now)}
+        </span>
         <span class="ad-verdict">
-          <b class="${clase}">${esc(valor)}</b>
-          <small>${esc(porque)}</small>
+          <b class="v-${esc(v.kind || "gratis")}">${esc(importe)}</b>
+          <small>${esc(pie)}</small>
         </span>
       </div>`;
   }).join("");
@@ -350,7 +350,26 @@ function renderPlan(plan) {
       ${fmtEUR.format(bat.peak_eur_kwh)}/kWh. Te ahorras
       <b>${fmtEUR.format(bat.saving_eur)}</b>.`);
   }
-  if (rows.length && !rows[0].priced) {
+  // La reserva de la batería. Venía de la tarjeta que se ha retirado y hay que
+  // conservarla: explica por qué una batería «al 21 %» no aparece en ninguna de
+  // las barras de arriba, que si no parece un error del programa.
+  const pila = plan && plan.battery_state;
+  if (pila && pila.at_reserve) {
+    notas.push(`La batería está en su reserva (${fmtNum.format(pila.soc)} % de carga,
+      mínimo ${fmtNum.format(pila.reserve_pct)} %): el inversor no baja de ahí, así
+      que ahora mismo no puede dar nada y lo que el sol no cubra sale de la red.`);
+  }
+  // Y los aparatos cuya forma de uso ha decidido la aplicación, para que se pueda
+  // corregir. Detectar y callarlo es lo que hace que una fila rara parezca un fallo.
+  const adivinados = rows.filter((r) => r.kind_auto && r.kind === "continuo");
+  if (adivinados.length) {
+    notas.push(`${adivinados.map((r) => esc(r.name)).join(", ")} ${
+      adivinados.length === 1 ? "está" : "están"} como <b>siempre encendido</b>
+      porque así lo dice su histórico: no se ${
+      adivinados.length === 1 ? "le" : "les"} propone hora porque no hay ninguna que
+      elegir. Se cambia en Ajustes → Electrodomésticos.`);
+  }
+  if (rows.length && rows.some((r) => r.priced === false)) {
     notas.push(`Sin tu tarifa elegida en Ajustes esto va por lo que no tendrías
       que comprar, no por lo que cuesta. Con la tarifa, en euros.`);
   }
@@ -426,67 +445,6 @@ function kwSol(w) {
   return w < 1000 ? `${Math.round(w)} W` : `${fmtNum.format(w / 1000)} kW`;
 }
 
-function renderAdvice(advice) {
-  const rows = (advice && advice.rows) || [];
-  $("#advice-panel").classList.toggle("hidden", !rows.length);
-  if (!rows.length) return;
-
-  $("#ad-title").textContent = advice.title;
-  const cabe = rows.filter((r) => r.verdict.kind === "gratis").length;
-  $("#ad-aside").textContent = advice.closed ? "precio de ahora"
-    : cabe ? `${cabe} de ${rows.length} entran gratis` : "";
-
-  $("#ad-rows").innerHTML = rows.map((r) => {
-    const meta = r.cycle
-      ? `${dur(r.cycle.hours)} · ${fmtNum.format(r.cycle.kwh)} kWh`
-      : "aprendiendo de su histórico";
-    const v = r.verdict;
-    // Un veredicto en euros llega como número; los otros dos, como su palabra.
-    const valor = typeof v.value === "number" ? fmtEUR.format(v.value) : (v.value || "—");
-    return `
-      <div class="ad-row">
-        <span class="ad-chip" style="--ap:${esc(r.color)}">
-          <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
-        </span>
-        <span class="ad-txt">
-          <b>${esc(r.name)}</b>
-          <small>${esc(meta)}</small>
-          ${estimacion(r.estimate, v.kind)}
-        </span>
-        <span class="ad-verdict">
-          <b class="v-${esc(v.kind)}">${esc(valor)}</b>
-          <small>${esc(v.sub)}</small>
-        </span>
-      </div>`;
-  }).join("");
-
-  // La letra pequeña solo aparece cuando explica algo que se está viendo.
-  const aprendiendo = rows.filter((r) => r.verdict.kind === "aprendiendo");
-  const sinPrecio = rows.some((r) => r.verdict.kind === "cerrada" && r.verdict.value == null);
-  const bat = advice.battery;
-  let nota = "";
-  // La reserva primero, cuando está mordiendo: es lo que explica que una batería
-  // «al 21 %» no aparezca en ninguna fila. Sin esto las cifras de arriba parecen
-  // un error, que es exactamente lo que pasó.
-  if (bat && bat.at_reserve) {
-    nota = `La batería está en su reserva (${fmtNum.format(bat.soc)} % de carga,
-      mínimo ${fmtNum.format(bat.reserve_pct)} %): el inversor no baja de ahí, así
-      que ahora mismo no puede dar nada y lo que el sol no cubra sale de la red.`;
-  } else if (bat && bat.reserve_pct > 0 && bat.usable_kwh < 1) {
-    // Sin marcado: esta nota se pinta con `textContent` porque las otras llevan
-    // nombres de aparatos que teclea quien los da de alta.
-    nota = `De la batería quedan ${fmtNum.format(bat.usable_kwh)} kWh por encima de
-      su reserva (${fmtNum.format(bat.reserve_pct)} %). Lo de debajo no lo entrega
-      el inversor, así que no se cuenta.`;
-  } else if (aprendiendo.length) {
-    nota = `De ${aprendiendo.map((r) => r.name).join(", ")} aún no hay dos ciclos en
-      el histórico, así que no se dice lo que tarda: en cuanto los haya, aparece
-      aquí sin tocar nada.`;
-  } else if (sinPrecio) {
-    nota = "Para poner el precio hace falta una tarifa marcada como la tuya en Ajustes → Tarifas.";
-  }
-  $("#ad-note").textContent = nota;
-}
 
 /* ------------- el cierre del día ------------- */
 

@@ -176,6 +176,163 @@ def _resumen(ciclos: list[dict[str, Any]], dias: int) -> dict[str, Any] | None:
     }
 
 
+# ── Qué clase de aparato es ────────────────────────────────────────────────
+#
+# Tres formas de uso, porque son **tres preguntas distintas** y hasta ahora se les
+# hacía la misma:
+#
+#   · `movible`  — lavadora, lavavajillas, coche. Tiene ciclo y se puede elegir
+#     cuándo ponerlo, así que la pregunta es «¿a qué hora?».
+#   · `fijo`     — el aire acondicionado. Tiene ciclo, pero no se mueve a
+#     voluntad: lo quieres cuando hace calor, no a las 14:00 porque es cuando
+#     pica el sol. La pregunta es «¿cuánto me cuesta ahora?», sin recomendar hora.
+#   · `continuo` — nevera, congelador, router. No hay ciclo ni hora que elegir: la
+#     pregunta es «¿cuánto lleva hoy y de dónde salió?».
+#
+# **Esto no era un hueco: estaba roto.** Una nevera de verdad (compresor 18 min sí,
+# 27 no) produce 32 «ciclos» al día, y de ahí salía un ciclo típico de «0 h 20 min ·
+# 0,03 kWh». Con eso la tarjeta decía «Nevera · Gratis · lo pone el sol» y el plan
+# le calculaba una hora óptima para encender la nevera. No le faltaba información:
+# contestaba con total confianza a una pregunta que no existe.
+#
+# Se detecta con dos señales medidas sobre siete días, y hacen falta las dos porque
+# cada una se le escapa un caso:
+#
+#   nevera   32,00 ciclos/día · encendida el 44 % del tiempo
+#   router    0,14 ciclos/día · encendido el 100 %
+#   aire      3,00 ciclos/día · encendido el 17 %
+#   lavadora  0,43 ciclos/día · encendida el  2 %
+#
+# Los ciclos por día cazan la nevera y se le escapa el router —un aparato de
+# consumo constante da **un** ciclo de 168 horas—; el tiempo encendido caza el
+# router. Y el corte en 6 cae en un hueco de 5× entre el aire (3) y la nevera (32).
+#
+# `fijo` **no se detecta**, y no es un olvido: no es una propiedad de la curva de
+# potencia sino una decisión de quien vive en la casa. Sale de su ficha.
+CICLOS_DIA_CONTINUO = 6.0
+ENCENDIDO_CONTINUO = 0.9
+FORMAS = ("movible", "fijo", "continuo")
+
+
+def forma_de_uso(
+    muestras: list[tuple[datetime, float]],
+    umbral: float,
+    ciclos: list[dict[str, Any]],
+    dias: int,
+) -> str:
+    """``"continuo"`` o ``"movible"``, mirando la curva de potencia.
+
+    Nunca devuelve ``"fijo"``: eso no se puede ver en los vatios (ver la nota de
+    arriba). Con pocas muestras se dice `movible`, que es lo que la aplicación
+    hacía siempre y deja la puerta abierta a aprender.
+    """
+    if not muestras or dias <= 0:
+        return "movible"
+    encendido = sum(1 for _t, w in muestras if w > umbral) / len(muestras)
+    por_dia = len(ciclos) / dias
+    if encendido >= ENCENDIDO_CONTINUO or por_dia >= CICLOS_DIA_CONTINUO:
+        return "continuo"
+    return "movible"
+
+
+def _por_horas_hoy(
+    muestras: list[tuple[datetime, float]], medianoche: datetime, now: datetime
+) -> dict[str, float]:
+    """kWh de hoy hora a hora, integrando la potencia de las muestras.
+
+    Para un aparato continuo esto **sustituye** a los ciclos: es lo que ha gastado
+    de verdad, y con el reparto horario de la casa se le puede decir de dónde salió.
+    Las claves van como texto porque el payload es JSON y ahí las claves numéricas
+    no existen.
+    """
+    paso_h = _PASO_MIN / 60.0
+    out: dict[str, float] = {}
+    for momento, w in muestras:
+        if momento < medianoche or momento > now:
+            continue
+        clave = str(momento.hour)
+        out[clave] = out.get(clave, 0.0) + max(w, 0.0) * paso_h / 1000.0
+    return {k: round(v, 4) for k, v in out.items()}
+
+
+def dia_de_un_continuo(
+    por_hora: dict[str, float] | None,
+    reparto: dict[str, dict[str, float]] | None,
+    precio_de: Any = None,
+) -> dict[str, Any] | None:
+    """Lo que un aparato continuo lleva hoy y **de dónde salió**.
+
+    Un 24/7 no tiene «hora óptima» que recomendar: tiene consumo. Y su origen no se
+    puede simular —ya pasó— así que se **atribuye**: lo que la nevera gastó a las
+    tres salió del mismo sitio que el resto de la casa a las tres, en la misma
+    proporción. Es la única atribución defendible sin un contador de origen por
+    aparato, y es la misma cuenta que necesitaría un desglose de la factura.
+
+    ``precio_de(iso)`` da el precio de esa hora, si se sabe. El coste se cobra
+    **solo de la red**: lo que puso el sol no costó nada, y lo que puso la batería
+    se valora aparte porque hay que reponerlo — igual que en la estimación de un
+    ciclo.
+
+    ``None`` si no hay consumo medido hoy o no hay reparto con el que atribuir.
+    """
+    if not por_hora or not reparto:
+        return None
+    # El reparto viene indexado por el ISO de la hora; se reindexa por hora del día
+    # para poder cruzarlo con lo del aparato, que va por hora.
+    de_la_casa: dict[str, dict[str, float]] = {}
+    for iso, split in reparto.items():
+        try:
+            hora = str(datetime.fromisoformat(iso).hour)
+        except ValueError:
+            continue
+        de_la_casa[hora] = split
+
+    sol = bat = red = 0.0
+    coste = 0.0
+    con_precio = precio_de is not None
+    sin_atribuir = 0.0
+    for hora, kwh in por_hora.items():
+        split = de_la_casa.get(hora)
+        casa = (split or {}).get("home_total") or 0.0
+        if not split or casa <= 0:
+            # Hay consumo del aparato en una hora de la que no hay reparto: se
+            # declara en vez de repartirlo a ojo.
+            sin_atribuir += kwh
+            continue
+        # Su parte de esa hora, sin pasar de uno: un contador que marca más que el
+        # total de la casa es ruido de medida, no un aparato que consume de más.
+        parte = min(kwh / casa, 1.0)
+        s = (split.get("from_solar") or 0.0) * parte
+        b = (split.get("from_battery") or 0.0) * parte
+        r = (split.get("from_grid") or 0.0) * parte
+        sol, bat, red = sol + s, bat + b, red + r
+        if con_precio:
+            p = precio_de(hora)
+            if p is None:
+                con_precio = False
+            else:
+                coste += r * p
+    total = sum(por_hora.values())
+    return {
+        "kwh": round(total, 3),
+        "sun_kwh": round(sol, 3),
+        "battery_kwh": round(bat, 3),
+        "grid_kwh": round(red, 3),
+        # Lo que se ha quedado sin origen: horas del aparato sin reparto de la casa.
+        # Se dice, en vez de repartirlo por ahí.
+        "unplaced_kwh": round(sin_atribuir, 3),
+        "eur": round(coste, 2) if con_precio else None,
+    }
+
+
+def forma(aparato: dict[str, Any], aprendido: dict[str, Any] | None) -> str:
+    """La forma que vale: la de su ficha si la tiene, y si no la detectada."""
+    elegida = str((aparato or {}).get("kind") or "").strip()
+    if elegida in FORMAS:
+        return elegida
+    return str((aprendido or {}).get("detected_kind") or "movible")
+
+
 async def learn(
     settings: dict[str, Any],
     states: dict[str, Any],
@@ -217,11 +374,23 @@ async def learn(
                 (datetime.fromisoformat(k), max(v, 0.0))
                 for k, v in sorted(filas.items())
             ]
-            ciclos = _ciclos_de(muestras, float(a.get("standby_w") or 0))
-            resumen = _resumen(ciclos, _DIAS)
+            umbral = float(a.get("standby_w") or 0)
+            ciclos = _ciclos_de(muestras, umbral)
+            detectada = forma_de_uso(muestras, umbral, ciclos, _DIAS)
+            # Un continuo **no tiene ciclo**, y publicar el que sale de partir su
+            # curva sería publicar «el ciclo típico de tu nevera son 20 minutos y
+            # 0,03 kWh». Es cierto que el compresor hace eso, y no significa nada.
+            resumen = None if detectada == "continuo" else _resumen(ciclos, _DIAS)
             hoy = [c for c in ciclos if c["start"] >= medianoche]
             out[a["id"]] = {
                 "cycle": resumen,
+                # Lo que la aplicación cree que es, para que su ficha lo pueda
+                # enseñar y quien la lea pueda corregirlo. Detectar y callarlo es
+                # lo que hace que una cifra rara parezca un error del programa.
+                "detected_kind": detectada,
+                # Energía de hoy hora a hora, que es lo que un continuo necesita:
+                # no tiene «hora óptima», tiene consumo del día y un origen.
+                "today_by_hour": _por_horas_hoy(muestras, medianoche, now),
                 # Los ciclos de hoy, para el cierre del día: cuándo se puso cada
                 # cosa y cuánto se llevó.
                 "today": [
@@ -244,7 +413,7 @@ async def learn(
 _MIGAJA_KWH = 0.05
 
 
-def _gratis_de_verdad(
+def etiqueta_de_origen(
     est: dict[str, Any] | None, price: float | None
 ) -> dict[str, Any]:
     """El veredicto de un ciclo puesto **ahora**, según de dónde saldría la energía.
@@ -274,8 +443,10 @@ def _gratis_de_verdad(
         return {"kind": "gratis", "value": "Gratis", "sub": "ahora mismo"}
     de_red = float(est.get("grid_kwh") or 0.0)
     de_bat = float(est.get("battery_kwh") or 0.0)
-    total = float(est.get("total_kwh") or 0.0)
     del_sol = float(est.get("sun_kwh") or 0.0)
+    # El total se recompone si no viene: la fila del plan trae las tres partes
+    # pero no su suma, y son la misma cosa.
+    total = float(est.get("total_kwh") or 0.0) or (del_sol + de_bat + de_red)
     pct_sol = round(del_sol / total * 100) if total > 0 else 0
 
     if de_red <= _MIGAJA_KWH and de_bat <= _MIGAJA_KWH:
@@ -310,7 +481,7 @@ def verdict(
 
     Las copias y el margen de quince minutos entre «Gratis» y «Cabe justo» son los
     de la maqueta. Lo que se ha añadido después es que **cuando la ventana ya está
-    abierta, el veredicto lo decide la energía** (ver `_gratis_de_verdad`) y no solo
+    abierta, el veredicto lo decide la energía** (ver `etiqueta_de_origen`) y no solo
     que el ciclo quepa en el tiempo que queda.
 
     ``est`` es la estimación **del momento del que habla el veredicto**: si la
@@ -339,7 +510,7 @@ def verdict(
     desde = max(now, inicio)
     queda = max(0.0, (fin - desde).total_seconds() / 3600.0)
     if dur <= queda - _MARGEN_H:
-        fallo = _gratis_de_verdad(est, price)
+        fallo = etiqueta_de_origen(est, price)
         if now < inicio:
             # Cabe, pero desde que abra. Si la energía de esa hora no da para
             # llamarlo gratis, se dice igual: lo único que cambia es el «cuándo».
@@ -419,11 +590,11 @@ def advice(
         # La reserva del inversor, para poder decirlo cuando está mordiendo. Es la
         # explicación de por qué una batería «al 21 %» no puede dar nada, y sin
         # enseñarla las cifras de arriba parecen equivocadas.
-        "battery": _estado_bateria(fuentes),
+        "battery": estado_bateria(fuentes),
     }
 
 
-def _estado_bateria(fuentes: dict[str, Any] | None) -> dict[str, Any] | None:
+def estado_bateria(fuentes: dict[str, Any] | None) -> dict[str, Any] | None:
     """Carga, reserva y lo que queda por encima de ella. ``None`` si no se sabe."""
     if not fuentes:
         return None
@@ -447,11 +618,6 @@ def _estado_bateria(fuentes: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
-# Paso de la simulación de un ciclo. Cinco minutos es el paso de todo lo demás
-# —las estadísticas, las curvas del flujo— y da de sobra para un ciclo de horas.
-_PASO_SIM_H = 5 / 60
-
-
 def estimate(
     cycle: dict[str, Any] | None,
     now: datetime,
@@ -467,7 +633,14 @@ def estimate(
     kilovatio de batería vale — porque el que gastes ahora lo tendrás que comprar
     luego.
 
-    Cómo se estima, minuto a minuto del ciclo:
+    La física —el sol primero, luego la batería mientras le quede, luego la red, y
+    el excedente que sobra recargando— está en `planner.simular` y **aquí no se
+    repite**. Estaba repetida, con distinto paso, y las dos tarjetas de
+    electrodomésticos enseñaban cifras distintas del mismo instante: para el mismo
+    horno a las 18:40, 0,36 kWh de red en una y 0,24 en la otra. Esta función pone
+    encima lo que la física no da: el porcentaje de batería y los euros.
+
+    Con lo que se cuenta:
 
       · el sol que se espera sale de la **previsión corregida con la producción
         real de ahora**: si el tejado se está desviando de lo previsto, la curva
@@ -475,18 +648,13 @@ def estimate(
       · el consumo de la casa, del perfil horario (la mediana de esa hora), que ya
         es lo que usa la ventana;
       · el aparato tira de su media (kWh del ciclo entre sus horas): no se finge
-        conocer la forma de su programa;
-      · lo que el sol no cubra lo pone la batería mientras le quede, y lo que no,
-        la red. Si sobra sol por encima del aparato, la batería se **carga**, que
-        es lo que pasaría de verdad y mejora la cuenta de una tarde soleada.
+        conocer la forma de su programa.
 
     ``None`` si no hay ciclo aprendido o no hay con qué estimar.
     """
     if not cycle or not fuentes:
         return None
-    sol_at = fuentes.get("sol_at")
-    casa_at = fuentes.get("casa_at")
-    if not sol_at or not casa_at:
+    if not fuentes.get("sol_at") or not fuentes.get("casa_at"):
         return None
 
     horas = float(cycle["hours"])
@@ -494,48 +662,14 @@ def estimate(
     if horas <= 0 or kwh <= 0:
         return None
     aparato_w = kwh * 1000.0 / horas
-
     capacidad = float(fuentes.get("capacity_kwh") or 0.0)
-    # Lo que la batería puede dar ahora, en kWh: lo que hay **por encima de su
-    # reserva**, que es lo único que el inversor va a entregar. Antes era la batería
-    # entera, y con el estado de carga en la reserva se ofrecían kilovatios que no
-    # existen: de ahí salía un «Gratis» con 1,1 kWh de una batería al 21 % que no
-    # baja del 20. `None` = no se puede saber, y entonces batería y red van juntas.
-    guardado = planner.guardado_utilizable(fuentes)
-    reserva = float(fuentes.get("reserve_pct") or 0.0)
-    # Y el techo de la batería para lo que se recargue durante el ciclo también
-    # baja: por debajo de la reserva no se puede contar con nada.
-    tope = capacidad * max(0.0, 100.0 - reserva) / 100.0
 
-    del_sol = de_bat = de_red = 0.0
-    restante = guardado
-    pasos = max(1, int(round(horas / _PASO_SIM_H)))
-    # El paso se reparte, no se fija: con uno fijo un ciclo de 1,9 h se simulaba
-    # en ocho cuartos de hora —2,0 h— y la suma del reparto no cuadraba con la
-    # energía aprendida, así que se veía «104 % lo pone el sol».
-    paso_h = horas / pasos
-    for i in range(pasos):
-        momento = now + timedelta(hours=i * paso_h)
-        sol = max(0.0, sol_at(momento))
-        casa = max(0.0, casa_at(momento))
-        sobra = max(0.0, sol - casa)
-        sol_ap = min(aparato_w, sobra)
-        falta = aparato_w - sol_ap
-        del_sol += sol_ap * paso_h / 1000.0
-        if falta <= 0:
-            # Lo que sobre por encima del aparato carga la batería.
-            if restante is not None and capacidad > 0:
-                restante = min(tope, restante + (sobra - sol_ap) * paso_h / 1000.0)
-            continue
-        pide = falta * paso_h / 1000.0
-        if restante is None:
-            de_bat += pide            # sin capacidad: no se puede separar
-        else:
-            usa = min(pide, restante)
-            de_bat += usa
-            restante -= usa
-            de_red += pide - usa
-
+    del_sol, de_bat, de_red = planner.simular(
+        now, horas, aparato_w, fuentes, planner.PASO_FINO
+    )
+    # `None` = no hay capacidad ni carga con que separar la batería de la red, y
+    # entonces lo que se ha contado como batería es en realidad «batería o red».
+    separable = planner.guardado_utilizable(fuentes) is not None
     total = del_sol + de_bat + de_red
     return {
         "sun_kwh": round(del_sol, 2),
@@ -549,7 +683,7 @@ def estimate(
         "grid_eur": None if price is None else round(de_red * price, 2),
         # `False` cuando no hay capacidad configurada: entonces «batería» es en
         # realidad «batería o red» y la interfaz no puede decir cuál.
-        "split": restante is not None,
+        "split": separable,
         "total_kwh": round(total, 2),
     }
 

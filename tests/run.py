@@ -98,6 +98,7 @@ PYTHON = [
     ("unificar.py", ["unificar.py"], {}),
     ("ciclos.py", ["ciclos.py"], {}),
     ("reserva.py", ["reserva.py"], {}),
+    ("aparatos.py", ["aparatos.py"], {}),
     ("facturaifx.py", ["facturaifx.py"], {}),
     ("perfil.py", ["perfil.py"], {}),
     ("diagapi.py", ["diagapi.py", "http://127.0.0.1:8363"], {}),

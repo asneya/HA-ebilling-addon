@@ -12,7 +12,7 @@
  *   5. ocultar una la quita de la Home y la deja en la lista
  *   6. las flechas de los extremos están desactivadas
  *   7. el cierre son dos elementos y se mueven juntos
- *   8. la ventana y su consejo, también
+ *   8. y la ventana, que desde la fusión de las tarjetas es un elemento solo
  *   9. otro usuario ve lo suyo, no lo de este
  *  10. ocultarlo todo avisa en vez de dejar la pantalla en blanco
  *  11. cabe a 320 px
@@ -159,8 +159,13 @@ const catalogo = (p) => p.evaluate(() =>
   });
   ok(grupos.cierre.length === 2 && grupos.cierre[0] === grupos.cierre[1],
     `el cierre son dos elementos con el mismo orden (${grupos.cierre.join(", ")})`);
-  ok(grupos.ventana.length === 2 && grupos.ventana[0] === grupos.ventana[1],
-    `la ventana y su consejo, también (${grupos.ventana.join(", ")})`);
+  // La ventana **era** dos elementos: ella y «Cabe en la ventana», que iba pegado
+  // debajo con su mismo `data-card`. Al fusionar las dos tarjetas de aparatos en
+  // una, el consejo desapareció y la ventana se quedó sola. Lo que sigue
+  // importando es que el grupo se mueva junto, cualquiera que sea su tamaño.
+  ok(grupos.ventana.length >= 1
+     && new Set(grupos.ventana).size === 1,
+    `la ventana se mueve como un grupo (${grupos.ventana.join(", ")})`);
 
   console.log("\n5 · ocultar");
   await irAjustesInicio(p);

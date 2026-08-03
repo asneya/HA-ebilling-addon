@@ -226,6 +226,15 @@
       "power_entity": "sensor.horno_power",
       "energy_entity": "sensor.horno_energy",
       "standby_w": 15.0
+    },
+        {
+      "id": "nevera000001",
+      "name": "Nevera",
+      "color": "#8a5a2b",
+      "icon": "potencia",
+      "power_entity": "sensor.nevera_power",
+      "energy_entity": "sensor.nevera_energy",
+      "standby_w": 2.0
     }
   ],
   "users": {

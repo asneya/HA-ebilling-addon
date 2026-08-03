@@ -79,7 +79,13 @@ def aparatos(h, dia=0):
     `dia` es el ordinal de la fecha: sirve para que no todos los días sean
     iguales, que es lo que hace que una mediana valga más que una media.
     """
-    out = {"lavadora": 0.0, "lavavajillas": 0.0, "horno": 0.0}
+    out = {"lavadora": 0.0, "lavavajillas": 0.0, "horno": 0.0, "nevera": 0.0}
+
+    # Nevera: 24/7, con el compresor 18 minutos sí y 27 no. Está aquí para que el
+    # camino de los aparatos **continuos** se pruebe de verdad: con solo ciclos, la
+    # aplicación llegó a publicar «el ciclo típico de tu nevera son 20 minutos» y a
+    # calcularle una hora óptima para encenderla.
+    out["nevera"] = 90.0 if (round(h * 60) % 45) < 18 else 1.0
 
     # Lavadora: días pares, a las 10, dos horas (dos y media un día de cada seis).
     if dia % 2 == 0:
@@ -131,7 +137,7 @@ S = lambda eid, st, unit=None, dc=None, name=None, **x: {"entity_id": eid, "stat
                    **({"friendly_name": name} if name else {}), **x}}
 
 CLAVES = ["pv", "grid_import", "grid_export", "batt_charge", "batt_discharge", "home"]
-APARATOS = ["lavadora", "lavavajillas", "horno"]
+APARATOS = ["lavadora", "lavavajillas", "horno", "nevera"]
 
 
 async def states(req):
@@ -289,7 +295,7 @@ async def ws(req):
                 clave = (eid.replace("sensor.", "").replace("_hoy", "")
                          .replace("_power", "").replace("_energy", ""))
                 rows, t = [], start
-                while t < end and len(rows) < 4000:
+                while t < end and len(rows) < 6000:   # 14 días a 5 min son 4.224: con 4.000 se caía hoy
                     h = t.hour + t.minute / 60.0
                     dia = t.toordinal()
                     pp, pc = pv(h, PICO_HOY), casa(h, dia)

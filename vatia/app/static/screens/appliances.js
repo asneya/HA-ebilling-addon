@@ -101,12 +101,20 @@ async function editar(id) {
   const a = lista().find((x) => x.id === id) || null;
   editando = a ? { ...a } : {
     name: "", icon: "lavadora", color: COLORES[0],
-    power_entity: "", energy_entity: "", standby_w: 15,
+    power_entity: "", energy_entity: "", standby_w: 15, kind: "",
   };
   $("#appliance-modal-title").textContent = a ? a.name : "Nuevo electrodoméstico";
   $("#ap-error").textContent = "";
   $("#ap-name").value = editando.name;
   $("#ap-standby").value = editando.standby_w;
+  $("#ap-kind").value = editando.kind || "";
+  // Y qué ha detectado la aplicación, cuando se deja en automático: detectar y
+  // callarlo es lo que hace que una fila rara parezca un fallo del programa.
+  const detectada = (vivo[id] || {}).kind;
+  $("#ap-kind-state").textContent = editando.kind || !detectada ? ""
+    : `Ahora mismo Vatia lo trata como «${
+        detectada === "continuo" ? "siempre encendido" : "puedo elegir la hora"
+      }», por lo que dice su histórico.`;
   $("#delete-appliance-btn").classList.toggle("hidden", !a);
 
   $("#ap-icons").innerHTML = ICONOS.map(([k, nombre]) => `
@@ -155,6 +163,7 @@ async function guardar() {
     power_entity: $("#ap-power").value,
     energy_entity: $("#ap-energy").value,
     standby_w: Number($("#ap-standby").value) || 0,
+    kind: $("#ap-kind").value,
   };
   if (!cuerpo.name) {
     $("#ap-error").textContent = "Ponle un nombre: es lo que se lee en la Home.";
