@@ -98,11 +98,55 @@ for svg, nombre in filas:
         raise SystemExit(f"«{ident}» trae algo que no es una forma: {sorted(etiquetas - PERMITIDAS)}")
     simbolos.append(f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>')
 
+# --- los diez añadidos a mano, sin handoff ------------------------------------
+# «Aumentar los glifos disponibles para representar electrodomésticos» pidió más
+# aparatos de los que hay en el diseño (que solo trae los 4 del prototipo). No
+# hay handoff del que extraerlos, así que van dibujados aquí mismo —mismo trazo,
+# misma caja de 24— y sobreviven a una regeneración porque el script los añade
+# después de leer los documentos, no antes.
+A_MANO = {
+    "aire-acondicionado": '<rect x="3" y="5.6" width="18" height="7" rx="2.4"/>'
+        '<path d="M7 9.1h10"/><path d="M6.4 16.2c.7 1.6 1.5 1.6 2.2 0'
+        'M11.9 16.2c.7 1.9 1.5 1.9 2.2 0M17.4 16.2c.6 1.3 1.2 1.3 1.8 0"/>',
+    "ordenador": '<rect x="4" y="4.4" width="16" height="11" rx="1.8"/>'
+        '<path d="M9.4 19.4h5.2M12 15.4v4"/>',
+    "movil": '<rect x="7.4" y="2.6" width="9.2" height="18.8" rx="2.2"/>'
+        '<path d="M10.6 5h2.8"/><path d="M11.2 18.6h1.6"/>',
+    "congelador": '<rect x="5" y="3.6" width="14" height="16.8" rx="2"/>'
+        '<path d="M5 9.6h14"/>'
+        '<path d="M12 12.4v4.8M9.9 13.4l4.2 2.8M14.1 13.4l-4.2 2.8"/>',
+    "iluminacion": '<circle cx="12" cy="9.6" r="5.4"/>'
+        '<path d="M9.8 17.4h4.4M10.4 20.2h3.2"/>',
+    "cortacesped": '<circle cx="12" cy="9.4" r="5.6"/><path d="M12 3.8v2"/>'
+        '<path d="M3 21.2l1.8-2.2 1.8 2.2 1.8-2.2 1.8 2.2 1.8-2.2 1.8 2.2 '
+        '1.8-2.2 1.8 2.2"/>',
+    "microondas": '<rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2"/>'
+        '<rect x="5" y="7.8" width="10.4" height="8.4" rx="1.2"/>'
+        '<path d="M18.4 10v5"/>',
+    "television": '<rect x="2.6" y="4.8" width="18.8" height="11.4" rx="2"/>'
+        '<path d="M7.4 19.6l2.4-3.4M16.6 19.6l-2.4-3.4"/>',
+    "freidora": '<path d="M8.6 8.6V6.4a1.8 1.8 0 0 1 1.8-1.8h3.2a1.8 1.8 0 0 1 '
+        '1.8 1.8v2.2"/><path d="M5.4 8.6h13.2l-1.6 10a2.2 2.2 0 0 1-2.2 '
+        '1.8H9.2A2.2 2.2 0 0 1 7 18.6z"/><path d="M12 12.4h.1"/>',
+    "ventilador": '<circle cx="12" cy="10" r="6.4"/>'
+        '<path d="M12 3.6v12.8M5.6 10h12.8"/><path d="M12 16.4v3M9 21h6"/>',
+}
+for ident, cuerpo in A_MANO.items():
+    if ident in vistos:
+        raise SystemExit(f"nombre repetido: {ident}")
+    vistos.add(ident)
+    simbolos.append(f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>')
+
 cabecera = (
     "<!--\n"
     f"  Set de iconos de Vatia: {len(simbolos)} glifos, trazo de 1,75, remate\n"
-    "  redondo y caja de 24, extraídos del diseño: los 42 del documento de\n"
-    "  sistema y los 4 de electrodoméstico de las filas del prototipo.\n\n"
+    "  redondo y caja de 24. Los primeros 46 vienen extraídos del diseño: los 42\n"
+    "  del documento de sistema y los 4 de electrodoméstico de las filas del\n"
+    "  prototipo. Los 10 últimos —aire acondicionado, ordenador, móvil, congelador,\n"
+    "  iluminación, cortacésped, microondas, televisión, freidora y ventilador— no\n"
+    "  están en ningún handoff: se dibujaron a mano para ampliar el catálogo de\n"
+    "  electrodomésticos, con el mismo trazo y la misma caja. `tools/generar-sprite.py`\n"
+    "  los añade después de la extracción, así que sobreviven a una regeneración.\n\n"
     "  Ninguno lleva relleno, degradado ni color fijo: el color entra por\n"
     "  `stroke: currentColor` desde el CSS, así que el mismo glifo sirve en\n"
     "  tinta de nivel 1, 2 o 3 y en color de estado.\n\n"
