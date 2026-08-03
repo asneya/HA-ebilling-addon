@@ -167,7 +167,7 @@ ningún otro contador.
   | Sección | Categorías |
   |---|---|
   | Datos | Fuente de datos |
-  | Sensores | Flujo de energía · Contadores de energía · Previsión solar · Meteorología |
+  | Sensores | Flujo de energía · Contadores de energía · Electrodomésticos · Previsión solar · Meteorología |
   | Facturación | Tarifas · Contrato y ciclo |
   | Integración | Sensores en Home Assistant |
 
@@ -293,6 +293,50 @@ perdería el contraste entre las dos que permite detectar un sensor que miente.
 El diccionario completo de registros y entidades, con las tres trampas y los
 detalles de escala, signo y cadencia, está en
 [`docs/sungrow-modbus.md`](../docs/sungrow-modbus.md).
+
+### Tus aparatos
+
+Cada electrodoméstico que declares en *Ajustes → Electrodomésticos* —un nombre, un
+icono, un color y **su sensor de potencia**— aparece en una fila de la tarjeta
+**«Tus aparatos»** de la Home. Nada se describe a mano: la duración del ciclo y su
+consumo se **aprenden** de la curva de potencia de los últimos días.
+
+Cada fila lleva una **barra segmentada del origen** de su energía (sol, batería y
+red, con los mismos colores que el resumen del día) y, a la derecha, **lo que
+cuesta** en euros o «Gratis» si no hay que comprar nada. Barra e importe salen del
+mismo reparto: si la barra no tiene rojo, el importe es cero.
+
+Lo que cambia de una fila a otra es **la pregunta que contesta**, y eso depende de
+la forma de uso:
+
+| Forma | La pregunta | Qué muestra |
+|---|---|---|
+| **Puedo elegir la hora** (movible) | ¿a qué hora lo pongo? | el origen y el coste si arranca **ahora**, más la **hora óptima** y lo que se gana esperando |
+| **Tiene ciclo, pero no lo muevo** (fijo) | ¿cuánto me cuesta ahora? | lo mismo, **sin** proponer hora |
+| **Siempre encendido** (continuo) | ¿cuánto lleva hoy y de dónde salió? | los kWh del día y su origen hora a hora |
+
+Vatia **detecta** «siempre encendido» de la curva de potencia: una nevera enciende
+y apaga el compresor decenas de veces al día y un router no se apaga nunca, y eso
+se ve en los vatios. Lo que **no** se puede saber mirando el sensor es si algo
+tiene un ciclo y aun así no lo mueves —el aire lo quieres cuando hace calor, no
+cuando pica el sol—, así que **«fijo» no se detecta jamás**: se elige en la ficha.
+Lo que elijas manda siempre sobre lo detectado, y cuando ha decidido la aplicación
+la tarjeta lo dice al pie.
+
+Un continuo **no publica ciclo típico**. Antes sí, y era una cifra medida que
+mentía: de una nevera con el compresor 18 minutos sí y 27 no salían «32 ciclos al
+día», un ciclo típico de «0 h 20 min · 0,03 kWh» y una hora óptima para
+encenderla. No faltaba información; se contestaba con confianza a una pregunta que
+no existe.
+
+El origen de un continuo se atribuye **hora a hora**: su parte de cada hora por el
+reparto de la casa en esa misma hora, no los kWh del día por un precio medio. Su
+parte nunca puede pasar del total de la casa de esa hora, y lo que cae en una hora
+sin reparto **se declara como no atribuido** en vez de repartirse a ojo para que
+cuadre.
+
+Las filas se ordenan por lo que hay que decidir: primero los movibles (por ahorro
+descendente), después los fijos y al final los continuos.
 
 ## Pantalla «Energía»
 

@@ -132,23 +132,19 @@
            una respuesta y no una lista: primero cuánto sobra, luego qué hacer
            con ello. En el light DOM y no en un componente porque necesita los
            iconos del sprite, y `<use href="#…">` no cruza el shadow DOM. -->
-      <section class="panel glass hidden" id="advice-panel" data-card="ventana">
-        <div class="ad-head">
-          <span class="ad-title" id="ad-title">Cabe en la ventana</span>
-          <span class="ad-aside" id="ad-aside"></span>
-        </div>
-        <div class="ad-rows" id="ad-rows"></div>
-        <p class="ad-note" id="ad-note"></p>
-      </section>
+      <!-- «Tus aparatos»: una sola tarjeta donde antes había dos.
 
-      <!-- «El plan de hoy»: a qué hora sale más barato cada electrodoméstico y
-           si compensa cargar la batería en las horas de valle. Va después del
-           consejo porque contesta la pregunta siguiente: «Cabe en la ventana»
-           dice qué entra ahora, y esto dice a qué hora conviene de aquí a
-           mañana. En el light DOM, como el consejo, por los iconos del sprite. -->
+           «Cabe en la ventana» y «El plan de hoy» contestaban la misma pregunta
+           —de dónde saldría la energía si lo pones ahora— con dos simulaciones
+           distintas, a 5 y a 15 minutos, que llegaban a discrepar en once puntos
+           de «% con sol» para el mismo aparato. Ahora cada fila lleva la barra del
+           origen, lo que cuesta si cuesta, y la hora óptima solo de los que se
+           pueden mover: un 24/7 no tiene hora que elegir, tiene consumo.
+
+           En el light DOM y no en un componente, por los iconos del sprite. -->
       <section class="panel glass hidden" id="plan-panel" data-card="plan">
         <div class="ad-head">
-          <span class="ad-title">El plan de hoy</span>
+          <span class="ad-title">Tus aparatos</span>
           <span class="ad-aside" id="plan-aside"></span>
         </div>
         <div class="ad-rows" id="plan-rows"></div>
@@ -1437,6 +1433,26 @@
               step="1" inputmode="numeric"><span class="unit">W</span></span></label>
           <p class="li-note">Un aparato enchufado consume dos o tres vatios todo
             el día y eso no es estar funcionando. 15 W vale para casi todo.</p>
+          <label class="li col"><span class="li-label">Forma de uso</span>
+            <select id="ap-kind">
+              <option value="">Detectarlo del histórico</option>
+              <option value="movible">Puedo elegir la hora</option>
+              <option value="fijo">Tiene ciclo, pero no lo muevo</option>
+              <option value="continuo">Siempre encendido</option>
+            </select></label>
+          <p class="li-note" id="ap-kind-state"></p>
+          <p class="li-note">
+            Decide <b>qué pregunta</b> contesta su fila en la Home. A los que
+            puedes mover se les calcula la hora óptima; a los que <b>no</b> —el aire
+            lo quieres cuando hace calor, no cuando pica el sol— solo lo que cuesta
+            ahora; y a los de <b>siempre encendido</b> —nevera, congelador— lo que
+            llevan hoy y de dónde salió, porque no hay hora que elegir.
+          </p>
+          <p class="li-note">
+            Detectándolo, Vatia distingue «siempre encendido» de «puedo elegir la
+            hora» mirando su curva de potencia. Lo que <b>no</b> puede saber es si
+            algo tiene ciclo y aun así no lo mueves: eso solo lo sabes tú.
+          </p>
         </div>
         <div class="list">
           <button class="btn danger-soft block" id="delete-appliance-btn">Quitar este electrodoméstico</button>

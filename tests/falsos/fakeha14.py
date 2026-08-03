@@ -233,7 +233,7 @@ async def ws(req):
             for eid in d["statistic_ids"]:
                 clave = eid.replace("sensor.", "").replace("_hoy", "").replace("_power", "")
                 rows, t = [], start
-                while t < end and len(rows) < 4000:
+                while t < end and len(rows) < 6000:   # 14 días a 5 min son 4.224: con 4.000 se caía hoy
                     h = t.hour + t.minute / 60.0
                     pp, pc = pv(h, PICO_HOY), casa(h)
                     s = pp - pc

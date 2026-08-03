@@ -41,8 +41,26 @@ _LOGGER = logging.getLogger(__name__)
 # resolución de la previsión: bajar de ahí es fingir precisión.
 HORIZONTE_H = 24.0
 PASO_MIN = 15
-# Paso de la simulación de dentro de un ciclo, en horas.
-_PASO_SIM_H = 0.25
+# Paso de la simulación de dentro de un ciclo, en horas. Hay dos, y la diferencia
+# es a propósito:
+#
+#   · **Para buscar**, `PASO_BUSCAR`. Se simulan 96 comienzos por aparato y solo
+#     hace falta *ordenarlos*: el error del paso es el mismo en todos, así que se
+#     cancela en la comparación. A paso fino cuesta el triple —85 ms con cuatro
+#     aparatos, y sube con cada uno— en un endpoint que se pide cada veinte
+#     segundos.
+#   · **Para enseñar**, `PASO_FINO`. Las dos horas que acaban en pantalla —ahora y
+#     la mejor— se vuelven a simular con el paso de todo lo demás en esta
+#     aplicación, que es el de las estadísticas.
+#
+# Esto existe porque había **dos simuladores** de la misma física, uno aquí a 15
+# minutos y otro en `appliances` a 5, y las dos tarjetas de electrodomésticos
+# enseñaban números distintos del mismo instante: para el mismo horno a las 18:40,
+# 0,36 kWh de red en una y 0,24 en la otra — once puntos de «% con sol». Ahora la
+# física está en `simular` y nada más la implementa.
+PASO_BUSCAR = 0.25
+PASO_FINO = 5 / 60
+_PASO_SIM_H = PASO_BUSCAR          # el de `_coste`, que muestrea precios
 # Por debajo de esto no se dice nada: mover una lavadora para ahorrar dos
 # céntimos es hacerle perder el tiempo a alguien.
 MIN_AHORRO_EUR = 0.05
@@ -89,32 +107,38 @@ def guardado_utilizable(fuentes: dict[str, Any]) -> float | None:
     return capacidad * max(0.0, min(float(soc), 100.0) - reserva) / 100.0
 
 
-def _simular(
+def simular(
     inicio: datetime,
     horas: float,
     aparato_w: float,
-    sol_at: Callable[[datetime], float],
-    casa_at: Callable[[datetime], float],
-    guardado: float | None,
-    capacidad: float,
-    reserva: float = 0.0,
+    fuentes: dict[str, Any],
+    paso: float = PASO_BUSCAR,
 ) -> tuple[float, float, float]:
     """Un ciclo puesto a `inicio`: (kWh de sol, de batería, de red).
 
-    La misma física que `appliances.estimate`, que es lo que ya se enseña en la
-    tarjeta: el sol cubre primero, lo que falte lo pone la batería mientras le
-    quede y el resto la red; el sol que sobre por encima del aparato carga la
-    batería, que es lo que pasaría de verdad.
+    **La única implementación de esta física en toda la aplicación.** El sol cubre
+    primero, lo que falte lo pone la batería mientras le quede y el resto la red; el
+    sol que sobre por encima del aparato carga la batería, que es lo que pasaría de
+    verdad.
 
-    ``guardado`` es lo **utilizable**, por encima de la reserva del inversor, y
-    ``reserva`` baja también el techo de lo que se recargue durante el ciclo: por
+    Había dos —esta y una copia en `appliances`, con distinto paso— y las dos
+    tarjetas de electrodomésticos enseñaban cifras distintas del mismo instante. Si
+    alguien necesita esta cuenta en otro sitio, llama aquí; no la copia.
+
+    Lo que la batería puede dar sale de `guardado_utilizable`, y la reserva del
+    inversor baja también el techo de lo que se recargue durante el ciclo: por
     debajo de ese porcentaje el inversor no descarga, así que esa energía figura en
     el contador y no se puede gastar.
     """
+    sol_at, casa_at = fuentes["sol_at"], fuentes["casa_at"]
+    capacidad = float(fuentes.get("capacity_kwh") or 0.0)
+    reserva = float(fuentes.get("reserve_pct") or 0.0)
+    guardado = guardado_utilizable(fuentes)
+
     del_sol = de_bat = de_red = 0.0
     restante = guardado
     tope = capacidad * max(0.0, 100.0 - reserva) / 100.0
-    pasos = max(1, int(round(horas / _PASO_SIM_H)))
+    pasos = max(1, int(round(horas / paso)))
     # El paso sale de repartir el ciclo, no al revés. Con un paso fijo, un ciclo
     # de 1,9 h se simulaba en ocho cuartos de hora —2,0 h— y la energía del
     # reparto no cuadraba con la aprendida: salía «104 % con sol».
@@ -173,20 +197,26 @@ def _mejor_hora(
     precio_at: Callable[[datetime], float | None],
     valor_bateria: float | None,
 ) -> dict[str, Any] | None:
-    """Prueba todos los comienzos del horizonte y devuelve el mejor y el de ahora."""
+    """Prueba todos los comienzos del horizonte y devuelve el mejor y el de ahora.
+
+    Dos resoluciones, y la diferencia está en `PASO_BUSCAR` / `PASO_FINO`: los 96
+    comienzos se simulan a paso grueso —solo hay que **ordenarlos**— y las dos horas
+    que acaban en pantalla se vuelven a simular a paso fino. Así lo que se enseña
+    tiene la precisión de las estadísticas sin pagar el triple por 94 comienzos que
+    nadie va a ver.
+    """
     horas = float(ciclo.get("hours") or 0.0)
     kwh = float(ciclo.get("kwh") or 0.0)
     if horas <= 0 or kwh <= 0:
         return None
     aparato_w = kwh * 1000.0 / horas
-    capacidad = float(fuentes.get("capacity_kwh") or 0.0)
-    # Lo utilizable, por encima de la reserva del inversor: viene calculado en
-    # `live.bateria_usable` y no se rehace aquí. Contando la batería entera, el
-    # plan prometía horas «con sol» sostenidas por kilovatios que el inversor no
-    # iba a entregar.
-    guardado = guardado_utilizable(fuentes)
-    reserva = float(fuentes.get("reserve_pct") or 0.0)
-    sol_at, casa_at = fuentes["sol_at"], fuentes["casa_at"]
+
+    def opcion_en(inicio: datetime, paso: float) -> dict[str, Any]:
+        sol, bat, red = simular(inicio, horas, aparato_w, fuentes, paso)
+        return {
+            "at": inicio, "sun_kwh": sol, "battery_kwh": bat, "grid_kwh": red,
+            "eur": _coste(red, bat, inicio, horas, precio_at, valor_bateria),
+        }
 
     opciones = []
     pasos = int(HORIZONTE_H * 60 / PASO_MIN)
@@ -196,22 +226,21 @@ def _mejor_hora(
         # planificada no es un plan.
         if inicio + timedelta(hours=horas) > now + timedelta(hours=HORIZONTE_H):
             break
-        sol, bat, red = _simular(
-            inicio, horas, aparato_w, sol_at, casa_at, guardado, capacidad, reserva
-        )
-        opciones.append({
-            "at": inicio, "sun_kwh": sol, "battery_kwh": bat, "grid_kwh": red,
-            "eur": _coste(red, bat, inicio, horas, precio_at, valor_bateria),
-        })
+        opciones.append(opcion_en(inicio, PASO_BUSCAR))
     if not opciones:
         return None
 
-    ahora = opciones[0]
     # Sin precios se ordena por lo que **no** pone el sol, que es la mejor
     # aproximación posible: menos comprado es menos pagado.
     con_precio = all(o["eur"] is not None for o in opciones)
     clave = (lambda o: o["eur"]) if con_precio else (lambda o: o["grid_kwh"] + o["battery_kwh"])
-    mejor = min(opciones, key=lambda o: (clave(o), o["at"]))
+    elegida = min(opciones, key=lambda o: (clave(o), o["at"]))
+
+    # Y ahora las dos que se van a enseñar, con el paso bueno. El ahorro sale de
+    # estas dos y no de las gruesas: es la cifra que se lee, y tiene que ser la
+    # diferencia entre los dos números que están al lado.
+    ahora = opcion_en(now, PASO_FINO)
+    mejor = ahora if elegida["at"] == now else opcion_en(elegida["at"], PASO_FINO)
 
     ahorro = None
     if con_precio:
@@ -346,16 +375,45 @@ def plan(
 
     filas = []
     for a in lista or []:
-        ciclo = (aprendido.get(a["id"]) or {}).get("cycle")
+        datos = aprendido.get(a["id"]) or {}
+        # La forma de uso viene resuelta en `datos` —la ficha manda sobre lo
+        # detectado— y la resuelve `live`, que es quien puede mirar a los dos:
+        # `appliances` importa este módulo, así que aquí no se puede llamar allí.
+        cual = str(datos.get("kind") or "movible")
+        fila = {
+            "id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
+            "kind": cual,
+            # `True` cuando la forma la ha decidido la aplicación y no su ficha:
+            # así la tarjeta puede decirlo y quien la lea puede corregirla.
+            "kind_auto": not str(a.get("kind") or "").strip(),
+        }
+        if cual == "continuo":
+            # No tiene ciclo ni hora que elegir: lo que lleva hoy y de dónde salió.
+            # Lo calcula quien tiene el reparto de la casa delante (`live`), que es
+            # de donde sale la atribución; aquí solo se deja el hueco marcado.
+            fila["today"] = datos.get("today_split")
+            if not fila["today"]:
+                continue
+            filas.append(fila)
+            continue
+        ciclo = datos.get("cycle")
         mejor = _mejor_hora(ciclo, now, fuentes, precio, valor_bateria) if ciclo else None
         if not mejor:
             continue
-        filas.append({
-            "id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
-            **mejor,
-        })
-    # Primero lo que más se gana moviéndolo: es el orden en que se decide.
-    filas.sort(key=lambda f: (-(f["saving_eur"] or 0.0), f["name"]))
+        fila.update(mejor)
+        if cual == "fijo":
+            # Tiene ciclo y coste, pero **no se le propone hora**: el aire lo
+            # quieres cuando hace calor, no a las 14:00 porque es cuando pica el
+            # sol. Recomendar una hora que no se puede seguir es ruido con aire de
+            # consejo, así que se calcula «ahora» y se calla el resto.
+            fila.update({"best": None, "saving_eur": None, "sun_gain_pct": 0,
+                         "worth_waiting": False})
+        filas.append(fila)
+    # Primero lo que más se gana moviéndolo, y los continuos al final: no hay nada
+    # que decidir sobre ellos, están para saber lo que cuestan.
+    orden = {"movible": 0, "fijo": 1, "continuo": 2}
+    filas.sort(key=lambda f: (orden.get(f["kind"], 9),
+                              -(f.get("saving_eur") or 0.0), f["name"]))
     bateria = cargar_de_red(now, fuentes, precio, manana)
     if not filas and not bateria:
         return None
@@ -369,4 +427,8 @@ def plan(
         # enseña la tarjeta de la ventana: si esta tarjeta promete un sol que el
         # tejado está desmintiendo, tiene que decirlo con las mismas palabras.
         "roof_today": fuentes.get("roof_today"),
+        # Y el estado de la batería, que era lo único de la tarjeta que se ha
+        # retirado y que hacía falta conservar: explica por qué una batería «al
+        # 21 %» no aparece en ninguna cuenta.
+        "battery_state": fuentes.get("battery_state"),
     }

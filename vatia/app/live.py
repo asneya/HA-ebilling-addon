@@ -382,29 +382,48 @@ def _states_energy(
 
 
 def _accumulate_flows(
-    buckets: dict[str, dict[str, float]], measured_home: bool,
-    partes: tuple[bool, bool] = (False, False),
+    por_hora: dict[str, dict[str, float]] | None,
 ) -> dict[str, float] | None:
-    """Reparte hora a hora y suma los resultados (Wh).
+    """Suma el reparto de cada hora (Wh).
 
     Hacer el reparto una sola vez sobre el total del día pierde la correlación
     temporal: si la batería se carga de la red de madrugada y hay sol al
     mediodía, sobre los totales esa carga parece solar. Repartir por intervalos
-    las separa. Los datos ya vienen descargados, así que no cuesta ninguna
-    petición extra.
-
-    Los intervalos son de **una hora** y no de cinco minutos, que es como
-    llegan: seis contadores distintos no publican a la vez, y a cinco minutos
-    ese desfase se leía como carga que el sol no explica. Los buckets finos
-    siguen saliendo enteros de ``daily_energy`` para el cierre del día.
+    las separa; el reparto lo hace `reparto_por_horas` y esto solo lo suma, para que
+    el detalle por horas se pueda usar también en otro sitio —atribuirle un origen
+    a un aparato continuo— sin repetir la cuenta.
     """
-    if not buckets:
+    if por_hora is None:
         return None
     keys = ("to_home", "to_battery", "to_grid", "from_solar", "from_battery",
             "from_grid", "home_total", "grid_to_battery", "battery_to_grid")
     acc = dict.fromkeys(keys, 0.0)
-    for values in series_mod.por_horas(buckets).values():
-        split = series_mod.split_flows(
+    for split in por_hora.values():
+        for key in keys:
+            acc[key] += split[key]
+    return {key: value * 1000.0 for key, value in acc.items()}  # kWh → Wh
+
+
+def reparto_por_horas(
+    buckets: dict[str, dict[str, float]], measured_home: bool,
+    partes: tuple[bool, bool] = (False, False),
+) -> dict[str, dict[str, float]] | None:
+    """El reparto de cada hora del día, sin sumar: ``{iso de la hora: split}`` en kWh.
+
+    Lo saca `_accumulate_flows` para sumarlo, y hace falta **sin sumar** para poder
+    atribuirle un origen a un aparato continuo: lo que gastó la nevera a las tres
+    salió del mismo sitio que el resto de la casa a las tres, y esa es la única
+    atribución defendible sin un contador de origen por aparato.
+
+    Se devuelve por horas y no por los cinco minutos en que llegan los datos por el
+    mismo motivo que explica `_accumulate_flows`: seis contadores no publican a la
+    vez, y a cinco minutos el desfase se lee como energía que el sol no explica.
+    """
+    if not buckets:
+        return None
+    out: dict[str, dict[str, float]] = {}
+    for iso, values in series_mod.por_horas(buckets).items():
+        out[iso] = series_mod.split_flows(
             values.get("pv_energy", 0.0),
             values.get("battery_charge_energy", 0.0),
             values.get("grid_export_energy", 0.0),
@@ -414,9 +433,7 @@ def _accumulate_flows(
             values.get("battery_charge_pv_energy") if partes[0] else None,
             values.get("grid_export_pv_energy") if partes[1] else None,
         )
-        for key in keys:
-            acc[key] += split[key]
-    return {key: value * 1000.0 for key, value in acc.items()}  # kWh → Wh
+    return out
 
 
 async def daily_energy(
@@ -643,17 +660,24 @@ async def daily_energy(
     partes = tuple(
         any(v.get(k) for v in per_bucket.values()) for k in ENERGY_PARTES
     )
-    flows = _accumulate_flows(
+    # El reparto hora a hora, que sale de aquí porque este es el sitio que sabe si
+    # el consumo está medido y qué partes tienen datos. Se usa dos veces: sumado,
+    # para el resumen del día; y por horas, para atribuirle un origen a lo que ha
+    # gastado un aparato continuo.
+    por_hora = reparto_por_horas(
         per_bucket, out.get("home_energy") is not None, partes
     )
+    flows = _accumulate_flows(por_hora)
     # Los buckets salen fuera para poder cruzarlos con la ventana en el cierre
     # del día: ya están descargados, así que no cuesta ninguna petición extra.
-    value = {"totals": out, "flows": flows, "sources": sources, "buckets": per_bucket}
+    value = {"totals": out, "flows": flows, "sources": sources,
+             "buckets": per_bucket, "flows_by_hour": por_hora}
     _daily_cache.update({"key": cache_key, "at": time.monotonic(),
                          "value": {"totals": dict(out), "flows": flows,
                                    "power": dict(power_totals),
                                    "sources": dict(sources),
-                                   "buckets": per_bucket}})
+                                   "buckets": per_bucket,
+                                   "flows_by_hour": por_hora}})
     return value
 
 
@@ -1616,28 +1640,53 @@ async def build(
     aparatos = appliance_list or []
     ahora_aparatos = appliances_mod.instantaneo(states, aparatos)
     aprendido: dict[str, dict[str, Any]] = {}
-    consejo = None
     plan = None
     if aparatos:
         aprendido = await appliances_mod.learn(settings, states, aparatos, now.tzinfo, now)
         fuentes = await _fuentes(curva, settings, states, soc, now.tzinfo, now)
-        consejo = appliances_mod.advice(
-            aparatos, aprendido, window, now,
-            _precio_tras_ventana(settings, tariffs, window, now),
-            fuentes,
-        )
-        # El plan del día: a qué hora sale más barato cada aparato y si
-        # compensa cargar la batería de la red. Comparte las fuentes con el
-        # consejo, así que no cuesta ninguna petición más que los precios.
+        if fuentes is not None:
+            fuentes["battery_state"] = appliances_mod.estado_bateria(fuentes)
+        precio_at = await _precio_por_hora(settings, tariffs, now)
+        # La forma de uso de cada aparato se resuelve **aquí y una sola vez**: la
+        # ficha manda sobre lo que la aplicación detecta, y este es el único sitio
+        # que puede mirar las dos cosas (`appliances` importa `planner`, así que
+        # allí no se puede resolver sin un ciclo de imports).
+        #
+        # Y a los continuos se les calcula aquí su día, porque la atribución del
+        # origen necesita el reparto horario de la casa, que está en este alcance.
+        por_horas = daily.get("flows_by_hour")
+        for a in aparatos:
+            datos = aprendido.setdefault(a["id"], {})
+            datos["kind"] = appliances_mod.forma(a, datos)
+            if datos["kind"] == "continuo":
+                datos["today_split"] = appliances_mod.dia_de_un_continuo(
+                    datos.get("today_by_hour"), por_horas,
+                    (lambda h: precio_at(
+                        now.replace(hour=int(h), minute=0, second=0, microsecond=0)))
+                    if precio_at else None,
+                )
+        # Una sola tarjeta para los electrodomésticos: de dónde saldría la energía
+        # si se pone ahora, lo que costaría, y la hora óptima de los que se pueden
+        # mover. Antes eran dos —«Cabe en la ventana» y «El plan de hoy»— con dos
+        # simulaciones distintas del mismo instante que llegaban a discrepar en once
+        # puntos de «% con sol» para el mismo aparato.
         plan = planner.plan(
-            aparatos, aprendido, fuentes,
-            await _precio_por_hora(settings, tariffs, now), now,
+            aparatos, aprendido, fuentes, precio_at, now,
             (window or {}).get("tomorrow"),
         )
+        # Y la etiqueta de cada fila —«Gratis», «De la batería», los euros— se pone
+        # aquí, a partir del reparto que trae la propia fila. No es una segunda
+        # opinión: es una lectura del mismo número, que es lo que impide que vuelva
+        # a pasar lo del «Gratis» con 1,1 kWh de batería debajo.
+        precio_ahora = _precio_tras_ventana(settings, tariffs, window, now)
+        for fila in (plan or {}).get("rows") or []:
+            origen = fila.get("now") or fila.get("today")
+            fila["verdict"] = appliances_mod.etiqueta_de_origen(origen, precio_ahora)
         for fila in ahora_aparatos:
             datos = aprendido.get(fila["id"]) or {}
             fila["cycle"] = datos.get("cycle")
             fila["today_kwh"] = datos.get("today_kwh")
+            fila["kind"] = datos.get("kind")
 
     return {
         "configured": configured,
@@ -1656,7 +1705,6 @@ async def build(
         "phase": _day_phase(states, now),
         "window": window,
         "appliances": ahora_aparatos,
-        "advice": consejo,
         "plan": plan,
         "close": day_close(
             states, energy_summary, buckets, window, now, savings, aparatos, aprendido

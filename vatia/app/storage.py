@@ -245,6 +245,10 @@ DEFAULT_APPLIANCES: list[dict[str, Any]] = []
 # defecto. Los cuatro primeros vienen dibujados del prototipo del diseño.
 APPLIANCE_ICONS = ("lavadora", "lavavajillas", "horno", "coche", "potencia")
 APPLIANCE_COLOR = "#0f7d8a"
+# Las tres formas de uso que se pueden elegir a mano. Vacío = detectarlo, y
+# entonces la aplicación distingue «movible» de «continuo»; «fijo» solo sale de
+# aquí, porque no está en la curva de potencia sino en cómo se usa la casa.
+APPLIANCE_KINDS = ("movible", "fijo", "continuo")
 
 # Tarifas de arranque: la de referencia extraída de una factura real de
 # Iberdrola (2.0TD, marzo 2026), una plana con excedentes y una PVPC.
@@ -352,6 +356,13 @@ def normalize_appliance(raw: dict[str, Any]) -> dict[str, Any]:
         "power_entity": str(raw.get("power_entity") or "").strip(),
         "energy_entity": str(raw.get("energy_entity") or "").strip(),
         "standby_w": max(0.0, min(umbral, 5000.0)),
+        # Forma de uso: «movible» (se elige la hora), «fijo» (tiene ciclo pero no
+        # se mueve: el aire lo quieres cuando hace calor) o «continuo» (nevera,
+        # congelador: no hay hora que elegir). Vacío = que lo detecte la aplicación,
+        # que sabe distinguir movible de continuo mirando la curva de potencia pero
+        # **no** puede saber si algo es fijo: eso es una decisión de la casa.
+        "kind": (str(raw.get("kind") or "").strip()
+                 if str(raw.get("kind") or "").strip() in APPLIANCE_KINDS else ""),
     }
 
 

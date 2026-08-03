@@ -2,6 +2,93 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.52.0
+
+### Dos tarjetas de lo mismo, y una de ellas contestando a una pregunta que no existe
+
+De una queja: *«la info de electrodomésticos de la home me parece redundante y eso
+no debería ocurrir, menos en una home»*. Lo era, y era peor que redundancia visual.
+**«Cabe en la ventana» y «El plan de hoy» simulaban el mismo instante dos veces**,
+con dos funciones distintas y a dos resoluciones distintas —5 y 15 minutos—, y
+llegaban a discrepar en **once puntos de «% con sol» para el mismo horno**. Dos
+respuestas a la misma pregunta, una encima de la otra, en la pantalla de inicio.
+
+Ahora hay una tarjeta, **«Tus aparatos»**, y una sola física: `planner.simular`.
+`appliances.estimate` la llama en vez de repetirla, y el banco lo comprueba con la
+batería en su reserva para que las tres partes salgan del cero —si el sol lo
+cubriera todo, coincidirían sin decir nada.
+
+Cada fila lleva ahora una **barra segmentada del origen** de su energía —sol,
+batería y red, con los colores del resumen del día— y a la derecha **lo que
+cuesta**, en euros o «Gratis». Salen del mismo reparto: si en la barra no hay rojo,
+el importe es cero, y ya no se puede leer una cosa arriba y otra a la derecha.
+
+### Y la nevera a la que se le calculaba su mejor hora
+
+El caso que estaba roto de raíz. Una nevera de verdad —compresor 18 minutos sí, 27
+no— da **32 «ciclos» al día**, así que la aplicación le publicaba un ciclo típico
+de **«0 h 20 min · 0,03 kWh»**, la etiquetaba **«Gratis · lo pone el sol»** y le
+proponía una hora óptima para encenderla. No le faltaba información: contestaba con
+confianza a una pregunta que no existe.
+
+Los aparatos tienen ahora **tres formas de uso**, porque son tres preguntas
+distintas:
+
+| Forma | La pregunta | La fila |
+|---|---|---|
+| **Puedo elegir la hora** | ¿a qué hora? | origen y coste si arranca ahora, más la hora óptima |
+| **Tiene ciclo, pero no lo muevo** | ¿cuánto cuesta ahora? | lo mismo, **sin** hora propuesta |
+| **Siempre encendido** | ¿cuánto lleva hoy y de dónde salió? | los kWh del día con su origen |
+
+«Siempre encendido» **se detecta de la curva de potencia**, y los números de las
+curvas reales dejan poco margen: la nevera da 32 ciclos al día y está encendida el
+44 % del tiempo, el router 0,14 y el **100 %**; el aire 3,0 y el 17 %, la lavadora
+0,43 y el 2 %. Los umbrales quedan en 6 ciclos/día y 90 % de encendido, con cinco
+veces de hueco a cada lado.
+
+**«Fijo» no se detecta nunca**, y eso es parte del diseño: que quieras el aire
+cuando hace calor y no cuando pica el sol **no está en los vatios**. Es una
+decisión de la casa y solo se elige en la ficha, donde lo que elijas manda siempre
+sobre lo detectado. Cuando ha decidido la aplicación, la tarjeta lo dice al pie y
+señala dónde cambiarlo.
+
+Un continuo ya **no publica ciclo típico**: publicarlo era publicar una mentira
+medida.
+
+### El día de un continuo, hora a hora
+
+Lo que lleva hoy una nevera no se puede repartir con el reparto del día: de noche
+sale de la batería y al mediodía del sol. Se atribuye **hora a hora** —su parte de
+cada hora por el reparto de la casa de esa misma hora— y solo se cobra la red. En
+la instalación real: `0,669 kWh hoy · sol 0,311 · batería 0,296 · red 0,062 ·
+0,01 €`.
+
+Con dos límites que evitan las dos formas de mentir aquí. Su parte **no puede pasar
+del total de la casa** de esa hora (un contador que marca más que la casa entera es
+ruido, no un aparato glotón), y lo que cae en una hora **sin reparto se declara
+como no atribuido** en vez de repartirse a ojo para que cuadre.
+
+Las filas se ordenan por **lo que hay que decidir**: primero los movibles, por
+ahorro descendente; luego los fijos; los continuos al final.
+
+### Detalles
+
+- La nota de la **reserva de la batería** venía de la tarjeta retirada y se
+  conserva en la nueva: explica por qué una batería «al 21 %» no aparece en
+  ninguna de las barras, que si no parece un error del programa.
+- Los trozos de la barra por debajo del **4 %** no se dibujan —a esa anchura solo
+  ensucian el borde entre sus dos vecinos—, pero su cifra sigue en el título.
+- La búsqueda de la mejor hora rastrea las **96 posibilidades del día a 15
+  minutos** y **solo afina a 5** las dos que se publican, «ahora» y «la mejor».
+  Con cuatro aparatos movibles el plan completo tarda **7,5 ms**; afinarlo entero
+  son 14,1, el doble, para mover cifras que no se enseñan.
+- El banco nuevo (`tests/python/aparatos.py`, diez secciones) y las secciones 8-9
+  de `tests/navegador/planui.js` fijan la barra, la fila de un continuo y que
+  «fijo» no salga jamás de la detección.
+- El Home Assistant falso guardaba **4000 filas** por sensor, y catorce días a
+  cinco minutos son 4224: el día en curso se caía por el otro extremo y la nevera
+  aparecía sin datos de hoy. Subido a 6000.
+
 ## 0.51.1
 
 ### «Hoy el cielo no acompaña» era afirmar lo que no se sabe
