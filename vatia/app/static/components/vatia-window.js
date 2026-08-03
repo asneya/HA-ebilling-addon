@@ -47,6 +47,9 @@
     return `${m} min`;
   };
   const kw = (w) => (w < 1000 ? `${nf0.format(w)} W` : `${nf1.format(w / 1000)} kW`);
+  const nfEur = new Intl.NumberFormat("es-ES",
+    { style: "currency", currency: "EUR", minimumFractionDigits: 2 });
+  const eur = (v) => nfEur.format(v);
 
   const CSS = `
     :host { display: block; }
@@ -174,14 +177,44 @@
         // mitad, prometer la mitad que no hay es lo que hacía que la tarjeta
         // no se correspondiera con la realidad al enchufar algo.
         const cuanto = t.spendable_w ?? t.surplus_w;
+        // **Lo que queda por sobrar, no una potencia media.** El titular decía «te
+        // sobran 2,7 kW durante 4 h 20 min», y de una queja: *«no me parece nada
+        // práctico. Además, aburre ver siempre lo mismo»*. Las dos cosas con la
+        // misma raíz: nadie tiene un aparato de 2,7 kW, así que para decidir algo
+        // había que hacer una cuenta aparte; y la frase no dependía de nada que
+        // cambiara salvo el número, así que se leía igual a las diez que a las
+        // siete. Los kWh que quedan y lo que valen sí son una decisión, y encogen
+        // solos con el día.
+        const kwh = t.left_spendable_kwh;
+        const ahorro = t.left_saving_eur, venta = t.left_export_eur;
+        const cierra = corte
+          ? `A las ${hhmm(corte.start)} se corta —la casa gasta más de lo que da el
+             sol— y vuelve a las ${hhmm(corte.end)}.`
+          : `A partir de las ${hhmm(t.end)} cada kWh lo pagas.`;
+        // Con la hora ya en el titular, repetirla debajo no añade nada: el corte de
+        // en medio sí, que eso el titular no lo dice.
+        const luego = corte ? ` ${cierra}` : "";
+        if (!kwh) {
+          // Sin la cifra de lo que queda —payload viejo, o la ventana justo
+          // acabándose— se dice lo que se sabe y no se rellena con otra cosa.
+          return {
+            pill: "ENERGÍA GRATIS AHORA",
+            head: `Te sobran ${kw(cuanto)} durante ${dur(d.hours_left)}.`,
+            sub: cierra + this._cuando(t),
+            note: this._bateria(t) + this._note(t, m),
+          };
+        }
         return {
           pill: "ENERGÍA GRATIS AHORA",
-          head: `Te sobran ${kw(cuanto)} durante ${dur(d.hours_left)}.`,
-          sub: (corte
-            ? `Es el mejor momento del día para gastar. A las ${hhmm(corte.start)} se corta
-               —la casa gasta más de lo que da el sol— y vuelve a las ${hhmm(corte.end)}.`
-            : `Es el mejor momento del día para gastar. A partir de las ${
-              hhmm(t.end)} cada kWh lo pagas.`) + this._cuando(t),
+          head: `Hasta las ${hhmm(t.end)} te sobran ${nf1.format(kwh)} kWh.`,
+          // Y los euros, que son el motivo: un kWh gastado vale lo que no compras;
+          // vendido, lo que te dan por él, que es bastante menos. Sin tarifa
+          // elegida no se inventan y se dice en energía.
+          sub: (ahorro != null && venta != null
+            ? `Gastarlos te ahorra ${eur(ahorro)}; si no, se van a la red por ${eur(venta)}.`
+            : ahorro != null ? `Gastarlos te ahorra ${eur(ahorro)}.`
+            : `Es energía que no tendrías que comprar, y a partir del cierre cada kWh lo pagas.`)
+            + luego + this._cuando(t),
           note: this._bateria(t) + this._note(t, m),
         };
       }

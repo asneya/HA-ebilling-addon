@@ -16,6 +16,7 @@
  *   9. otro usuario ve lo suyo, no lo de este
  *  10. ocultarlo todo avisa en vez de dejar la pantalla en blanco
  *  11. cabe a 320 px
+ *  12. y el catálogo llama a cada tarjeta como se llama de verdad en la Home
  */
 const { abrirNavegador, base, ficheros } = require("./camino");
 const BASE = base("http://127.0.0.1:8404/");
@@ -222,6 +223,34 @@ const catalogo = (p) => p.evaluate(() =>
     const b2 = document.querySelector('[data-card-row="ahora"] .down').getBoundingClientRect();
     return b2.right <= window.innerWidth && b2.width >= 30;
   }), "y las flechas caben y son pulsables");
+
+  console.log("\n12 · el catálogo dice los nombres de verdad");
+  // El catálogo solo se lee en Ajustes, así que puede quedarse describiendo una
+  // tarjeta que ya no existe sin que nada se rompa: pasó, y durante tres
+  // versiones, con «El plan de hoy · a qué hora sale más barato cada
+  // electrodoméstico» cuando esa tarjeta ya se llamaba «Tus aparatos» y contaba
+  // bastante más. Las que llevan su título escrito en la Home se pueden comparar,
+  // y son justo las que cambian.
+  await p.setViewportSize({ width: 414, height: 900 });
+  await p.goto(BASE);
+  await p.waitForFunction(() => !document.querySelector("#boot"), { timeout: 25000 });
+  await p.waitForTimeout(1200);
+  const nombres = await p.evaluate(async () => {
+    const { CATALOGO } = await import("./static/core/tarjetas.js");
+    return CATALOGO.map((t) => {
+      const el = document.querySelector(`#home-cards [data-card="${t.id}"] .ad-title`);
+      return { id: t.id, name: t.name, claim: t.claim, titulo: el?.textContent.trim() || null };
+    });
+  });
+  const conTitulo = nombres.filter((x) => x.titulo);
+  ok(conTitulo.length >= 2,
+    `hay tarjetas con su título escrito para comparar (${conTitulo.map((x) => x.id).join(", ")})`);
+  conTitulo.forEach((x) => {
+    ok(x.name === x.titulo,
+      `«${x.id}» se llama igual en las dos partes (catálogo «${x.name}» · Home «${x.titulo}»)`);
+  });
+  ok(nombres.every((x) => x.claim && x.claim.length > 12 && x.name),
+    "y ninguna se queda sin nombre ni sin lo que hace");
 
   // Se deja como estaba, que el banco se puede repetir.
   await p.evaluate((todas) => fetch("api/settings", {

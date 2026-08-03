@@ -124,6 +124,18 @@
   const GAP = 14;          // separación entre segmentos de una misma columna
   const PASO = 40;         // paso mínimo entre centros de etiqueta (antirreapilado)
 
+  /* Cuántos huecos hay que descontar del presupuesto: los del lado más poblado.
+     El diseño da tres nodos por lado —sol, batería, red— y con eso los dos huecos
+     estaban puestos a mano. Al partir la casa por dentro puede haber siete
+     segmentos a la derecha, y entonces los seis huecos se comían 84 px que nadie
+     había reservado: **el dibujo se salía del lienzo**, medido, 17 px por la
+     izquierda y 365 sobre un ancho de 348. El suelo de dos deja el caso de
+     siempre exactamente como estaba: solo se estrecha cuando hay detalle. */
+  const huecosDe = (active) => {
+    const cuantos = (lado) => new Set(active.map((l) => l[lado])).size;
+    return Math.max(2, Math.max(cuantos("from"), cuantos("to")) - 1);
+  };
+
   // Contadores del día, con el sentido en el nombre para que no haya que
   // adivinar si «Batería» es lo que ha entrado o lo que ha salido. La casa se
   // enseña siempre; el resto, solo si ha habido algo.
@@ -306,28 +318,41 @@
       return { src, dst };
     }
 
-    /* Antirreapilado del diseño: el bloque de etiqueta ocupa lo suyo, así que en
-       segmentos finos las etiquetas se solaparían. Se impone un paso mínimo
-       empujando hacia delante; si la última se sale del tope, se desplaza todo y
-       se reequilibra hacia atrás.
-       `pasos[i]` es la distancia mínima entre el centro i−1 y el i. En las
-       columnas es la constante del diseño (40 px, alto del bloque); en las filas
-       depende de lo que mide cada nombre, porque con un paso único los nombres
-       cortos se separaban de su barra sin necesidad. */
+    /* Antirreapilado: el bloque de etiqueta ocupa lo suyo, así que en segmentos
+       finos las etiquetas se solaparían. Cada una quiere estar en el centro de su
+       barra y solo se mueve lo justo para dejar `pasos[i]` con la anterior, sin
+       salirse nunca de [`piso`, `tope`].
+
+       `pasos[i]` es la distancia mínima entre el centro i−1 y el i. En las columnas
+       es la constante del diseño (40 px, alto del bloque); en las filas depende de
+       lo que mide cada nombre, porque con un paso único los nombres cortos se
+       separaban de su barra sin necesidad.
+
+       Esto era una cadena de empujones —hacia delante, luego todo el grupo hacia
+       atrás si la última se pasaba, luego reequilibrar, luego todo el grupo hacia
+       delante si la primera se salía— y el último empujón no tenía tope: con más
+       etiquetas de las que caben mandaba las últimas **fuera del lienzo**, que con
+       `overflow: visible` no es recortarlas sino pintarlas por encima de la tarjeta
+       y del borde de la pantalla, donde no hay scroll con el que llegar. Medido con
+       cinco aparatos: la última en x = 563 con la pantalla en 414.
+
+       Ahora son dos pasadas y una salida honrada. Si al acabar los pasos no se
+       respetan, es que **no caben**: entonces se reparten a partes iguales entre
+       los dos bordes, que es la forma menos mala de no caber —apretadas pero
+       parejas, y todas dentro— en vez de un montón al final. */
     _centros(list, pasos, piso, tope) {
+      const n = list.length;
+      if (!n) return [];
       const c = list.map((s) => (s.b0 + s.b1) / 2);
-      for (let i = 1; i < c.length; i++) if (c[i] - c[i - 1] < pasos[i]) c[i] = c[i - 1] + pasos[i];
-      const sobra = c.length ? c[c.length - 1] - tope : 0;
-      if (sobra > 0) for (let i = 0; i < c.length; i++) c[i] -= sobra;
-      for (let i = c.length - 2; i >= 0; i--) if (c[i + 1] - c[i] < pasos[i + 1]) c[i] = c[i + 1] - pasos[i + 1];
-      // Y si tras todo eso la primera se sale por el otro lado, no cabe: se
-      // empuja el conjunto y se acepta el solape, que es mejor que salir del
-      // lienzo y desaparecer.
-      if (c.length && c[0] < piso) {
-        const falta = piso - c[0];
-        for (let i = 0; i < c.length; i++) c[i] += falta;
-      }
-      return c;
+      c[0] = Math.max(c[0], piso);
+      for (let i = 1; i < n; i++) c[i] = Math.max(c[i], c[i - 1] + pasos[i]);
+      c[n - 1] = Math.min(c[n - 1], tope);
+      for (let i = n - 2; i >= 0; i--) c[i] = Math.min(c[i], c[i + 1] - pasos[i + 1]);
+      const cabe = c[0] >= piso - 0.5
+        && c.every((v, i) => i === 0 || v - c[i - 1] >= pasos[i] - 0.5);
+      if (cabe) return c;
+      const paso = (tope - piso) / Math.max(1, n - 1);
+      return list.map((_, i) => piso + paso * i);
     }
 
     _caudal(flows, ancho) {
@@ -441,7 +466,10 @@
       // 14 px («Batería · descarga»); el resto es zona de cintas.
       const ETIQ = 150;
       const A1 = ETIQ + BW, A2 = ancho - ETIQ - BW, AC = (A1 + A2) / 2;
-      const scale = Math.min(250 / KW_LLENO, 250 / Math.max(1.2, total / 1000)) / 1000;
+      // Los 250 px del diseño son para tres nodos por lado; con la casa partida
+      // los huecos de más salen de aquí y no del lienzo.
+      const largo = Math.max(120, 250 - (huecosDe(active) - 2) * GAP);
+      const scale = Math.min(largo / KW_LLENO, largo / Math.max(1.2, total / 1000)) / 1000;
       const { src, dst } = this._reparto(active, scale, MID, d.orden);
       const proj = (a, b) => `${r1(a)},${r1(b)}`;
       const { defs, bands, dots, valores } = this._piezas(active, { A1, A2, AC, proj, dentro: true, d });
@@ -492,16 +520,26 @@
        de cintas —arriba las de entrada, abajo las de salida— y en dos líneas,
        porque «Batería · descarga» a 14 px no cabe en un tercio de un teléfono. */
     _vertical(active, total, ancho, d) {
-      const MARGEN = 4, BW = 34, TRAMO = 132, ETIQ = 38, PIE = 20;
-      const A1 = ETIQ + BW;                 // borde inferior de la fila de entrada
+      const MARGEN = 4, BW = 34, TRAMO = 132, PIE = 20;
+      // Cuando un lado trae más de tres segmentos —la casa partida por dentro—
+      // sus etiquetas no caben en una línea: cinco aparatos piden unos 600 px de
+      // nombres sobre los 348 que hay. Se ponen entonces en **dos filas alternas**,
+      // que dobla el sitio de cada una, y la zona de etiquetas crece lo que ocupa
+      // la segunda. Con tres o menos no cambia nada.
+      const SALTO = 32;
+      const escalones = (lado) => new Set(active.map((l) => l[lado])).size > 3 ? 2 : 1;
+      const filasArriba = escalones("from"), filasAbajo = escalones("to");
+      const ETIQ_A = 38 + (filasArriba - 1) * SALTO;
+      const ETIQ_B = 38 + (filasAbajo - 1) * SALTO;
+      const A1 = ETIQ_A + BW;               // borde inferior de la fila de entrada
       const A2 = A1 + TRAMO;                // borde superior de la fila de salida
       const AC = (A1 + A2) / 2;
-      const ALTO = A2 + BW + ETIQ + PIE;
+      const ALTO = A2 + BW + ETIQ_B + PIE;
       const MID = ancho / 2;
       // El presupuesto se calcula con **tres** segmentos siempre, aunque ahora
       // haya uno: si dependiera de los que hay, la escala daría un salto al
       // aparecer una corriente y el diagrama parecería cambiar de unidades.
-      const budget = Math.max(60, ancho - 2 * MARGEN - 2 * GAP);
+      const budget = Math.max(60, ancho - 2 * MARGEN - huecosDe(active) * GAP);
       const scale = Math.min(budget / KW_LLENO, budget / Math.max(1.2, total / 1000)) / 1000;
       const { src, dst } = this._reparto(active, scale, MID, d.orden);
       const proj = (a, b) => `${r1(b)},${r1(a)}`;
@@ -511,30 +549,52 @@
 
       const labels = [];
       const fila = (list, arriba) => {
-        const y = arriba ? ETIQ - 20 : A2 + BW + 16;
+        const escalonado = (arriba ? filasArriba : filasAbajo) > 1;
+        // La fila de más lejos va primero, para que las guías de la cercana se
+        // pinten encima y no al revés.
+        const base = arriba ? ETIQ_A - 20 : A2 + BW + 16;
         // Dos líneas por etiqueta: el nombre y, debajo, el sufijo con el valor.
+        // Con el lado apretado el sufijo se cae, y no es una pérdida: «carga» o
+        // «excedente» pesan el triple que la cifra y dicen lo que ya dicen el
+        // nombre de encima, el color y el propio sitio —abajo van los destinos—.
+        // Con los ocho destinos de una casa partida no cabían ni escalonadas: la
+        // fila de «Resto de la casa · 360 W» y «Red excedente · 1,4 kW» pedía 258 px
+        // de los 246 que hay.
         const textos = list.map((s) => {
           const [nombre, sufijo] = (arriba ? SRC_SHORT : d.corto)[s.k];
-          return [nombre, sufijo ? `${sufijo} · ${power(s.w)}` : power(s.w)];
+          return [nombre, sufijo && !escalonado ? `${sufijo} · ${power(s.w)}` : power(s.w)];
         });
         // Media anchura de cada bloque, medida, más 5 px de aire a cada lado.
         const medios = textos.map(([n, v]) =>
           Math.max(medir(n, 14, 600), medir(v, 12.5, 500)) / 2 + 5);
-        const pasos = medios.map((m, i) => (i ? medios[i - 1] + m : 0));
-        const centros = this._centros(list, pasos, medios[0], ancho - medios[medios.length - 1]);
-        list.forEach((s, i) => {
-          const cx = centros[i], real = (s.b0 + s.b1) / 2;
-          const [nombre, valor] = textos[i];
-          const color = arriba ? tono(SRC_COLOR, {}, s.k) : tono(d.color, d.tinta, s.k);
-          if (Math.abs(cx - real) > 6) {
-            labels.push(`<line class="guia" x1="${r1(cx)}" y1="${r1(arriba ? y + 4 : y - 12)}"
-              x2="${r1(real)}" y2="${r1(arriba ? A1 - BW : A2 + BW)}"
-              style="stroke:${color}"/>`);
-          }
-          labels.push(`<text class="n" x="${r1(cx)}" y="${y}" text-anchor="middle">${
-            esc(nombre)}</text>
-            <text class="v" x="${r1(cx)}" y="${y + 15}" text-anchor="middle"
-              style="fill:${color}">${esc(valor)}</text>`);
+        // Escalonadas, cada etiqueta solo tiene que esquivar a la de **su** fila,
+        // así que cada fila se coloca por separado: es lo que dobla el sitio.
+        const grupos = escalonado
+          ? [list.map((_, i) => i).filter((i) => i % 2 === 0),
+             list.map((_, i) => i).filter((i) => i % 2 === 1)]
+          : [list.map((_, i) => i)];
+        grupos.forEach((idx, nivel) => {
+          if (!idx.length) return;
+          // Arriba, la fila lejana es la de más arriba; abajo, la de más abajo.
+          const y = base + (arriba ? -1 : 1) * (escalonado ? (1 - nivel) * SALTO : 0);
+          const mios = idx.map((i) => medios[i]);
+          const pasos = mios.map((m, j) => (j ? mios[j - 1] + m : 0));
+          const centros = this._centros(idx.map((i) => list[i]), pasos,
+                                        mios[0], ancho - mios[mios.length - 1]);
+          idx.forEach((i, j) => {
+            const s = list[i], cx = centros[j], real = (s.b0 + s.b1) / 2;
+            const [nombre, valor] = textos[i];
+            const color = arriba ? tono(SRC_COLOR, {}, s.k) : tono(d.color, d.tinta, s.k);
+            if (Math.abs(cx - real) > 6 || escalonado) {
+              labels.push(`<line class="guia" x1="${r1(cx)}" y1="${r1(arriba ? y + 4 : y - 12)}"
+                x2="${r1(real)}" y2="${r1(arriba ? A1 - BW : A2 + BW)}"
+                style="stroke:${color}"/>`);
+            }
+            labels.push(`<text class="n" x="${r1(cx)}" y="${r1(y)}" text-anchor="middle">${
+              esc(nombre)}</text>
+              <text class="v" x="${r1(cx)}" y="${r1(y + 15)}" text-anchor="middle"
+                style="fill:${color}">${esc(valor)}</text>`);
+          });
         });
       };
       fila(src, true);

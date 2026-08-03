@@ -19,6 +19,15 @@ Y lo que se dibuja del día que ya ha pasado:
  14. `real_until` dice dónde está la costura
  15. sin nada medido, todo previsión y ninguna costura
  16. y los números de la ventana **no** cambian: siguen siendo del día previsto
+
+Y lo que queda por sobrar de aquí al cierre, que es lo único sobre lo que se puede
+decidir algo:
+
+ 17. a media mañana queda menos que el día entero, y no todo
+ 18. al cerrar la ventana no queda nada
+ 19. antes de abrir queda el día entero
+ 20. la batería se descuenta también de lo que queda
+ 21. y sin decir qué hora es no se inventa un «resto»
 """
 import sys
 from datetime import datetime, timedelta
@@ -190,6 +199,39 @@ print("\n16 · los números de la ventana no cambian")
 ok(wm["kwh"] == w["kwh"] and wm["start"] == w["start"] and wm["end"] == w["end"],
    f"start, end y kwh siguen siendo los del día previsto ({wm['kwh']} kWh)")
 ok(wm["peak_at"] == w["peak_at"], "y el pico también")
+
+print("\n17-21 · lo que queda de aquí al cierre")
+# El excedente del día entero incluye la mañana, que ya pasó: el titular de la
+# tarjeta decía «te sobran 2,7 kW» —una potencia media que no es de ningún aparato—
+# y con esto puede decir los kWh que quedan y lo que valen, que sí es una decisión.
+abre = datetime.fromisoformat(w["start"])
+cierra = datetime.fromisoformat(w["end"])
+media = abre + (cierra - abre) / 2
+mitad = S.free_window(PUNTOS, casa, DIA, ahora=media)
+ok(0 < mitad["left_kwh"] < mitad["kwh"],
+   f"a mitad de ventana queda parte, no todo ({mitad['left_kwh']} de {mitad['kwh']} kWh)")
+# La tarde de esta curva es simétrica a la mañana salvo el hueco del horno, que cae
+# antes del medio: lo que queda tiene que ser algo más de la mitad.
+ok(abs(mitad["left_kwh"] / mitad["kwh"] - 0.5) < 0.15,
+   f"y del orden de la mitad ({mitad['left_kwh'] / mitad['kwh']:.0%})")
+tarde = S.free_window(PUNTOS, casa, DIA, ahora=cierra + timedelta(minutes=1))
+ok(tarde["left_kwh"] == 0.0 and tarde["left_spendable_kwh"] == 0.0,
+   f"cerrada la ventana no queda nada ({tarde['left_kwh']} kWh)")
+pronto = S.free_window(PUNTOS, casa, DIA, ahora=abre - timedelta(hours=1))
+ok(abs(pronto["left_kwh"] - pronto["kwh"]) < 0.02,
+   f"antes de abrir queda el día entero ({pronto['left_kwh']} de {pronto['kwh']})")
+# La batería se lleva lo suyo también de lo que queda, y con el mismo hueco: es lo
+# que le cabe **ahora**, así que aplicado al futuro es lo correcto.
+conbat = S.free_window(PUNTOS, casa, DIA, bateria_wh=3000.0, ahora=media)
+ok(abs(conbat["left_battery_kwh"] - 3.0) < 0.01,
+   f"la batería se descuenta de lo que queda ({conbat['left_battery_kwh']} kWh)")
+ok(abs(conbat["left_spendable_kwh"]
+       - (conbat["left_kwh"] - conbat["left_battery_kwh"])) < 0.01,
+   f"y lo gastable es la resta ({conbat['left_spendable_kwh']} kWh)")
+ok(conbat["left_spendable_kwh"] < mitad["left_spendable_kwh"],
+   "así que con batería que llenar queda menos para enchufar algo")
+ok(w["left_kwh"] is None and w["left_spendable_kwh"] is None,
+   "y sin decir qué hora es no se devuelve un «resto» inventado")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

@@ -294,6 +294,24 @@ El diccionario completo de registros y entidades, con las tres trampas y los
 detalles de escala, signo y cadencia, está en
 [`docs/sungrow-modbus.md`](../docs/sungrow-modbus.md).
 
+### La ventana de energía gratis
+
+Mientras está abierta, la tarjeta dice **lo que queda por sobrar de aquí al cierre**
+—no una potencia media— y lo que vale por los dos lados:
+
+> **Hasta las 19:32 te sobran 8,4 kWh.**
+> Gastarlos te ahorra 1,71 €; si no, se van a la red por 0,42 €.
+
+Los kWh son los **gastables**: si a la batería le cabe algo, se carga con lo que
+sobra antes de exportar, así que ese trozo no se puede gastar en otra cosa y se dice
+aparte al pie. Los euros salen de los precios de las horas que quedan (no del precio
+de este minuto, que la ventana puede cruzar un cambio de periodo) y de la
+compensación de excedentes de tu tarifa. **Sin tarifa elegida** en Ajustes no se
+inventan: la tarjeta habla solo de energía.
+
+Esa diferencia entre las dos cifras es el motivo de la tarjeta. En una 2.0TD con
+excedentes a 0,05 €, un kWh gastado en casa vale cuatro veces lo que vendido.
+
 ### Tus aparatos
 
 Cada electrodoméstico que declares en *Ajustes → Electrodomésticos* —un nombre, un

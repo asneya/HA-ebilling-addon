@@ -1245,7 +1245,7 @@ async def free_energy(
     # Solo hoy lleva lo medido: de mañana no hay nada que medir, y el eje de luz
     # es la geometría del día, que no la cambia lo que haya hecho el tejado.
     today = series_mod.free_window(
-        points, perfil.at, midnight, hueco, curva.get("medido")
+        points, perfil.at, midnight, hueco, curva.get("medido"), ahora=now
     )
     # Mañana **sin** descontar la batería: cómo estará mañana por la mañana no
     # se sabe, y suponerlo sería inventar. Así además `kwh` de hoy y de mañana
@@ -1633,6 +1633,10 @@ async def build(
         free_energy(curva, settings, states, now.tzinfo, now),
         weather_hours(settings, curva, now),
     )
+    # Lo que valen los kWh que quedan por sobrar: aquí, que es donde están las
+    # tarifas, y no en la tarjeta. Es lo que convierte «te sobran 2,7 kW» —una
+    # potencia media que no es de nadie— en una decisión.
+    _valorar_lo_que_queda(window, settings, tariffs, now)
     # El ahorro solo hace falta cuando el cierre va a salir: tras la puesta de
     # sol. Calcularlo a mediodía sería trabajo (y PVPC) tirado a la basura.
     sunset = _sunset(states, now)
@@ -1854,6 +1858,62 @@ def _cola_del_ciclo(
         # otra vez en el JavaScript es cómo empezaron las dos que discrepaban.
         "sun_pct": round(sol / total * 100) if total > 0 else 0,
     }
+
+
+def _valorar_lo_que_queda(
+    window: dict[str, Any] | None,
+    settings: dict[str, Any],
+    tariffs: list[dict[str, Any]] | None,
+    now: datetime,
+) -> None:
+    """Pone en `window['today']` lo que valen los kWh que quedan por sobrar.
+
+    Dos cifras, y son las dos caras de la misma decisión:
+
+      · `left_saving_eur` — lo que **ahorras** si los gastas, a los precios de las
+        horas que quedan: es un kWh que no compras;
+      · `left_export_eur` — lo que te **pagan** si se van a la red.
+
+    La diferencia entre las dos es el motivo de la tarjeta, y es grande: en una
+    2.0TD con excedentes a 0,05 €, cada kWh gastado vale cuatro veces lo que
+    vendido. Decirlo en euros es lo que hace que «te sobran 2,7 kW» pase de dato a
+    decisión.
+
+    Sin tarifa elegida no se inventan: se quedan en `None` y la tarjeta habla solo
+    de kWh, que es lo que sabe.
+    """
+    hoy = (window or {}).get("today") or {}
+    kwh = hoy.get("left_spendable_kwh")
+    if not kwh or kwh <= 0:
+        return
+    my_id = settings.get("my_tariff_id") or ""
+    tariff = next((t for t in tariffs or [] if t.get("id") == my_id), None)
+    if not tariff or tariff["energy"]["type"] == "pvpc":
+        # El PVPC de las horas que quedan puede no estar publicado, y pedirlo aquí
+        # costaría una petición de red en cada /api/live.
+        return
+    fin = datetime.fromisoformat(hoy["end"]) if hoy.get("end") else None
+    if fin is None or fin <= now:
+        return
+    festivos = set(settings.get("holidays") or [])
+    # El precio de las horas que quedan, no el de ahora: la ventana puede cruzar un
+    # cambio de periodo y valorarla entera al precio de este minuto sería una cifra
+    # que no le corresponde a ninguna hora.
+    horas, precios, excedentes = 0, [], []
+    momento = now.replace(minute=0, second=0, microsecond=0)
+    while momento < fin and horas < 24:
+        precio, _nombre = billing.price_now(tariff, momento, festivos, None)
+        if precio is not None:
+            precios.append(precio)
+        sp = billing.surplus_price_now(tariff, momento, festivos)
+        if sp is not None:
+            excedentes.append(sp)
+        momento += timedelta(hours=1)
+        horas += 1
+    if precios:
+        hoy["left_saving_eur"] = round(kwh * (sum(precios) / len(precios)), 2)
+    if excedentes:
+        hoy["left_export_eur"] = round(kwh * (sum(excedentes) / len(excedentes)), 2)
 
 
 def _precio_tras_ventana(
