@@ -72,8 +72,17 @@ async function abrir(plan) {
       // sustituye al renglón de texto de la tarjeta retirada.
       barra: [...f.querySelectorAll(".ap-barra i")].map((x) => ({
         color: x.style.background, ancho: parseFloat(x.style.width),
+        // Y el ancho **pintado**, que no es el mismo: un tramo diminuto lo sostiene
+        // un mínimo de 2 px del CSS. Sin medir esto no había forma de saber si el
+        // tramo que se quiere enseñar se ve o se lo come el redondeo.
+        pintado: +x.getBoundingClientRect().width.toFixed(2),
         titulo: x.getAttribute("title"),
       })),
+      // El carril y la suma de los tramos, para saber si el mínimo desborda.
+      carril: (() => {
+        const c = f.querySelector(".ap-barra > span");
+        return c ? +c.getBoundingClientRect().width.toFixed(2) : null;
+      })(),
       // Y hasta dónde llega el relleno, que en un aparato en marcha es el
       // progreso del ciclo: la barra del origen y la del progreso son la misma.
       relleno: f.querySelector(".ap-barra.ap-progreso > span")?.style.width || null,
@@ -176,14 +185,33 @@ let navegador;
   ok(/del sol/.test(b[0].titulo) && /de la batería/.test(b[1].titulo)
      && /de la red/.test(b[2].titulo),
     `y su cifra en el título («${b[0].titulo}»)`);
-  // Un trozo de migaja no se dibuja: a esa anchura no se ve y ensucia el borde.
+  // Un trozo diminuto **sí** se dibuja. Antes se descartaba por debajo del 4 %, y
+  // con eso la barra podía contradecir a la cifra de al lado: de la pregunta *«me
+  // aparece que se alimenta solo de solar pero hay un coste»*. Una nevera al 98,5 %
+  // de sol y 1,5 % de red pintaba una barra ámbar entera y a la vez enseñaba euros,
+  // así que parecía cobrar por el sol.
+  // Las cifras son de un coche cargando: 10 kWh en el día con 0,06 de la red. Ese
+  // 0,6 % son 1,07 px sin el mínimo —invisible— y sin embargo **cuesta dinero**, que
+  // es lo que hace la contradicción. Con un aparato pequeño el tramo ya se veía
+  // solo, así que un banco con esas cifras no habría probado el mínimo: el primer
+  // intento de este caso usaba 1,5 % y salía verde con el arreglo quitado.
   v = await abrir({ battery: null, rows: [fila({
-    now: { at: "2026-08-03T11:00:00+02:00", sun_pct: 99, sun_kwh: 2.0,
-           battery_kwh: 0.01, grid_kwh: 0, eur: 0 },
+    now: { at: "2026-08-03T11:00:00+02:00", sun_pct: 99, sun_kwh: 9.94,
+           battery_kwh: 0, grid_kwh: 0.06, eur: 0.01 },
     worth_waiting: false, saving_eur: 0,
+    verdict: { kind: "parcial", value: 0.01, sub: "99 % lo puso el sol" },
   })] });
-  ok(v.filas[0].barra.length === 1,
-    `un trozo por debajo del 4 % no se dibuja (${v.filas[0].barra.length})`);
+  const dos = v.filas[0].barra;
+  ok(dos.length === 2,
+    `un tramo del 0,6 % se dibuja igual, para no contradecir a la cifra (${dos.length})`);
+  ok(dos[1] && dos[1].pintado >= 2,
+    `y el mínimo del CSS lo sostiene a 2 px (${dos[1] && dos[1].pintado} px de ${
+      dos[1] && dos[1].ancho} %)`);
+  // Y el mínimo no puede desbordar: con `overflow: hidden` lo que se recortaría es
+  // justo el tramo pequeño, porque la red va al final. El grande cede los 2 px.
+  const suma = dos.reduce((a, x) => a + x.pintado, 0);
+  ok(Math.abs(suma - v.filas[0].carril) < 0.6,
+    `los tramos suman el carril, sin desbordar (${suma.toFixed(2)} de ${v.filas[0].carril})`);
 
   console.log("\n9 · un aparato de siempre encendido");
   v = await abrir({ battery: null, rows: [{
@@ -199,6 +227,37 @@ let navegador;
   ok(v.filas[0].barra.length === 3, "con su barra del origen igual que los demás");
   ok(/deducido Vatia/.test(v.nota) && /Ajustes → Electrodomésticos/.test(v.nota),
     `y se dice que lo ha decidido la app, y dónde se cambia («${v.nota}»)`);
+
+  console.log("\n9b · sus euros son los atribuidos, no una revaloración");
+  // De la pregunta: *«¿qué significan los euros que salen junto al congelador?»*. El
+  // coste de un continuo sale del `eur` de su atribución —hora a hora, cada hora a
+  // su precio, cobrando solo la red— y el servidor ya no lo recalcula. Lo que aquí
+  // se comprueba es que la pantalla enseñe **ese** número y no otro.
+  v = await abrir({ battery: null, rows: [{
+    id: "nev", name: "Nevera", icon: "nevera", color: "#08f",
+    kind: "continuo", kind_auto: false,
+    today: { kwh: 0.639, sun_kwh: 0.279, battery_kwh: 0.296, grid_kwh: 0.064,
+             eur: 0.01 },
+    verdict: { kind: "parcial", value: 0.01, sub: "44 % lo puso el sol" },
+  }] });
+  // `\s` y no un espacio: `Intl` mete un espacio duro antes del €, y comparar la
+  // cadena entera se pone rojo por un carácter que no se ve.
+  ok(/^0,01\s€$/.test(v.filas[0].valor),
+    `enseña el coste atribuido («${v.filas[0].valor}», no los 0,07 € de antes)`);
+  ok(/44 %/.test(v.filas[0].porque), `con el sol que lo puso («${v.filas[0].porque}»)`);
+  // Y un congelador alimentado del sol y de lo guardado: ni un céntimo.
+  v = await abrir({ battery: null, rows: [{
+    id: "cong", name: "Congelador", icon: "congelador", color: "#08f",
+    kind: "continuo", kind_auto: false,
+    today: { kwh: 0.5, sun_kwh: 0.2, battery_kwh: 0.3, grid_kwh: 0.0, eur: 0.0 },
+    verdict: { kind: "gratis", value: "Gratis",
+               sub: "del sol y de lo que tenías guardado" },
+  }] });
+  ok(v.filas[0].valor === "Gratis",
+    `del sol y de la batería no cuesta nada («${v.filas[0].valor}»)`);
+  ok(/guardado/.test(v.filas[0].porque),
+    `y se dice por qué el cero es cero («${v.filas[0].porque}»)`);
+  ok(v.filas[0].barra.length === 2, "con los dos depósitos de los que salió");
 
   console.log("\n10 · un aparato en marcha");
   // La lavadora puesta hace 40 minutos, de un ciclo de 1 h 30 que siempre dura lo

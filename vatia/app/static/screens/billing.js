@@ -131,7 +131,7 @@ function filaDelReparto(f, maxKwh) {
   ];
   const suma = partes.reduce((a, [, v]) => a + v, 0);
   const trozos = suma <= 0 ? "" : partes
-    .filter(([, v]) => v / suma >= 0.02)
+    .filter(([, v]) => v / suma >= 0.002)
     .map(([k, v]) => `<i style="width:${((v / suma) * 100).toFixed(1)}%;background:${
       SUM_COLORS[k]}" title="${esc(`${fmtNum.format(v)} kWh`)}"></i>`).join("");
   const peso = maxKwh > 0 ? f.kwh / maxKwh : 0;

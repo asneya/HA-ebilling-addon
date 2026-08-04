@@ -1542,7 +1542,11 @@ body.scrolled .scroll-top { opacity: .95; }
    entera y no se nota; en uno en marcha, solo lo que lleva del ciclo. Así la barra
    del origen y la del progreso son la misma y no dos. */
 .ap-barra > span { display: flex; width: 100%; height: 100%; }
-.ap-barra i { display: block; height: 100%; }
+/* Un tramo que existe se ve. El mínimo es de flex, así que frena el encogido y el
+   tramo grande cede los dos píxeles en vez de que la barra desborde el carril: sin
+   esto, con `overflow: hidden`, lo que se recortaba era justo el tramo pequeño que
+   se quiere enseñar, porque la red va al final. */
+.ap-barra i { display: block; height: 100%; min-width: 2px; }
 /* Y en marcha, el carril se ve: sin esto un ciclo al 20 % parece una barra corta,
    no una barra que va por el 20 %. La transición es para que al refrescar el
    payload avance en vez de saltar. */
@@ -1772,7 +1776,7 @@ body.scrolled .scroll-top { opacity: .95; }
    comparan entre sí: por eso el carril no se dibuja. Dentro, los tres orígenes. */
 .sp-barra { display: flex; height: 5px; border-radius: 3px; overflow: hidden;
   margin-top: 6px; min-width: 3%; background: var(--hair); }
-.sp-barra i { display: block; height: 100%; }
+.sp-barra i { display: block; height: 100%; min-width: 2px; }
 .sp-num { text-align: right; flex: none; }
 .sp-num b { display: block; font-size: 14px; font-weight: 700; color: var(--ink);
   font-variant-numeric: tabular-nums; }

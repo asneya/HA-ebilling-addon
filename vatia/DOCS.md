@@ -411,6 +411,30 @@ parte nunca puede pasar del total de la casa de esa hora, y lo que cae en una ho
 sin reparto **se declara como no atribuido** en vez de repartirse a ojo para que
 cuadre.
 
+### Qué son los euros de una nevera
+
+Hay dos preguntas distintas en la tarjeta y por eso hay dos cifras distintas, que no
+se calculan igual:
+
+| | Qué se enseña | La batería |
+|---|---|---|
+| Un ciclo que **aún no has puesto** | lo que costaría ponerlo, simulado | **se cobra**: lo que le saques hay que reponerlo esta noche |
+| Un continuo, o lo que **lleva** un ciclo en marcha | lo que ya ha costado, atribuido hora a hora | **no se cobra**: se llenó antes |
+
+En un continuo, cada hora se cobra **a su precio** y solo por lo que salió de la red.
+La batería no se cobra porque esa energía se guardó antes: si la llenó el sol no
+costó nada, y si la llenó la red ese dinero ya está contado en la hora en que se
+compró — cobrarlo otra vez al gastarlo sería contarlo dos veces. Es la misma
+convención que sigue [el desglose de la factura](#quién-se-ha-gastado-la-factura),
+donde «cargar la batería desde la red» tiene su propia línea, y por eso las dos
+pantallas se pueden sumar sin contradecirse.
+
+De ahí que un congelador que tira del sol y de lo que había guardado salga
+**«Gratis»**: no es un adorno, es que a esa energía no le corresponde ni un céntimo
+de esta factura. Y si aparecen unos céntimos, son los kilovatios que sí hubo que
+comprar en alguna hora, aunque sean pocos: la barra los dibuja siempre, por pequeños
+que sean, para que no parezca que se cobra por el sol.
+
 Las filas se ordenan por lo que hay que decidir, con lo que **está pasando** por
 delante: primero lo que esté en marcha, luego los movibles (por ahorro
 descendente), después los fijos y al final los continuos.
