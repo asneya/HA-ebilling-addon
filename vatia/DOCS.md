@@ -617,13 +617,25 @@ No cuesta ninguna consulta extra: todo lo que la cuenta necesita —el reparto h
 hora del día, lo que cada aparato gastó en cada hora y los precios— ya está en el mismo
 payload con el que se dibuja la Home.
 
+El **«% con sol»** de cada fila sale de ese mismo reparto, es decir **medido**. Hasta la
+0.67.0 era el solape del ciclo con la ventana, que no es lo mismo: la ventana se calcula
+con la previsión solar y el consumo *típico* de la casa, así que un día en que la casa
+gastó más de lo normal el ciclo seguía «dentro» aunque parte la pusiera la red, y la
+tarjeta decía «100 % con sol» igual. La batería va aparte a propósito —fue sol de otra
+hora, no de esta—, así que un ciclo nocturno alimentado por la batería no aparece como
+solar.
+
+Por debajo de **cinco céntimos no se propone otra hora**: es el mismo umbral que el plan
+del día, y por el mismo motivo — señalar dos céntimos de un día que ya pasó es hacer
+perder el tiempo. La búsqueda sigue siendo fina; lo que se calla es el consejo.
+
 Lo que se publica es **una diferencia**: «entre todos, 0,58 € de más de lo que la misma
 energía habría costado en su hueco». Nunca «lo que gastaste», y tampoco «lo que te has
 ahorrado»: ahorrar es prospectivo y este día ya pasó. Lo que hay es un sobrecoste ya
 pagado, y por eso cada fila lo dice con una flecha hacia arriba —«↑ 0,39 € de más»— y no
 con un signo más, que se leería como dinero que entró. El modelo de esta tarjeta es más
 simple que el del desglose de la factura —aquel reparte la energía entre orígenes medidos
-y este coloca rectángulos— y publicar un coste absoluto pondría dos cifras del mismo día
+y este desliza el ciclo por las horas— y publicar un coste absoluto pondría dos cifras del mismo día
 en dos pantallas.
 
 **La batería está dentro de la cuenta** desde la 0.65.0, y no era un detalle: el sobrante
@@ -664,7 +676,7 @@ Lo que el modelo no tiene, y conviene saber:
 | | |
 |---|---|
 | **La capacidad y la carga de la batería** | No se simula su estado: se **infiere** de cada hora si tenía sitio —mirando si a esa hora se vertía— y del día si llegó a vaciarse. Son inferencias sobre medidas, pero son inferencias: un tope de potencia de carga se lee igual que una batería llena, y una casa que importa de noche porque pide más potencia de la que el inversor descarga se lee como una batería vacía. |
-| **La forma del programa** | Un ciclo se coloca como un rectángulo, su energía repartida por igual entre sus horas. En una lavadora el calentamiento va al principio, así que un hueco de sol le vale algo más de lo que aquí sale. |
+| **Que el programa gaste lo mismo a cualquier hora** | La forma del ciclo se toma **medida** y se desliza entera, sin aplanarla: si la lavadora gastó 0,90 kWh en su primera hora y 0,05 en la última, eso es lo que se mueve. Lo que se supone es que habría gastado lo mismo puesta a otra hora, y eso en una lavadora es verdad — con agua de entrada más fría en invierno, no del todo. Hasta la 0.67.0 se aplanaba, y eso inventaba céntimos en ciclos que habían sido gratis. |
 | **Las razones humanas** | Que el lavavajillas se pudiera poner a las tres de la madrugada no significa que se pudiera. La tarjeta dice lo que **había** sobre la mesa, no lo que se hizo mal. |
 
 ## Pantalla «Energía»

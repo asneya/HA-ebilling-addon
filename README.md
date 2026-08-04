@@ -8,7 +8,7 @@ factura española: término de potencia, energía por periodos 2.0TD
 electricidad, alquiler de contador, servicios adicionales e IVA por grupos.
 
 ![Peaje 2.0TD](https://img.shields.io/badge/peaje-2.0TD-blue)
-![Arquitecturas](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64%20%7C%20armv7-lightgrey)
+![Arquitecturas](https://img.shields.io/badge/arch-amd64%20%7C%20aarch64-lightgrey)
 
 ## Instalación
 

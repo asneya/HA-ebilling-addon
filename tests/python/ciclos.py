@@ -7,7 +7,8 @@ Lo que se comprueba:
   4. el ruido por debajo del umbral no es un ciclo
   5. la mediana no la mueve un día raro
   6. los veredictos del diseño, con sus copias
-  7. el reparto del cierre del día, por solape con la ventana
+  7. el reparto del cierre del día: el solape con la ventana, y el «% con sol»
+     **medido** y no deducido de ella
   8. de dónde saldría la energía de un ciclo puesto ahora
   9. y el ciclo que sigue en marcha no cuenta como uno que terminó
  10. el detector es uno, y da lo mismo a cinco minutos que a un cuarto de hora
@@ -136,6 +137,44 @@ ok(abs(filas[0]["in_window_kwh"] - 3.0) < 0.02,
 ok(filas[0]["pct"] == 75, f"o sea el 75 % ({filas[0]['pct']} %)")
 ok(A.del_cierre(lista, {"a": {"today": []}}, ventana) == [],
    "y lo que no se ha puesto no sale")
+
+print("\n7b · pero el «% con sol» se mide, no se deduce de la ventana")
+# De un aviso: *«el resumen dice que la lavadora ha usado 100 % con sol»* junto a un
+# sobrecoste. El porcentaje salía del **solape con la ventana**, y la ventana se
+# calcula con la previsión solar y el consumo **típico** de la casa: un día en que la
+# casa gastó más de lo normal el ciclo seguía «dentro» aunque parte la pusiera la red.
+#
+# Aquí el ciclo cae entero dentro de la ventana —11:40 a 13:40, las mismas horas de
+# arriba— pero el reparto **medido** de esas horas dice que solo dos tercios los puso
+# el sol. La cifra tiene que ser la medida, no el 100 %.
+#
+# Las claves de `today_by_hour` van como **texto**: el payload es JSON y ahí no hay
+# claves numéricas. Con enteros la atribución no encuentra la hora y sale 0 % — lo
+# escribí así la primera vez y el banco lo cazó.
+uno = {"a": {"today": [
+    {"start": "2026-07-20T11:40:00+02:00", "end": "2026-07-20T13:40:00+02:00", "kwh": 3.0},
+], "today_by_hour": {"11": 1.0, "12": 1.0, "13": 1.0}}}
+# La casa gastó 2 kWh en cada una de esas horas; de cada 2, el sol puso 1,5 salvo a las
+# 13:00, en que puso 0 y lo puso la red. Con el aparato llevándose 1 de cada 2, le toca
+# la mitad de cada origen: sol 0,75 + 0,75 + 0 = 1,5 de 3 kWh → 50 %.
+medido = {
+    f"2026-07-20T{h:02d}:00:00+02:00": {
+        "home_total": 2.0,
+        "from_solar": 0.0 if h == 13 else 1.5,
+        "from_battery": 0.0,
+        "from_grid": 2.0 if h == 13 else 0.5,
+    } for h in (11, 12, 13)
+}
+sin_reparto = A.del_cierre(lista, uno, ventana)[0]
+ok(sin_reparto["pct"] == 100,
+   f"sin reparto se cae al solape, que es lo que había ({sin_reparto['pct']} %)")
+con_reparto = A.del_cierre(lista, uno, ventana, medido)[0]
+ok(con_reparto["pct"] == 50,
+   f"con el reparto medido, el 50 % que sale a mano ({con_reparto['pct']} %)")
+ok(abs(con_reparto["grid_kwh"] - 1.5) < 0.02,
+   f"y se dice lo que puso la red, sin que nadie reste ({con_reparto['grid_kwh']} kWh)")
+ok(abs(con_reparto["in_window_kwh"] - 3.0) < 0.02,
+   "el solape con la ventana sigue publicándose, que es otra cosa")
 
 
 print("\n8 · de dónde saldría la energía de un ciclo puesto ahora")

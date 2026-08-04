@@ -27,7 +27,7 @@ y no con un signo más — un «+0,39 €» se lee como dinero que entró.
 Lo que el modelo hace, hora a hora y sobre medidas:
 
     sobrante(h) = solar real(h) − consumo del resto de la casa(h)
-    coste       = Σ potencia colocada(h) × lo que costaba un kilovatio a esa hora
+    coste       = Σ kWh medidos del ciclo(h) × lo que costaba un kilovatio a esa hora
 
 «El resto de la casa» es una resta, la misma que el desglose de la factura: el
 consumo medido menos lo que sumaron los aparatos. Es lo que no se puede mover —las
@@ -60,10 +60,11 @@ Lo que el modelo **no** tiene, dicho:
   igual que una batería llena —a efectos de esta cuenta dan lo mismo, no cabía más—, y
   una casa que importa de noche por pedir más potencia de la que el inversor descarga
   se lee como una batería vacía.
-- **La forma del programa.** Un ciclo se coloca como un rectángulo: su energía
-  repartida por igual entre sus horas. En una lavadora el calentamiento va al
-  principio, así que un hueco de sol a media tarde le vale algo más de lo que aquí
-  sale. Es la misma aproximación que ya usa el planificador del día.
+- **Que el programa gaste lo mismo a cualquier hora.** La forma del ciclo se toma
+  medida y se **desliza** entera, sin aplanarla — ver `_forma`, que es lo que cambió
+  en la 0.67.0 y por qué—. Lo que se supone es que la lavadora habría gastado lo
+  mismo puesta a otra hora, y eso en una lavadora es verdad: el programa es el que es.
+  Con agua de entrada más fría en invierno no lo sería del todo.
 - **Las razones humanas.** Que el lavavajillas se pudiera poner a las tres de la
   madrugada no significa que se pudiera. Esto dice lo que había sobre la mesa, no lo
   que se hizo mal.
@@ -176,9 +177,12 @@ class _Huecos:
         return gratis, del_guardado, de_bateria, resto - de_bateria
 
     def coste(
-        self, inicio: int, largo: int, por_hora: float
+        self, inicio: int, forma: list[float]
     ) -> tuple[float | None, float, float]:
-        """Lo que costaría el rectángulo empezando en la hora ``inicio``.
+        """Lo que costaría poner ``forma`` empezando en la hora ``inicio``.
+
+        ``forma`` son los kWh que el aparato gasta en cada una de sus horas, **medidos
+        y en orden**, no un promedio. Ver `_forma`: aplanarlos inventaba coste.
 
         Devuelve (euros, kWh que hubo que pagar, peso). Los euros son ``None`` si
         falta el precio de alguna de las horas que ocupa: mejor no decirlo que decirlo
@@ -190,11 +194,11 @@ class _Huecos:
         pagado = 0.0
         peso = 0.0
         sabido = True
-        for i in range(largo):
+        for i, kwh in enumerate(forma):
             h = inicio + i
             if h >= len(self.vertido):
                 break
-            _gratis, del_guardado, de_bateria, de_red = self._tramos(h, por_hora)
+            _gratis, del_guardado, de_bateria, de_red = self._tramos(h, kwh)
             pagado += de_bateria + de_red
             if self.suelta:
                 peso += de_red
@@ -212,13 +216,13 @@ class _Huecos:
                         + del_guardado * (self.guardar or 0.0))
         return (eur if sabido else None), pagado, peso
 
-    def ocupar(self, inicio: int, largo: int, por_hora: float) -> None:
-        """Descuenta lo que un rectángulo ya colocado se lleva de cada escalón."""
-        for i in range(largo):
+    def ocupar(self, inicio: int, forma: list[float]) -> None:
+        """Descuenta de cada escalón lo que un ciclo ya colocado se lleva."""
+        for i, kwh in enumerate(forma):
             h = inicio + i
             if h >= len(self.vertido):
                 continue
-            gratis, del_guardado, de_bateria, _de_red = self._tramos(h, por_hora)
+            gratis, del_guardado, de_bateria, _de_red = self._tramos(h, kwh)
             self.vertido[h] = max(0.0, self.vertido[h] - gratis)
             self.guardado[h] = max(0.0, self.guardado[h] - del_guardado)
             self.dio[h] = max(0.0, self.dio[h] - de_bateria)
@@ -368,24 +372,48 @@ def _huecos_del_dia(
     return _Huecos(vertido, guardado, dio, precio, valor, hay)
 
 
-def _rectangulo(consumo: dict[str, float]) -> tuple[int, float] | None:
-    """De lo que un aparato consumió en el día, cuántas horas y cuánta potencia.
+def _forma(horas: list[str], consumo: dict[str, float]) -> tuple[int, list[float]] | None:
+    """Lo que el aparato gastó en cada una de sus horas, **medido y en orden**.
 
-    Sale de **ese día** y no del ciclo típico aprendido: aquí no se está prediciendo
-    nada, se está midiendo lo que pasó. Si el lavavajillas tardó tres horas ese día,
-    tres son las que había que colocar.
+    Devuelve (hora en que empezó, kWh de cada hora consecutiva). Sale de **ese día** y
+    no del ciclo típico aprendido: aquí no se predice nada, se mide lo que pasó.
+
+    Antes esto devolvía un **rectángulo** —las horas y la media— y era el defecto que
+    más se veía en la tarjeta, de un aviso: *«el resumen dice que la lavadora ha usado
+    100 % con sol y me pone que ha gastado 0,02 € de más»*. Las dos cosas eran ciertas
+    a la vez, y la culpa era del promedio. Una lavadora carga al principio —el
+    calentamiento del agua— y baja al final:
+
+        medido    12:00 → 0,90 kWh   13:00 → 0,20   14:00 → 0,05
+        sobrante  12:00 → 2,00 kWh   13:00 → 0,50   14:00 → 0,10
+
+    Con la forma medida cada hora cabe en su sobrante y el ciclo costó **cero**. Con el
+    promedio, 0,383 kWh en cada hora: a las 14:00 no caben en 0,10 y el modelo cobraba
+    0,08 € que la casa **nunca pagó**. Y luego colocaba ese mismo rectángulo en otro
+    hueco donde sí cabía, y publicaba la diferencia como un sobrecoste.
+
+    Deslizar la forma medida en vez de aplanarla arregla las dos hipótesis a la vez, y
+    con una sola cuenta: si el ciclo fue gratis donde estuvo, el «como se hizo» sale
+    cero y no hay nada que restar. Sigue siendo una aproximación —se supone que el
+    programa gasta lo mismo a cualquier hora del día—, pero esa sí es verdad en una
+    lavadora: el programa es el que es.
+
+    Las horas de en medio con consumo despreciable **se conservan** con su cifra: si un
+    lavavajillas para entre lavado y secado, ese hueco es parte de su forma y moverlo
+    entero es lo que hay que valorar.
     """
-    activas = [h for h, k in consumo.items() if k > _MIGAJA_KWH / 24]
-    total = sum(consumo.values())
-    if not activas or total <= _MIGAJA_KWH:
+    activas = sorted(h for h, k in consumo.items() if k > _MIGAJA_KWH / 24)
+    if not activas or sum(consumo.values()) <= _MIGAJA_KWH:
         return None
-    return len(activas), total / len(activas)
+    primera, ultima = horas.index(activas[0]), horas.index(activas[-1])
+    return primera, [max(0.0, consumo.get(horas[h], 0.0))
+                     for h in range(primera, ultima + 1)]
 
 
 def _mejor_hueco(
     c: dict[str, Any], huecos: _Huecos
 ) -> tuple[int, float | None, float, float]:
-    """La hora más barata para el rectángulo de ``c``, y lo que cuesta ahí.
+    """La hora más barata para la forma de ``c``, y lo que cuesta ahí.
 
     Devuelve (hora, euros, kWh pagados, peso). Sin precios se ordena por el peso, que
     es la misma idea con la única cifra que hay — igual que en el plan del día.
@@ -397,9 +425,10 @@ def _mejor_hueco(
     cambio que no gana nada es ruido con aire de consejo, y además deja «ya estaba
     donde tocaba» sin poder decirse nunca.
     """
-    mejor = (c["ran"], *huecos.coste(c["ran"], c["largo"], c["por_hora"]))
-    for h in range(max(1, 24 - c["largo"] + 1)):
-        eur, pagado, peso = huecos.coste(h, c["largo"], c["por_hora"])
+    forma = c["forma"]
+    mejor = (c["ran"], *huecos.coste(c["ran"], forma))
+    for h in range(max(1, 24 - len(forma) + 1)):
+        eur, pagado, peso = huecos.coste(h, forma)
         clave = eur if eur is not None else peso
         actual = mejor[1] if mejor[1] is not None else mejor[3]
         # El margen es de medio céntimo: por debajo de ahí la «mejora» es el redondeo
@@ -472,16 +501,15 @@ def del_dia(
     candidatos = []
     for ident, consumo in por_aparato.items():
         del_dia_ = {h: k for h, k in consumo.items() if h in medido}
-        rect = _rectangulo(del_dia_)
-        if not rect or ident not in fichas:
+        hecho = _forma(horas, del_dia_)
+        if not hecho or ident not in fichas:
             continue
-        largo, por_h = rect
-        activas = sorted(h for h, k in del_dia_.items() if k > _MIGAJA_KWH / 24)
+        arranco, forma = hecho
         candidatos.append({
             "id": ident, "name": fichas[ident]["name"],
             "color": fichas[ident].get("color"), "icon": fichas[ident].get("icon"),
-            "largo": largo, "por_hora": por_h,
-            "ran": horas.index(activas[0]),
+            "forma": forma,
+            "ran": arranco,
             "kwh": round(sum(del_dia_.values()), 3),
         })
     if not candidatos:
@@ -493,8 +521,8 @@ def del_dia(
     puestos = huecos.copia()
     for c in sorted(candidatos, key=lambda c: c["ran"]):
         c["eur_real"], c["pagado_real"], c["peso_real"] = puestos.coste(
-            c["ran"], c["largo"], c["por_hora"])
-        puestos.ocupar(c["ran"], c["largo"], c["por_hora"])
+            c["ran"], c["forma"])
+        puestos.ocupar(c["ran"], c["forma"])
 
     # Y ahora el mejor orden. Dos pasadas, como en el plan del día: primero el hueco
     # que tendría cada uno **a solas**, que sirve para ordenar el turno en igualdad de
@@ -508,24 +536,32 @@ def del_dia(
         return (real or 0.0) - (mio or 0.0)
 
     quedan = huecos.copia()
-    total_real = 0.0
-    total_mejor = 0.0
     sabido = True
     filas = []
     for c in sorted(candidatos, key=lambda c: (-_de_mas(c), c["name"])):
         hueco, eur, pagado, _peso = _mejor_hueco(c, quedan)
-        quedan.ocupar(hueco, c["largo"], c["por_hora"])
+        quedan.ocupar(hueco, c["forma"])
         if c["eur_real"] is None or eur is None:
             sabido = False
             extra = None
         else:
-            total_real += c["eur_real"]
-            total_mejor += eur
             extra = round(c["eur_real"] - eur, 2)
+            # **Y por debajo del umbral no se propone nada.** `MIN_EXTRA_EUR` estaba
+            # definido con su porqué escrito —«señalar dos céntimos de un día que ya
+            # pasó es hacerle perder el tiempo a alguien»— y no se usaba en ningún
+            # sitio: la tarjeta llevaba el 0,05 a mano para el titular del día y un
+            # `> 0` para las filas, así que una fila de dos céntimos sí traía consejo.
+            # Se vio en un aviso: *«dice que la lavadora ha usado 100 % con sol y me
+            # pone que ha gastado 0,02 € de más»*.
+            #
+            # La búsqueda sigue siendo fina —el turno se ordena con la diferencia
+            # exacta—; lo que se corta es el **consejo**, que es lo que se lee.
+            if extra < MIN_EXTRA_EUR:
+                hueco, pagado, extra = c["ran"], c["pagado_real"], 0.0
         filas.append({
             "id": c["id"], "name": c["name"], "color": c["color"], "icon": c["icon"],
             "kwh": c["kwh"],
-            "hours": c["largo"],
+            "hours": len(c["forma"]),
             "ran_at": horas[c["ran"]],
             "best_at": horas[hueco],
             # Si le tocaba justo donde estuvo, se dice: pasa la mitad de las veces y
@@ -557,7 +593,13 @@ def del_dia(
         # que pagaste **de más** de lo que la misma energía habría costado en su hueco.
         # Con el nombre viejo, un «+0,39 €» al lado de una flecha se lee como dinero
         # que ganaste, que es justo lo contrario de lo que pasó.
-        "extra_eur": round(total_real - total_mejor, 2) if sabido else None,
+        #
+        # Y sale de **sumar las filas publicadas**, no de restar los dos totales de la
+        # búsqueda. El pie dice «entre todos», así que tiene que ser la suma de lo que
+        # las filas enseñan: con el umbral de arriba cortando los consejos de dos
+        # céntimos, restar los totales daría un titular que ninguna fila explica.
+        "extra_eur": round(sum(f["extra_eur"] or 0.0 for f in filas), 2)
+                     if sabido else None,
         "sun_kwh": round(sum(sol), 2),
         # El sobrante partido en dos, que es lo que explica una cifra pequeña: en una
         # casa con batería casi todo el sol que sobra se guarda, y entonces mover un
