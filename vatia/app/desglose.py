@@ -326,12 +326,20 @@ def _detalle(
             limpio = (split.get("from_solar") or 0.0) + (split.get("from_battery") or 0.0)
             sol_por_hora[h] += kwh * min(limpio / casa, 1.0)
 
+    # El día que salió más caro. **Solo si alguno costó algo**: un aparato que fue
+    # siempre gratis no tiene un día más caro, y decir «el día más caro fue el 3 de
+    # agosto (0,00 €)» es una superlativa sobre un empate a cero. De un aviso: *«veo
+    # electrodomésticos que acumulan 0 € y el detalle dice: el día más caro fue el 3 de
+    # agosto (0,00 €). Esto no tiene sentido»*. No lo tiene: era el `max` de una lista
+    # plana, que siempre devuelve algo.
     peor = None
     for dia, horas_del_dia in por_dia.items():
         cuenta = appliances_mod.atribuir(horas_del_dia, reparto, precio_de)
         if not cuenta:
             continue
         clave = cuenta["eur"] if cuenta["eur"] is not None else cuenta["grid_kwh"]
+        if clave <= 0:
+            continue
         if peor is None or clave > peor[0]:
             peor = (clave, {"date": dia, "eur": cuenta["eur"],
                             "kwh": cuenta["kwh"], "grid_kwh": cuenta["grid_kwh"]})

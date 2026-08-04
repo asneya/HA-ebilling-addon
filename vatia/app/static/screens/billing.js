@@ -287,8 +287,14 @@ function renderBills(sim) {
     const open = bill.tariff_id === openBillId;
     const mine = bill.tariff_id === myId;
     const color = esc(bill.color || "#4d7cba");
-    const s = bill.subtotals;
     const shown = projected ? bill.projected : bill;
+    // Los subtotales **de lo que se está enseñando**, no siempre los del acumulado.
+    // Con la proyección puesta, el titular era la factura proyectada y las líneas de
+    // debajo el acumulado, sin decirlo: cuatro cifras que no suman a la quinta en la
+    // misma tarjeta. Y era la explicación más probable de un aviso —«el término de
+    // energía no coincide con el importe que aparece en el desglose»—, porque el
+    // desglose por electrodoméstico es siempre del periodo transcurrido.
+    const s = shown.subtotals || bill.subtotals;
     const co = [bill.company, bill.energy_type === "pvpc" ? "PVPC" : null,
       `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 })
         .format(shown?.days ?? bill.days ?? 0)} días`].filter(Boolean).join(" · ");

@@ -237,6 +237,20 @@ ok(peor.get("date") == "2026-03-10",
 ok(casi(peor.get("eur"), 0.60), f"con lo que costó ese día ({peor.get('eur')} €)")
 ok(det["by_hour"][21] > 0 and det["by_hour"][22] > 0 and det["by_hour"][13] > 0,
    "y a qué horas se pone, sumado por hora del día")
+
+# Y **si nunca costó nada, no hay día más caro**. De un aviso: *«veo electrodomésticos
+# que acumulan 0 € y el detalle dice: el día más caro fue el 3 de agosto (0,00 €). Esto
+# no tiene sentido»*. No lo tiene: era el máximo de una lista plana a cero, que siempre
+# devuelve algo. Un aparato que va entero con sol es justo el caso.
+solo_sol = {"lavav": {hh(D10, 13): 1.0, hh(D11, 13): 1.0}}
+d8b = desglose.filas(LAVAV, solo_sol, reparto_de(CONT2), importada_de(CONT2),
+                     PRECIOS2.get)
+fila8b = {f["id"]: f for f in d8b["rows"]}["lavav"]
+ok(casi(fila8b["eur"], 0.0), f"el aparato no costó nada ({fila8b['eur']} €)")
+ok(fila8b["detail"]["worst_day"] is None,
+   f"y entonces no hay «día más caro» ({fila8b['detail']['worst_day']})")
+ok(det.get("worst_day") is not None,
+   "pero el que sí costó algo lo sigue teniendo")
 ok(sum(det["by_hour"]) > 2.9 and abs(sum(det["by_hour"]) - 3.0) < 0.01,
    f"que suma lo que gastó ({sum(det['by_hour'])} de 3,0 kWh)")
 # Un tramo es horas **seguidas**: tres sueltas son tres tramos, no uno.
@@ -274,6 +288,69 @@ ok(d9["cycles"] is True, "y el desglose dice que son ciclos, para que la interfa
 ok(d8["cycles"] is False,
    "sin InfluxDB se dice que no lo son, en vez de dejarlo a la interpretación")
 ok("cycles" not in det, "y la fila no trae recuento de ciclos que no se pueda sostener")
+
+print("\n10 · el total del desglose es el término de energía de la factura")
+# De un aviso: *«el coste del término de energía que aparece en “quién se ha gastado la
+# factura” según la tarifa “la mía” no coincide con el importe que aparece en el propio
+# desglose de dicha tarifa, más arriba en la misma pantalla»*.
+#
+# Son dos módulos calculando lo mismo por caminos distintos —`billing` sobre la serie
+# horaria de lo importado, `desglose` sobre el reparto hora a hora— y hasta ahora nada
+# comprobaba que llegaran al mismo número. Es la comprobación que faltaba, y es la que
+# de verdad importa de esta pantalla: si las dos cifras no cuadran, una de las dos
+# miente y no hay forma de saber cuál.
+import billing as billing_mod                                    # noqa: E402
+import tariffs as tariffs_mod                                    # noqa: E402
+
+# La misma tarifa que los precios del banco, escrita como una 2.0TD de tres periodos:
+# valle de 00 a 08, llano de 08 a 18 y punta el resto. Con eso, las tres horas del
+# fixture caen una en cada periodo y los precios coinciden con `PRECIOS`.
+TARIFA = {
+    "id": "t", "name": "La mía", "company": "Banco",
+    "power": {"periods": [{"name": "P1", "price": 0.0}, {"name": "P2", "price": 0.0}]},
+    # El horario va como texto, «DÍAS HORAS» separado por «|», que es el formato del
+    # editor de tarifas. El último tramo se deja sin horario a propósito: es el que
+    # `compile_matrix` toma por defecto para las horas que nadie reclama.
+    "energy": {"type": "schedule", "periods": [
+        {"name": "Valle", "price": 0.08, "schedule": "L-D 0-7"},
+        {"name": "Llano", "price": 0.15, "schedule": "L-D 8-17"},
+        {"name": "Punta", "price": 0.30, "schedule": ""},
+    ]},
+    "charges": [], "services": [], "fixed_daily": [],
+    "taxes": {"electric_pct": 0.0, "vat_pct": 0.0},
+}
+try:
+    tariffs_mod.compile_matrix(TARIFA["energy"]["periods"])
+    matriz_ok = True
+except Exception as err:                                          # noqa: BLE001
+    matriz_ok = False
+    ok(False, f"la tarifa del banco no compila: {err}")
+
+if matriz_ok:
+    from datetime import datetime                                 # noqa: E402
+    # La serie horaria de lo importado, que es lo que factura `billing`.
+    horaria = [{"start": datetime.fromisoformat(iso), "kwh": kwh}
+               for iso, kwh in importada_de(CONTADORES).items()]
+    desglose_energia, _sin = billing_mod.energy_breakdown(TARIFA, horaria, set(), None)
+    de_la_factura = round(sum(i["cost"] for i in desglose_energia.items), 2)
+
+    # Y el mismo periodo por el otro camino: el reparto hora a hora, repartido entre
+    # los aparatos, el resto de la casa, la batería y lo que no se colocó.
+    def precio_tarifa(iso):
+        return billing_mod.price_now(TARIFA, datetime.fromisoformat(iso), set(), None)[0]
+
+    d10 = desglose.filas(APARATOS, CONSUMO, reparto_de(CONTADORES),
+                         importada_de(CONTADORES), precio_tarifa)
+    ok(casi(d10["eur"], de_la_factura, 0.02),
+       f"las dos cifras del mismo periodo coinciden: desglose {d10['eur']} € · "
+       f"factura {de_la_factura} €")
+    # Y que la comprobación no pase por casualidad valiendo cero las dos.
+    ok(de_la_factura > 0.5,
+       f"con una cifra que no es cero, que si no no prueba nada ({de_la_factura} €)")
+    # Los kWh, que es la otra mitad: si el desglose repartiera más o menos energía que
+    # la que factura la tarifa, los euros solo cuadrarían por compensación.
+    ok(casi(d10["imported_kwh"], sum(p["kwh"] for p in horaria), 0.01),
+       f"y sobre los mismos kWh importados ({d10['imported_kwh']})")
 
 print()
 if fallos:

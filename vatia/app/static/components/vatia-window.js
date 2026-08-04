@@ -268,12 +268,20 @@
         };
       }
       if (d.state === "post") {
+        // «Mañana no se espera excedente» solo si de mañana **se sabe algo**. Sin ese
+        // reparo, una integración solar que solo publica el día en curso hacía que la
+        // tarjeta afirmara, todas las tardes, que mañana no iba a sobrar nada — y de
+        // un aviso: *«dice que mañana no habrá excedentes (…) y el pronóstico de sol
+        // de mañana es muy bueno»*. El payload traía la distinción desde la 0.53 y
+        // esta rama era la única que no la miraba; `_note` sí, así que se usa.
+        const nada = d.tomorrow_forecast === false
+          ? "De mañana todavía no hay previsión."
+          : "Mañana no se espera excedente.";
         return {
           pill: "VENTANA CERRADA",
           head: `Tu ventana se cerró a las ${hhmm(t.end)}.`,
-          sub: `Desde ahora, cada kWh que gastes lo pagas. ${
-            abre ? abre + "." : "Mañana no se espera excedente."}`,
-          note: "",
+          sub: `Desde ahora, cada kWh que gastes lo pagas. ${abre ? abre + "." : nada}`,
+          note: this._note(t, m, d.tomorrow_forecast),
         };
       }
       // Un día de nubes: la previsión no llega ni a lo que gasta la casa.
