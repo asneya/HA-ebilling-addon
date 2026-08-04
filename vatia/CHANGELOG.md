@@ -2,6 +2,90 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.60.0
+
+### El sol de una hora es uno
+
+De una pregunta sobre [el modelo de EMHASS](https://emhass.readthedocs.io/en/latest/advanced_math_model.html),
+que resuelve todas las cargas contra un **único balance de potencia**. Comparándolo
+con lo nuestro salió que ahí faltaba algo, y no en abstracto: cada aparato buscaba su
+hora **como si estuviera solo en la casa**. `simular` recibe la potencia de uno y el
+perfil de la casa, y no sabe que hay otros dos a los que se les está recomendando la
+misma hora.
+
+Medido, con tres aparatos de 2 kW y un tejado que da 2,6 kW de sobrante:
+
+```
+Aparato 1: mejor 12:00 · 2.00 kWh de sol (100 %) · 0.000 €
+Aparato 2: mejor 12:00 · 2.00 kWh de sol (100 %) · 0.000 €
+Aparato 3: mejor 12:00 · 2.00 kWh de sol (100 %) · 0.000 €
+
+Sol prometido por las filas: 6,00 kWh
+Sobrante del tejado:         2,30 kWh en esa hora  → 2,6 veces
+«Ahorras … esperando»:       1,08 € que no existían
+```
+
+Si seguías los tres consejos, ninguno cumplía. Es la misma enfermedad que ya se
+corrigió dos veces —dos cuentas del mismo instante que se desmienten— pero entre filas
+de una tarjeta en vez de entre tarjetas.
+
+Ahora el plan las coloca **por turnos**: lo que está en marcha aparta su sol primero
+—no es una hipótesis, está gastando—, y los movibles van después, el que más se ahorra
+primero, buscando cada uno contra el sobrante que de verdad queda. Un fijo no reserva
+nada, porque su cifra no es un plan sino un precio de «si lo pones ahora».
+
+Con las mismas cifras de arriba y un tejado estrecho, las tres filas pasan a 13:30 al
+100 %, 14:30 al 80 % y 12:30 al 76 %: 5,12 kWh de sol prometido sobre los 5,76 que hay.
+Cabe, y a los que llegan tarde se les dice que no les toca todo el sol en vez de
+prometérselo.
+
+### Y por qué tu lavadora va a las 14:00 y no a las 13:30
+
+Se dice, con la hora que habría tenido y quién tiene el hueco: «la Lavadora iría a las
+13:30, pero el Coche ya tiene ese hueco». Sin eso, la hora recomendada cambia de un día
+para otro y en la tarjeta no hay nada que lo explique — el tipo de cifra que parece un
+error del programa.
+
+Va en la nota de la tarjeta y no en la fila, por lo que ya se pidió una vez: las filas
+tenían «mucha información larga y pequeña», y esto no es un dato de la fila sino del
+reparto.
+
+El primer intento publicaba «con quién comparte el sol», y contestaba a la pregunta que
+no era: el turno casi nunca deja dos ciclos solapados —los separa—, así que salía vacío
+justo en el caso que hay que explicar.
+
+### El turno no baila, y eso vale más que el último céntimo
+
+La primera versión recalculaba la ganancia de todos en cada vuelta. Sale algo mejor y
+cuesta n² planes: **122 ms con ocho aparatos** en un endpoint que se pide cada veinte
+segundos. Con dos pasadas son 2n y **43 ms**, y con un solo aparato en la casa —el caso
+más común— vuelve a costar exactamente lo que costaba antes: 2,1 ms.
+
+Pero el motivo de fondo no es el coste. Ordenar el turno por la ganancia recalculada
+hace que dos refrescos seguidos puedan cambiar el orden, y con él las horas de la
+tarjeta entera, porque la previsión se ha movido un poco. **Un plan que cambia solo
+mientras lo miras no se puede seguir.**
+
+### Qué se ha tomado de EMHASS y qué no
+
+Se ha tomado la idea que arreglaba algo: el balance compartido. **No se ha tomado el
+solver.** Un MILP con `pulp` y CBC compra los últimos puntos de optimalidad sobre una
+previsión que trae mucho más error que el hueco que cierra —el propio sesgo medido baja
+al 0,85 en días que se desvían—, y además produce consignas para accionar
+interruptores. Vatia aconseja y no acciona: un óptimo que dice «lavadora de 13:35 a
+15:05» está bien como consigna y es inservible como consejo humano.
+
+Tampoco se ha tocado la batería como variable de decisión: en un Sungrow la prioridad
+la manda el inversor —casa primero y luego llenar al 100 %— y Vatia lo **modela**
+deliberadamente en vez de mandarlo.
+
+### Lo que esto no arregla, dicho
+
+El perfil de la casa es la **mediana** de esa hora, así que ya contiene a los aparatos
+en las horas en que suelen ponerse. Separarlo pediría un histórico por aparato dentro
+del perfil, que no está. Lo que se corrige es lo que no admite dudas: dos aparatos no
+pueden llevarse el mismo kilovatio.
+
 ## 0.59.1
 
 ### Los euros de la nevera eran siete veces los de verdad

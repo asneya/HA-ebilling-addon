@@ -190,6 +190,53 @@ def _coste(
     return de_red * (sum(muestras) / len(muestras)) + de_bat * valor_bateria
 
 
+def _casa_con_lo_comprometido(
+    casa_at: Callable[[datetime], float],
+    tramos: list[tuple[datetime, datetime, float]],
+) -> Callable[[datetime], float]:
+    """El consumo de la casa **más** lo que el plan ya ha dado por gastado.
+
+    El sol de una hora es uno, y hasta ahora cada aparato lo buscaba como si
+    estuviera solo en la casa: `simular` recibe la potencia de **un** aparato y el
+    perfil de la casa, y no sabe que hay otros dos a los que se les está
+    recomendando la misma hora. Medido con tres aparatos de 2 kW y un tejado que da
+    2,6 kW de sobrante: los tres decían «12:00 · 100 % con sol», sumaban 6,00 kWh de
+    sol prometido sobre los 2,30 kWh que el tejado da en esa hora —2,6 veces— y la
+    tarjeta anunciaba 1,08 € de ahorro que no existía. Es la misma enfermedad que ya
+    se corrigió entre tarjetas, ahora entre filas de la misma tarjeta.
+
+    Sumar el compromiso al consumo de la casa es la forma barata y exacta de que la
+    física siga en un solo sitio: `simular` no se toca, y lo que ve como «lo que la
+    casa está gastando a esa hora» incluye a los aparatos que ya tienen su hueco. El
+    sobrante que le queda al siguiente es el de verdad, y su recarga de batería
+    también, porque las dos salen de la misma resta.
+
+    Un aviso que conviene tener escrito: el perfil de la casa es la **mediana** de
+    esa hora, así que ya contiene a los aparatos en las horas en que suelen
+    ponerse. Restarles su parte del perfil pediría un histórico por aparato dentro
+    del perfil, que no está. Lo que este cambio arregla es lo que no admite dudas:
+    dos aparatos no pueden llevarse el mismo kilovatio.
+    """
+    # Sin nada comprometido no hay nada que envolver, y devolver el perfil tal cual
+    # importa: la envoltura se llama una vez por paso de simulación —96 comienzos por
+    # aparato, por vuelta— y con un solo aparato en la casa el coste sería puro peaje.
+    if not tramos:
+        return casa_at
+
+    def casa(t: datetime) -> float:
+        extra = sum(w for ini, fin, w in tramos if ini <= t < fin)
+        return max(0.0, casa_at(t)) + extra
+    return casa
+
+
+def _tramo_de(inicio: datetime, horas: float, kwh: float
+              ) -> tuple[datetime, datetime, float] | None:
+    """El hueco que ocupa un ciclo: desde cuándo, hasta cuándo y a qué potencia."""
+    if horas <= 0 or kwh <= 0:
+        return None
+    return (inicio, inicio + timedelta(hours=horas), kwh * 1000.0 / horas)
+
+
 def _mejor_hora(
     ciclo: dict[str, Any],
     now: datetime,
@@ -374,6 +421,13 @@ def plan(
     valor_bateria = min(precios) if precios else None
 
     filas = []
+    # Los huecos del sol que el plan ya ha dado por gastados, y de quién son. El
+    # sol de una hora es uno: ver `_casa_con_lo_comprometido`.
+    tramos: list[tuple[datetime, datetime, float]] = []
+    dueños: list[tuple[datetime, datetime, str]] = []
+    # Los movibles se planifican **después**, por turnos, compitiendo por lo que
+    # quede: aquí solo se recogen.
+    pendientes: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for a in lista or []:
         datos = aprendido.get(a["id"]) or {}
         # La forma de uso viene resuelta en `datos` —la ficha manda sobre lo
@@ -414,20 +468,119 @@ def plan(
                 "worth_waiting": False,
             })
             filas.append(fila)
+            # Y lo que le queda por consumir **se aparta del sol de los demás**. Esto
+            # no es una hipótesis como las horas que se proponen: el aparato está
+            # dando ahora mismo, así que ese sobrante ya no está libre. Un coche
+            # cargando se come el sol que el plan le estaba ofreciendo a la lavadora.
+            marcha, ciclo = datos["progress"], datos.get("cycle") or {}
+            queda_h = max(0.0, float(marcha.get("typical_h") or 0.0)
+                          - float(marcha.get("elapsed_h") or 0.0))
+            tramo = _tramo_de(now, queda_h, float(ciclo.get("kwh") or 0.0))
+            if tramo:
+                tramos.append(tramo)
+                dueños.append((tramo[0], tramo[1], a["name"]))
             continue
         ciclo = datos.get("cycle")
-        mejor = _mejor_hora(ciclo, now, fuentes, precio, valor_bateria) if ciclo else None
-        if not mejor:
+        if not ciclo:
             continue
-        fila.update(mejor)
         if cual == "fijo":
             # Tiene ciclo y coste, pero **no se le propone hora**: el aire lo
             # quieres cuando hace calor, no a las 14:00 porque es cuando pica el
             # sol. Recomendar una hora que no se puede seguir es ruido con aire de
             # consejo, así que se calcula «ahora» y se calla el resto.
+            #
+            # Y por eso tampoco reserva sol: su cifra es un precio de «si lo pones
+            # ahora», no un plan. Apartarle el sobrante a los movibles por una
+            # hipótesis que puede no ocurrir sería inventarse una escasez.
+            mejor = _mejor_hora(
+                ciclo, now, {**fuentes, "casa_at": _casa_con_lo_comprometido(
+                    fuentes["casa_at"], tramos)}, precio, valor_bateria)
+            if not mejor:
+                continue
+            fila.update(mejor)
             fila.update({"best": None, "saving_eur": None, "sun_gain_pct": 0,
                          "worth_waiting": False})
+            filas.append(fila)
+            continue
+        pendientes.append((fila, ciclo))
+
+    # Y ahora los movibles, **en turnos y no a la vez**: el sol de una hora es uno.
+    # Dos pasadas, y no una por aparato:
+    #
+    #   1. **A solas.** La hora que tendría cada uno si estuviera solo en la casa.
+    #      Sirve para dos cosas: ordenar el turno en igualdad de condiciones, y poder
+    #      decir después por qué la hora de uno es otra.
+    #   2. **Por turno.** Se colocan en ese orden, y cada uno vuelve a buscar contra
+    #      el sol que de verdad queda libre —los huecos ya dados, más lo que esté en
+    #      marcha—. Así el que llega tarde ve su sobrante y no el del tejado entero.
+    #
+    # Se probó re-escaneando a todos en cada vuelta, que es algo mejor y cuesta n²
+    # planes: 122 ms con ocho aparatos en un endpoint que se pide cada veinte
+    # segundos. Con dos pasadas son 2n y hay además una razón que no es el coste: el
+    # orden **no baila**. Ordenar por la ganancia recalculada hace que dos refrescos
+    # seguidos, con la previsión moviéndose un poco, puedan cambiar el turno y con él
+    # las horas de la tarjeta entera. Un plan que cambia solo mientras lo miras no se
+    # puede seguir.
+    #
+    # El criterio del turno —el que más gana, primero— es el mismo con el que la
+    # tarjeta ordena las filas y el que seguiría cualquiera a mano: si solo cabe uno
+    # al mediodía, que sea el que más se ahorra. Sin precios se ordena por lo que
+    # evita comprar, que es la misma idea con la única cifra que hay.
+    def _gana(m: dict[str, Any]) -> float:
+        ahorro = m.get("saving_eur")
+        if ahorro is not None:
+            return float(ahorro)
+        return (m["now"]["grid_kwh"] + m["now"]["battery_kwh"]
+                - m["best"]["grid_kwh"] - m["best"]["battery_kwh"])
+
+    a_solas: dict[int, dict[str, Any]] = {}
+    orden: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for fila, ciclo in pendientes:
+        m = _mejor_hora(ciclo, now, fuentes, precio, valor_bateria)
+        if not m:
+            continue
+        a_solas[id(fila)] = m
+        orden.append((fila, ciclo))
+    orden.sort(key=lambda par: (-_gana(a_solas[id(par[0])]), par[0]["name"]))
+
+    for fila, ciclo in orden:
+        casa = _casa_con_lo_comprometido(fuentes["casa_at"], tramos)
+        # Sin nada comprometido, buscar otra vez daría lo mismo que la pasada a
+        # solas: se reaprovecha. Es el caso del primero del turno y el del único
+        # aparato de la casa, que es el más común de todos.
+        if casa is fuentes["casa_at"]:
+            mejor = a_solas[id(fila)]
+        else:
+            mejor = _mejor_hora(ciclo, now, {**fuentes, "casa_at": casa},
+                                precio, valor_bateria)
+            if not mejor:
+                continue
+        fila.update(mejor)
+        # **Quién le ha quitado el sitio**, si alguien se lo ha quitado. Y no «con
+        # quién comparte»: eso se escribió antes y contestaba a la pregunta que no
+        # era, porque el turno casi nunca deja dos ciclos solapados —los separa— y
+        # entonces salía vacío justo en el caso que hay que explicar. Lo que hace
+        # falta saber es por qué la lavadora va a las 14:00 y no a las 13:30.
+        horas = float(ciclo.get("hours") or 0.0)
+        solo = a_solas[id(fila)]
+        fila["displaced_by"] = []
+        fila["alone_at"] = None
+        if solo["best"]["at"] != mejor["best"]["at"]:
+            queria = datetime.fromisoformat(solo["best"]["at"])
+            hasta = queria + timedelta(hours=horas)
+            fila["displaced_by"] = sorted({
+                quien for ini, f, quien in dueños if ini < hasta and queria < f
+            })
+            # La hora que habría tenido, para poder decirla. Se publica solo cuando
+            # de verdad la ha perdido por otro: si no, sería la misma y sobra.
+            if fila["displaced_by"]:
+                fila["alone_at"] = solo["best"]["at"]
         filas.append(fila)
+        tramo = _tramo_de(datetime.fromisoformat(mejor["best"]["at"]), horas,
+                          float(ciclo.get("kwh") or 0.0))
+        if tramo:
+            tramos.append(tramo)
+            dueños.append((tramo[0], tramo[1], fila["name"]))
     # Primero lo que está pasando, que es lo único de la tarjeta que no es una
     # hipótesis; luego lo que más se gana moviéndolo; y los continuos al final: no
     # hay nada que decidir sobre ellos, están para saber lo que cuestan.
