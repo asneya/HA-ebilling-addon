@@ -22,7 +22,8 @@ import { guardando } from "../core/guardando.js";
 /* Los mismos glifos que acepta el servidor, con su nombre para el botón. */
 const ICONOS = [
   ["lavadora", "Lavadora"], ["lavavajillas", "Lavavajillas"],
-  ["horno", "Horno"], ["coche", "Coche"],
+  ["horno", "Horno"], ["coche", "Carga del coche"],
+  ["coche-electrico", "Coche eléctrico"],
   ["aire-acondicionado", "Aire acondicionado"], ["ordenador", "Ordenador"],
   ["movil", "Móvil"], ["nevera", "Nevera"], ["congelador", "Congelador"],
   ["iluminacion", "Iluminación"], ["cortacesped", "Cortacésped"],
