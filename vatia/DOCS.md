@@ -592,9 +592,37 @@ Lo que se publica es **una diferencia**: «entre todos, 0,58 € de más de lo q
 energía habría costado en su hueco». Nunca «lo que gastaste», y tampoco «lo que te has
 ahorrado»: ahorrar es prospectivo y este día ya pasó. Lo que hay es un sobrecoste ya
 pagado, y por eso cada fila lo dice con una flecha hacia arriba —«↑ 0,39 € de más»— y no
-con un signo más, que se leería como dinero que entró. El modelo de esta tarjeta es más simple que el del
-desglose de la factura —no tiene batería— y publicar un coste absoluto pondría dos
-cifras del mismo día en dos pantallas.
+con un signo más, que se leería como dinero que entró. El modelo de esta tarjeta es más
+simple que el del desglose de la factura —aquel reparte la energía entre orígenes medidos
+y este coloca rectángulos— y publicar un coste absoluto pondría dos cifras del mismo día
+en dos pantallas.
+
+**La batería está dentro de la cuenta** desde la 0.65.0, y no era un detalle: el sobrante
+de mediodía no se tira, se guarda, así que una lavadora movida al sol no se ahorra el
+kilovatio entero de la noche. Contra una simulación exacta de la batería hora a hora, con
+el mismo día y el mismo aparato:
+
+| El día | Lo cierto | Lo que se publicaba antes |
+|---|---|---|
+| la batería se vació y entró la red | 0,40 € de más | 0,60 € |
+| a la batería le sobró energía | **0,00 €** | 0,60 € |
+
+El sobrante de cada hora se parte en cuatro escalones, y lo que cuesta cada uno es lo
+que ese kilovatio le quita a otro sitio: **lo que se vertía** sale gratis; **lo que se
+guardaba** cuesta la ida y vuelta de la batería, porque el que no entra es uno que luego
+no sale; **lo que la batería entregó a esa hora** cuesta lo que valía su kilovatio, y
+solo hasta lo que entregó —pasado ese tope no consta que pudiera dar más—; y lo que
+quede, **la red**, al precio de la hora. No van de más barato a más caro, van en el
+orden en que la instalación los usa. Entre las dos líneas de la tabla decide una sola pregunta:
+*¿se llegó a vaciar la batería?* Si llegó a la mañana siguiente con energía sin gastar,
+un kilovatio suyo no valía nada ese día. Se responde sin estado de carga y sin un sensor
+nuevo, mirando si la casa importó después de la última hora en que la batería cargaba.
+
+Un resultado que parece un error y no lo es: en un día con la batería atada y madrugada
+barata, la tarjeta puede decir que **las tres de la mañana era mejor hora que el
+mediodía**. La batería ya convertía ese sol en energía de la noche, así que consumirlo
+directo solo se ahorra el 10 % de la ida y vuelta —tres céntimos— frente a los veinte de
+diferencia entre tarifas.
 
 Solo se le propone otra hora a los aparatos **movibles**, y solo cuando de verdad se
 ganaba algo: a una nevera no hay hora que proponerle, a un fijo tampoco, y decir «ya
@@ -606,7 +634,7 @@ Lo que el modelo no tiene, y conviene saber:
 
 | | |
 |---|---|
-| **La batería** | Mueve energía de una hora a otra, y meterla pediría simular su carga en las dos hipótesis. Las dos cifras se calculan igual, así que su diferencia sigue valiendo; lo que no valdría es leer una de ellas como una factura. |
+| **La capacidad y la carga de la batería** | No se simula su estado: se **infiere** de cada hora si tenía sitio —mirando si a esa hora se vertía— y del día si llegó a vaciarse. Son inferencias sobre medidas, pero son inferencias: un tope de potencia de carga se lee igual que una batería llena, y una casa que importa de noche porque pide más potencia de la que el inversor descarga se lee como una batería vacía. |
 | **La forma del programa** | Un ciclo se coloca como un rectángulo, su energía repartida por igual entre sus horas. En una lavadora el calentamiento va al principio, así que un hueco de sol le vale algo más de lo que aquí sale. |
 | **Las razones humanas** | Que el lavavajillas se pudiera poner a las tres de la madrugada no significa que se pudiera. La tarjeta dice lo que **había** sobre la mesa, no lo que se hizo mal. |
 

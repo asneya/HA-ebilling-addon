@@ -6,10 +6,10 @@ se puede decir sin condicionales — un plan del día que viene depende de una p
 que falla; esto no depende de ninguna.
 
 Lo delicado no es la cuenta, es **qué se publica**. El modelo de aquí es más simple que
-el del desglose de la factura (no tiene batería), así que publicar «tus aparatos
-costaron X» pondría dos cifras del mismo día en dos pantallas — el defecto que esta
-aplicación lleva corrigiendo desde la 0.48. Lo que se publica es una **diferencia**,
-calculada dos veces con la misma cuenta y restada.
+el del desglose de la factura, así que publicar «tus aparatos costaron X» pondría dos
+cifras del mismo día en dos pantallas — el defecto que esta aplicación lleva corrigiendo
+desde la 0.48. Lo que se publica es una **diferencia**, calculada dos veces con la misma
+cuenta y restada.
 
 Lo que se comprueba, con un día hecho a mano para poder derivar la respuesta a mano:
 
@@ -21,6 +21,14 @@ Lo que se comprueba, con un día hecho a mano para poder derivar la respuesta a 
   5. sin sol, sin aparatos o sin precios no se inventa nada
   6. la cifra que se publica es la diferencia, y **no** hay ninguna que se pueda leer
      como «lo que gastaste» — ni como un ahorro, que es prospectivo y este día ya pasó
+  7. **la batería** (0.65.0): el mismo día con el sobrante guardado en vez de vertido da
+     un sobrecoste distinto, y cuál es lo dice una **simulación exacta** puesta al lado
+     del modelo — a mano no se deriva una cuenta con estado
+  7c. los cuatro escalones de una hora, de cerca: lo que la batería entregó es un tope
+     medido y se gasta, no una barra libre
+  8. y un resultado que parece un error y no lo es: con la batería atada y madrugada
+     barata, las tres de la mañana **sí** pueden ganarle al sol. Está aquí para que
+     nadie «arregle» el modelo hasta que deje de salir
 """
 import sys
 from datetime import datetime
@@ -129,8 +137,8 @@ horas3 = sorted(f["best_at"][11:13] for f in d3["rows"])
 ok(len(set(horas3)) == 2, f"cada uno a un hueco distinto ({horas3})")
 # Y el segundo no sale gratis: donde le toca hay que comprar, y se dice.
 peor = min(d3["rows"], key=lambda f: f["extra_eur"] or 0)
-ok(peor["best_grid_kwh"] > 0,
-   f"al segundo le toca comprar algo, y se dice ({peor['best_grid_kwh']} kWh de red)")
+ok(peor["best_paid_kwh"] > 0,
+   f"al segundo le toca comprar algo, y se dice ({peor['best_paid_kwh']} kWh pagados)")
 
 print("\n4 · «el resto de la casa» es el suelo")
 # La casa se come el sol entero: 3 kWh de resto en las horas de sol. No queda hueco,
@@ -169,6 +177,162 @@ ok(not {k for k in claves if "saving" in k},
    f"ni como un ahorro ({sorted(k for k in claves if 'saving' in k)})")
 ok("extra_eur" in d and "extra_eur" in d["rows"][0],
    "lo que se publica es lo que costó de más")
+
+# ── La batería dentro del modelo (0.65.0) ──────────────────────────────────
+#
+# El mismo día de arriba pero con batería: el sol que sobra ya no se tira, se guarda.
+# La respuesta correcta ya no es «te ahorrabas el kilovatio entero», y para saber cuál
+# es se simula la batería **exacta**, hora a hora, con las tres hipótesis. Esa
+# simulación está aquí abajo y es de veinte líneas: no vale derivar a mano una cuenta
+# con estado, porque el estado es justo lo que se olvida.
+#
+# La batería voraz: guarda todo el sobrante y descarga en cuanto falta, con el 90 % de
+# rendimiento a la salida. Sin topes de potencia ni de capacidad, que es el modelo del
+# que habla `optimo`.
+
+
+def coste_exacto(resto, wm_horas, wm_kwh_h, eta=0.90):
+    """Lo que costó de verdad el día, con la lavadora puesta en `wm_horas`."""
+    soc = coste = 0.0
+    for h in range(24):
+        sol = SOLAR[H(h)]
+        carga = resto[h] + (wm_kwh_h if h in wm_horas else 0.0)
+        neto = sol - carga
+        if neto > 0:
+            soc += neto * eta
+        else:
+            da = min(-neto, soc)
+            soc -= da
+            coste += (-neto - da) * PRECIOS[H(h)]
+    return coste, soc
+
+
+def reparto_bateria(resto, wm_horas, wm_kwh_h, eta=0.90):
+    """El reparto hora a hora **medido** de ese día, que es lo que ve `optimo`.
+
+    Sale de la misma simulación, así que el banco no le está dando a `optimo` un día
+    inventado: le está dando lo que los contadores habrían publicado.
+    """
+    soc = 0.0
+    out = {}
+    for h in range(24):
+        iso = H(h)
+        sol = SOLAR[iso]
+        carga = resto[h] + (wm_kwh_h if h in wm_horas else 0.0)
+        neto = sol - carga
+        fila = {"home_total": carga, "to_home": min(sol, carga), "to_grid": 0.0,
+                "to_battery": 0.0, "from_solar": min(sol, carga),
+                "from_battery": 0.0, "from_grid": 0.0, "grid_to_battery": 0.0,
+                "battery_to_grid": 0.0}
+        if neto > 0:
+            fila["to_battery"] = neto
+            soc += neto * eta
+        else:
+            da = min(-neto, soc)
+            soc -= da
+            fila["from_battery"] = da
+            fila["from_grid"] = -neto - da
+        out[iso] = fila
+    return out
+
+
+print("\n7 · la batería dentro: el sol que sobra no se tira, se guarda")
+LLANO = [0.5] * 24
+CARGADO = [0.5 if h < 18 else 2.0 for h in range(24)]
+COMO_FUE = (22, 23)
+# La lavadora: 1 kWh/h durante dos horas, igual que en §1.
+lava_2h = {"lava": {H(22): 1.0, H(23): 1.0}}
+
+for etiqueta, resto, esperado in (
+    ("la batería se vació", CARGADO, 0.40),
+    ("le sobró energía", LLANO, 0.00),
+):
+    # Lo cierto: el mejor de los tres sitios donde cabía, contra donde estuvo.
+    real, _ = coste_exacto(resto, COMO_FUE, 1.0)
+    opciones = {h: coste_exacto(resto, h, 1.0)[0]
+                for h in (COMO_FUE, (12, 13), (0, 1))}
+    cierto = real - min(opciones.values())
+    ok(abs(cierto - esperado) < 0.005,
+       f"{etiqueta}: la simulación exacta dice {cierto:.2f} € de más")
+    d7 = optimo.del_dia(APARATOS, DIA, lava_2h,
+                        reparto_bateria(resto, COMO_FUE, 1.0), SOLAR, precio_de)
+    ok(d7 is not None and casi(d7["extra_eur"], esperado, 0.02),
+       f"  y el modelo lo clava ({d7 and d7['extra_eur']} €)")
+    ok(d7["battery"] is True, "  con la batería declarada dentro de la cuenta")
+
+# Y el sesgo que esto corrige: el modelo sin batería —el mismo día sin nada en las
+# claves de batería— canta 0,60 € en los dos casos. Es la cifra que se publicaba.
+sin_bat = optimo.del_dia(APARATOS, DIA, lava_2h, reparto_con(lava_2h), SOLAR, precio_de)
+ok(casi(sin_bat["extra_eur"], 0.60),
+   f"sin batería en el día se sigue diciendo 0,60 € ({sin_bat['extra_eur']} €)")
+ok(sin_bat["battery"] is False, "y se dice que la batería no está en esa cuenta")
+
+print("\n7b · el día en que le sobró energía no se le echa nada en cara")
+# El caso que se colaba: el aparato **ya estaba donde tocaba** —la simulación exacta
+# dice que ponerlo al sol no habría cambiado un céntimo— y la tarjeta le señalaba un
+# sobrecoste de sesenta céntimos. Si esto se rompe, se está aconsejando sobre un día
+# que se hizo bien.
+d7b = optimo.del_dia(APARATOS, DIA, lava_2h, reparto_bateria(LLANO, COMO_FUE, 1.0),
+                     SOLAR, precio_de)
+ok(d7b["rows"][0]["already_best"] is True, "se dice que ya estaba en su mejor hueco")
+ok(casi(d7b["rows"][0]["extra_eur"], 0.0, 0.02),
+   f"y su sobrecoste es cero ({d7b['rows'][0]['extra_eur']} €)")
+ok(casi(d7b["battery_eur_kwh"], 0.0),
+   f"porque el kilovatio de batería no valía nada ese día ({d7b['battery_eur_kwh']})")
+ok(d7b["free_kwh"] == 0 and d7b["stored_kwh"] > 0,
+   f"y el sobrante fue guardado, no vertido ({d7b['stored_kwh']} kWh)")
+
+print("\n7c · lo que la batería dio a esa hora es un tope, no una barra libre")
+# Los cuatro escalones, mirados de cerca: es la única parte del modelo que no se ve
+# desde fuera con un día entero, porque a la hora en que un aparato estuvo de verdad el
+# `from_battery` medido **ya lleva su consumo dentro** y el tope nunca aprieta. Donde
+# aprieta es en las otras horas, que son las que el modelo propone.
+#
+# Una hora con: 1 kWh que se vertía, 2 kWh que se guardaban, 1,5 kWh que la batería
+# entregó a la casa y un precio de 0,20 €. La batería vale 0,10 € el kilovatio.
+UNA = optimo._Huecos([1.0], [2.0], [1.5], [0.20], 0.10, True)
+eur, pagado, _peso = UNA.coste(0, 1, 1.0)
+ok(casi(eur, 0.0), f"el primer kilovatio es el vertido, y es gratis ({eur} €)")
+eur, pagado, _peso = UNA.coste(0, 1, 3.0)
+# 1 gratis + 2 guardados × 0,9 × 0,10 = 0,18 €
+ok(casi(eur, 0.18), f"los dos siguientes salen del guardado, a la ida y vuelta ({eur} €)")
+eur, pagado, _peso = UNA.coste(0, 1, 4.5)
+# … + 1,5 de la batería × 0,10 = 0,33 €
+ok(casi(eur, 0.33), f"y luego lo que la batería dio, a su valor ({eur} €)")
+eur, pagado, _peso = UNA.coste(0, 1, 10.0)
+# … + 5,5 de la red × 0,20 = 1,43 €. **Sin el tope serían 0,33 €**: diez kilovatios
+# gratis de una batería que a esa hora entregó uno y medio.
+ok(casi(eur, 1.43), f"pasado el tope, lo pone la red y se paga ({eur} €)")
+ok(casi(pagado, 7.0),
+   f"y lo pagado son la batería y la red, no el sol ({pagado} kWh)")
+# Y el tope se gasta: dos aparatos no se llevan el mismo kilovatio de batería.
+UNA.ocupar(0, 1, 4.5)
+eur, _pagado, _peso = UNA.coste(0, 1, 1.0)
+ok(casi(eur, 0.20), f"colocado uno, al siguiente ya le toca la red ({eur} €)")
+
+print("\n8 · con la batería atada, la madrugada barata puede ganarle al sol")
+# No es una rareza del modelo: la batería ya convertía el sol de mediodía en energía de
+# la noche a 0,30 €/kWh, y consumirlo directo solo se ahorra el 10 % de la ida y vuelta
+# —tres céntimos— frente a los veinte de diferencia entre tarifas. La simulación exacta
+# lo confirma, y es lo que impide «corregir» el modelo para que nunca salga de noche.
+por_sol, _ = coste_exacto(CARGADO, (12, 13), 1.0)
+por_noche, _ = coste_exacto(CARGADO, (0, 1), 1.0)
+ok(por_noche < por_sol,
+   f"la simulación exacta prefiere la madrugada ({por_noche:.3f} € < {por_sol:.3f} €)")
+d8 = optimo.del_dia(APARATOS, DIA, lava_2h,
+                    reparto_bateria(CARGADO, COMO_FUE, 1.0), SOLAR, precio_de)
+ok(d8["rows"][0]["best_at"][11:13] in ("00", "01"),
+   f"y el modelo también, sin que nadie se lo diga ({d8['rows'][0]['best_at'][11:16]})")
+# Lo que **no** puede pasar: que el vertido pierda contra cualquier cosa. Sol tirado a
+# la red es el único kilovatio que de verdad es gratis, y ahí el orden es intocable.
+vertiendo = reparto_bateria(CARGADO, COMO_FUE, 1.0)
+for h in (12, 13, 14):
+    vertiendo[H(h)]["to_grid"] = vertiendo[H(h)].pop("to_battery")
+    vertiendo[H(h)]["to_battery"] = 0.0
+d8b = optimo.del_dia(APARATOS, DIA, lava_2h, vertiendo, SOLAR, precio_de)
+ok(d8b["rows"][0]["best_at"][11:13] in ("12", "13"),
+   f"si el sol se vertía, gana el sol ({d8b['rows'][0]['best_at'][11:16]})")
+ok(d8b["free_kwh"] > 0, f"y ese sobrante sí es gratis ({d8b['free_kwh']} kWh)")
 
 print()
 if fallos:

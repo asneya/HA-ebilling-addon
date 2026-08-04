@@ -181,8 +181,9 @@
        bucle que la aplicación tenía abierto: prometía «gratis a las 13:00» y no
        volvía a mirar si salió gratis.
 
-       Es **una diferencia** y nunca «lo que gastaste»: este modelo no tiene batería
-       dentro, y un coste absoluto se contradiría con el desglose de la factura. */
+       Es **una diferencia** y nunca «lo que gastaste»: un coste absoluto se
+       contradiría con el desglose de la factura, que reparte la energía entre orígenes
+       medidos en vez de colocar rectángulos. */
     _sobreLaMesa(mejor) {
       if (!mejor || !mejor.rows || !mejor.rows.length) return "";
       const eur = mejor.extra_eur;
@@ -193,13 +194,26 @@
           costó de más ponerlos a esas horas.</p>`;
       }
       if (eur < 0.05) {
+        // Y con batería esto es lo normal, no un día flojo: si el sol que sobraba se
+        // guardó, ya lo estabas aprovechando. Decirlo evita leer «no había nada que
+        // ganar» como «el día salió mal».
+        const guardado = mejor.battery && mejor.stored_kwh > mejor.free_kwh;
         return `<p class="ap-pie">Aprovechaste el sol prácticamente todo lo que se
-          podía: en su mejor hueco no habrían costado ni cinco céntimos menos.</p>`;
+          podía: en su mejor hueco no habrían costado ni cinco céntimos menos.${
+            guardado ? ` El sol que sobraba no se perdió, se guardó en la batería.` : ""
+          }</p>`;
       }
+      // La coletilla dice qué **no** mira la cuenta, y eso cambió al meter la batería:
+      // antes la advertencia era que no estaba. Ahora está, y lo que queda fuera es que
+      // las tres de la madrugada se cuentan como una hora cualquiera.
+      const bat = mejor.battery
+        ? `la batería entra en esta cuenta —el sol que sobraba y se guardó cuenta como
+           energía que ya tenías— y `
+        : "";
       return `<p class="ap-pie">Entre todos, <b>${esc(nf2.format(eur))} € de más</b> de
         lo que la misma energía habría costado en su hueco. Es lo que <b>había</b> sobre
-        la mesa, no lo que se hizo mal: la batería no entra en esta cuenta y las tres de
-        la madrugada cuentan como una hora cualquiera.</p>`;
+        la mesa, no lo que se hizo mal: ${bat}las tres de la madrugada cuentan como una
+        hora cualquiera.</p>`;
     }
 
     _render() {
