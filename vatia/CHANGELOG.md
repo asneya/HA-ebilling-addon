@@ -2,6 +2,67 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.67.0
+
+### «100 % con sol» y «0,02 € de más» ya no pueden salir juntos
+
+De un aviso: *«el resumen del día dice que la lavadora ha usado 100 % con sol y me pone
+que ha gastado 0,02 € de más que si lo hubiera puesto a las 14h. Si ya fue todo sol, no
+es ya gratis?»*. Sí lo es. Y las dos cifras eran ciertas a la vez, lo que quiere decir
+que había **tres** cosas mal, no una.
+
+### 1. El modelo aplanaba el ciclo
+
+Para colocar una lavadora en otra hora, el óptimo del día la trataba como un
+rectángulo: su energía repartida por igual entre sus horas. Pero una lavadora carga al
+principio —el calentamiento del agua— y baja al final:
+
+| | 12:00 | 13:00 | 14:00 |
+|---|---|---|---|
+| lo que gastó (medido) | 0,90 kWh | 0,20 | 0,05 |
+| el sobrante de esa hora | 2,00 kWh | 0,50 | 0,10 |
+| aplanado a la media | 0,38 kWh | 0,38 | 0,38 |
+
+Con la forma medida cada hora cabe en su sobrante y el ciclo costó **cero**. Aplanado, a
+las 14:00 no caben 0,38 en 0,10 y el modelo cobraba unos céntimos que la casa **nunca
+pagó** — y luego colocaba ese mismo rectángulo donde sí cabía y publicaba la diferencia
+como un sobrecoste.
+
+Ahora la forma medida **se desliza entera**, sin aplanarla. Arregla las dos hipótesis a
+la vez y con una sola cuenta: si el ciclo fue gratis donde estuvo, el «como se hizo» sale
+cero y no hay nada que restar. Y de paso se retira una de las salvedades del modelo: lo
+único que sigue suponiéndose es que el programa gasta lo mismo a cualquier hora, y eso en
+una lavadora es verdad.
+
+### 2. El umbral de cinco céntimos estaba escrito y no se usaba
+
+`MIN_EXTRA_EUR = 0.05` llevaba desde la 0.61.0 con su porqué al lado —«señalar dos
+céntimos de un día que ya pasó es hacerle perder el tiempo a alguien»— y **no se leía en
+ningún sitio**: la tarjeta llevaba el 0,05 a mano para el titular del día y un `> 0` para
+las filas. Así que una fila de dos céntimos traía su «mejor a las 14:00».
+
+Ahora la búsqueda sigue siendo fina —el turno se ordena con la diferencia exacta— y lo
+que se corta es el **consejo**, que es lo que se lee. Y el titular del día pasa a ser la
+suma de las filas publicadas, no la resta de los dos totales: si no, diría una cifra que
+ninguna fila explica.
+
+### 3. Y el «% con sol» no medía el sol
+
+Salía del **solape del ciclo con la ventana**, y la ventana se calcula con la previsión
+solar y el consumo **típico** de la casa. Un día en que la casa gastó más de lo normal, el
+ciclo seguía «dentro» aunque parte la pusiera la red — y la tarjeta decía «100 % con sol»
+igual. Ahora sale del reparto **medido** de esas horas, con la misma atribución que usa el
+desglose de la factura, así que las dos pantallas no pueden discrepar del mismo aparato.
+Cada fila publica además lo que puso la batería y lo que puso la red, para que no haya que
+restar.
+
+Sin reparto —un payload viejo— se cae al solape, que es lo que había.
+
+### Y una cosa que quitamos
+
+**armv7.** El add-on declaraba las tres arquitecturas y Supervisor tiene la de 32 bits
+deprecada. Quedan `aarch64` y `amd64`.
+
 ## 0.66.0
 
 ### La ventana dice cuánto puede moverse su hora

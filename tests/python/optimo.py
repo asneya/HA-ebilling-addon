@@ -291,24 +291,85 @@ print("\n7c · lo que la batería dio a esa hora es un tope, no una barra libre"
 # Una hora con: 1 kWh que se vertía, 2 kWh que se guardaban, 1,5 kWh que la batería
 # entregó a la casa y un precio de 0,20 €. La batería vale 0,10 € el kilovatio.
 UNA = optimo._Huecos([1.0], [2.0], [1.5], [0.20], 0.10, True)
-eur, pagado, _peso = UNA.coste(0, 1, 1.0)
+eur, pagado, _peso = UNA.coste(0, [1.0])
 ok(casi(eur, 0.0), f"el primer kilovatio es el vertido, y es gratis ({eur} €)")
-eur, pagado, _peso = UNA.coste(0, 1, 3.0)
+eur, pagado, _peso = UNA.coste(0, [3.0])
 # 1 gratis + 2 guardados × 0,9 × 0,10 = 0,18 €
 ok(casi(eur, 0.18), f"los dos siguientes salen del guardado, a la ida y vuelta ({eur} €)")
-eur, pagado, _peso = UNA.coste(0, 1, 4.5)
+eur, pagado, _peso = UNA.coste(0, [4.5])
 # … + 1,5 de la batería × 0,10 = 0,33 €
 ok(casi(eur, 0.33), f"y luego lo que la batería dio, a su valor ({eur} €)")
-eur, pagado, _peso = UNA.coste(0, 1, 10.0)
+eur, pagado, _peso = UNA.coste(0, [10.0])
 # … + 5,5 de la red × 0,20 = 1,43 €. **Sin el tope serían 0,33 €**: diez kilovatios
 # gratis de una batería que a esa hora entregó uno y medio.
 ok(casi(eur, 1.43), f"pasado el tope, lo pone la red y se paga ({eur} €)")
 ok(casi(pagado, 7.0),
    f"y lo pagado son la batería y la red, no el sol ({pagado} kWh)")
 # Y el tope se gasta: dos aparatos no se llevan el mismo kilovatio de batería.
-UNA.ocupar(0, 1, 4.5)
-eur, _pagado, _peso = UNA.coste(0, 1, 1.0)
+UNA.ocupar(0, [4.5])
+eur, _pagado, _peso = UNA.coste(0, [1.0])
 ok(casi(eur, 0.20), f"colocado uno, al siguiente ya le toca la red ({eur} €)")
+
+print("\n7d · «100 % con sol» y «0,02 € de más» no pueden salir juntos")
+# De un aviso: *«el resumen del día dice que la lavadora ha usado 100 % con sol y me
+# pone que ha gastado 0,02 € de más que si lo hubiera puesto a las 14h. Si ya fue todo
+# sol, no es ya gratis?»*. Sí lo es, y las dos cifras eran ciertas a la vez: la culpa
+# era de **aplanar el ciclo**.
+#
+# El día: la lavadora carga al principio —el calentamiento del agua— y baja al final.
+# El sobrante de cada hora es justo lo suficiente para su forma real, y ni un vatio
+# más. Aplanada, la parte de la cola se sale del sobrante de las 14:00 y el modelo
+# cobra algo que la casa nunca pagó.
+# Y con un hueco ancho por la mañana —tres horas con 1 kWh de sobrante— donde el
+# rectángulo aplanado **sí** cabe entero: eso es lo que hacía que el modelo viejo
+# propusiera otra hora y publicara un sobrecoste. Sin ese hueco la cifra salía cero
+# igual y el banco no habría visto nada.
+FORMA = {H(12): 0.90, H(13): 0.20, H(14): 0.05}
+SOBRA = {9: 1.00, 10: 1.00, 11: 1.00, 12: 2.00, 13: 0.50, 14: 0.10}
+# Solar = resto de la casa + el sobrante que se quiere en cada hora.
+SOLAR_FORMA = {H(h): (CASA_RESTO + SOBRA[h] if h in SOBRA else 0.0) for h in range(24)}
+lava_forma = {"lava": FORMA}
+d7d = optimo.del_dia(APARATOS, DIA, lava_forma, reparto_con(lava_forma),
+                     SOLAR_FORMA, precio_de)
+f7d = d7d["rows"][0]
+# A mano: con la forma medida, cada hora cabe en su sobrante (0,90 < 2,00 · 0,20 < 0,50
+# · 0,05 < 0,10), así que el ciclo **no pagó nada**.
+ok(casi(f7d["paid_kwh"], 0.0),
+   f"con la forma medida el ciclo no pagó nada ({f7d['paid_kwh']} kWh)")
+ok(casi(f7d["extra_eur"], 0.0),
+   f"y por tanto no costó de más de lo que costó ({f7d['extra_eur']} €)")
+ok(f7d["already_best"] is True, "se dice que ya estaba en su mejor hueco")
+ok(casi(d7d["extra_eur"], 0.0), f"y el titular del día también ({d7d['extra_eur']} €)")
+# Y la prueba de que el aplanado era el culpable: el mismo día con el mismo total
+# repartido por igual entre las tres horas **sí** paga, porque la cola no cabe.
+plano = round(sum(FORMA.values()) / 3, 4)
+aplanado = {"lava": {h: plano for h in FORMA}}
+d7dp = optimo.del_dia(APARATOS, DIA, aplanado, reparto_con(aplanado),
+                      SOLAR_FORMA, precio_de)
+ok(d7dp["rows"][0]["paid_kwh"] > 0.2,
+   f"la misma energía aplanada sí se sale del sobrante "
+   f"({d7dp['rows'][0]['paid_kwh']} kWh) — era el modelo, no el día")
+
+print("\n7e · y por debajo de cinco céntimos no se propone hora")
+# `MIN_EXTRA_EUR` estaba definido con su porqué escrito y **no se usaba en ningún
+# sitio**: la tarjeta llevaba el 0,05 a mano para el titular del día y un `> 0` para
+# las filas, así que una fila de dos céntimos traía consejo. Es la otra mitad del mismo
+# aviso.
+ok(optimo.MIN_EXTRA_EUR == 0.05, "el umbral sigue siendo el del plan del día")
+# Un día en que mover la lavadora gana **algo** pero menos del umbral: 0,1 kWh de cola
+# fuera del sobrante, a 0,30 € = 0,03 €.
+SOBRA_JUSTO = {12: 2.00, 13: 0.50, 14: 0.0}
+SOLAR_JUSTO = {H(h): (CASA_RESTO + SOBRA_JUSTO[h] if h in SOBRA_JUSTO else 0.0)
+               for h in range(24)}
+cola = {"lava": {H(12): 0.90, H(13): 0.20, H(14): 0.10}}
+d7e = optimo.del_dia(APARATOS, DIA, cola, reparto_con(cola), SOLAR_JUSTO, precio_de)
+f7e = d7e["rows"][0]
+ok(casi(f7e["paid_kwh"], 0.10),
+   f"la cola sí se paga: 0,10 kWh a 0,30 € = 0,03 € ({f7e['paid_kwh']} kWh)")
+ok(casi(f7e["extra_eur"], 0.0),
+   f"pero no se propone otra hora por tres céntimos ({f7e['extra_eur']} €)")
+ok(f7e["already_best"] is True and f7e["best_at"] == f7e["ran_at"],
+   "y la hora que se enseña es la suya, no una que no compensa")
 
 print("\n8 · con la batería atada, la madrugada barata puede ganarle al sol")
 # No es una rareza del modelo: la batería ya convertía el sol de mediodía en energía de

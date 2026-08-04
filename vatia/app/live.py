@@ -1684,8 +1684,11 @@ def day_close(
         "self_pct": self_pct,
         "in_window": in_window,
         "saved": savings,
+        # El reparto va también aquí para que el «% con sol» de cada fila sea **lo
+        # medido** y no el solape con la ventana, que se calcula con el consumo típico
+        # y podía decir «100 % con sol» un día en que parte la puso la red.
         "appliances": appliances_mod.del_cierre(
-            appliance_list or [], aprendido or {}, window
+            appliance_list or [], aprendido or {}, window, por_horas
         ),
         # Lo que había sobre la mesa: el mejor orden posible del día que se acaba.
         # Va aquí y no en su propia petición porque **todo lo que necesita ya está

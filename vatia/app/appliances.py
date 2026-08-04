@@ -1005,13 +1005,24 @@ def del_cierre(
     lista: list[dict[str, Any]],
     aprendido: dict[str, dict[str, Any]],
     window: dict[str, Any] | None,
+    reparto: dict[str, dict[str, float]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Qué se ha puesto hoy y cuánto de cada cosa cayó dentro de la ventana.
+    """Qué se ha puesto hoy, cuánto puso el sol y cuánto cayó dentro de la ventana.
 
     Es la pregunta del cierre del día llevada al detalle: no solo «has aprovechado
-    el 64 % del consumo» sino *qué* lo aprovechó y qué no. Se reparte cada ciclo
-    por el solape con la ventana, en vez de mirar solo la hora de inicio: una
-    lavadora que empieza dentro y acaba fuera no es ni todo gratis ni todo pagado.
+    el 64 % del consumo» sino *qué* lo aprovechó y qué no.
+
+    **El «% con sol» se mide, no se deduce de la ventana.** Antes era el solape del
+    ciclo con la ventana, y eso no es lo mismo: la ventana se calcula con la previsión
+    solar y el consumo **típico** de la casa, así que un día en que la casa gastó más
+    de lo normal la tenía dentro y la energía la puso en parte la red — y la tarjeta
+    decía «100 % con sol» igual. Con el reparto medido del día, la cifra es lo que fue.
+
+    Cuesta cero consultas: el reparto hora a hora ya viaja en el mismo payload, y la
+    atribución es la de siempre —`atribuir_por_horas`, la misma que el desglose de la
+    factura—, así que las dos pantallas no pueden discrepar del mismo aparato.
+
+    Sin reparto se cae al solape con la ventana, que es lo que había.
     """
     hoy = (window or {}).get("today") or {}
     inicio = datetime.fromisoformat(hoy["start"]) if hoy.get("start") else None
@@ -1034,12 +1045,26 @@ def del_cierre(
             largo = (c1 - c0).total_seconds()
             if solape > 0 and largo > 0:
                 dentro += kwh * (solape / largo)
+        # Lo que puso el sol, medido. La batería va aparte a propósito: fue sol de
+        # otra hora, no de esta, y meterla en el mismo porcentaje haría que «100 %
+        # con sol» tapara un ciclo nocturno alimentado por la batería.
+        origen = atribuir_por_horas(
+            (aprendido.get(a["id"]) or {}).get("today_by_hour"), reparto)
+        con_sol = None
+        if origen and origen["kwh"] > 0:
+            con_sol = round(origen["sun_kwh"] / origen["kwh"] * 100)
+        elif total > 0 and inicio and fin:
+            con_sol = round(dentro / total * 100)      # sin reparto, lo que había
         filas.append({
             "id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
             "runs": len(ciclos),
             "kwh": round(total, 2),
             "in_window_kwh": round(dentro, 2) if (inicio and fin) else None,
-            "pct": round(dentro / total * 100) if total > 0 and inicio and fin else None,
+            "pct": con_sol,
+            # Y de dónde salió el resto, para que la fila pueda explicarse sin que
+            # nadie tenga que restar: la batería no es la red.
+            "battery_kwh": round(origen["battery_kwh"], 2) if origen else None,
+            "grid_kwh": round(origen["grid_kwh"], 2) if origen else None,
         })
     filas.sort(key=lambda f: -f["kwh"])
     return filas
