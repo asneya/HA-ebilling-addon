@@ -1117,13 +1117,19 @@ async def _run_breakdown(
         por_aparato = await desglose.por_horas_de_aparatos(
             settings, states, lista, tz, cycle_start, fetch_end
         )
+        # Y los ciclos de verdad si hay InfluxDB, que guarda meses donde las
+        # estadísticas de Home Assistant solo guardan la hora. `None` cuando no lo
+        # hay: entonces el desglose se queda con los tramos y lo dice.
+        ciclos = await desglose.ciclos_del_periodo(
+            settings, states, lista, tz, cycle_start, fetch_end
+        )
     except datasources.SourceError as err:
         raise HTTPException(502, str(err)) from err
     except Exception as err:  # pragma: no cover - errores de red
         _LOGGER.warning("Error construyendo el desglose del ciclo", exc_info=True)
         raise HTTPException(502, f"No se pudo construir el desglose: {err}") from err
 
-    detalle = desglose.filas(lista, por_aparato, reparto, importada, precio_de)
+    detalle = desglose.filas(lista, por_aparato, reparto, importada, precio_de, ciclos)
     return {
         "period": {
             "start": cycle_start.isoformat(),

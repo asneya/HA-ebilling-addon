@@ -5,7 +5,7 @@
 import { $, esc } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
-import { fmtNum, fmtTemp, fmtEUR } from "../core/format.js";
+import { fmtNum, fmtTemp, fmtEUR, dur } from "../core/format.js";
 import { SUM_COLORS } from "../core/colors.js";
 import { showView } from "../core/nav.js";
 import { estado, titular, montarFlujo } from "../core/flujo.js";
@@ -253,16 +253,6 @@ function renderFlow(data) {
 }
 
 /* ------------- «Cabe en la ventana» ------------- */
-
-/* «2 h 10 min», «50 min», «2 h». Los minutos se redondean a cinco: el ciclo sale
-   de una mediana de muestras de cinco minutos, y dar «2 h 07 min» sería fingir
-   una precisión que no existe. */
-function dur(horas) {
-  const total = Math.max(5, Math.round((horas || 0) * 12) * 5);
-  const h = Math.floor(total / 60), m = total % 60;
-  if (!h) return `${m} min`;
-  return m ? `${h} h ${m} min` : `${h} h`;
-}
 
 /* La hora de un ISO, y si es de mañana se dice: «a las 03:00» a secas, cuando
    son las once de la noche, se lee como dentro de cuatro minutos.

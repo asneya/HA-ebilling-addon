@@ -2,6 +2,62 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.64.0
+
+### Con InfluxDB, ciclos de verdad en vez de tramos de hora
+
+De una corrección a la 0.63.0: *«HA guarda un mes pero ojo que tb tenemos el influx. Si
+un usuario usa influx, puedes hacer análisis más profundos»*. Y es exacto — el desglose
+contaba tramos de hora porque las estadísticas de Home Assistant es lo único que guardan
+de un mes entero, pero quien tenga InfluxDB tiene **meses de datos finos**, y ahí un ciclo
+es un ciclo.
+
+Ahora, con InfluxDB configurado, la fila abierta dice «**5 ciclos de 1 h 50 min de
+media**» en vez de «5 tramos», y con la hora a la que se arrancan — que es la del botón,
+no la del consumo, y por tanto la accionable. Sin InfluxDB se queda como estaba, y **la
+tarjeta dice cuál de las dos cosas está contando**: llamarlos igual sería prometer con
+unos datos lo que solo sostienen los otros.
+
+| | Resolución de un mes | Qué se cuenta |
+|---|---|---|
+| Estadísticas de Home Assistant | la hora | tramos: horas seguidas con consumo |
+| InfluxDB | cuarto de hora | ciclos, con su duración típica |
+
+### Un solo detector, con el paso abierto
+
+El detector de ciclos es **el mismo** que aprende los de la Home. Escribir un segundo
+habría hecho que un ciclo en el desglose y un ciclo en la Home fueran cosas distintas, que
+es el defecto que este proyecto lleva corrigiendo toda la vida. Lo que se ha abierto es su
+paso, y con él dos constantes que estaban **contadas en muestras**:
+
+- la tolerancia al reposo dentro de un ciclo (un lavavajillas baja entre lavado y secado);
+- y la duración mínima para que algo cuente como ciclo.
+
+Contadas en muestras valían quince minutos con un paso y una hora con otro. Ahora van en
+minutos, y con el paso por defecto el resultado es idéntico — los bancos de ciclos y de
+forma de uso lo confirman sin tocar una cifra.
+
+Cuarto de hora y no cinco minutos: un mes a cinco son 8.640 puntos por aparato y no compra
+nada. Y **lo que cuesta el paso grueso está medido**, no supuesto: sobre una lavadora de
+dos horas con una pausa de diez minutos, el paso fino clava la integral (3,30 kWh) y el de
+cuarto de hora se queda en 3,15 — un 4,5 % corto, y corto y no largo, porque la pausa cae
+dentro de una ventana cuya media baja. Es el precio de poder recorrer un mes entero, y el
+banco lo deja escrito con el número.
+
+### Y una función que estaba dos veces
+
+`dur()` —«2 h 10 min», redondeado a cinco minutos— estaba escrita **idéntica, carácter por
+carácter**, en la Home y en el editor de electrodomésticos, y el desglose iba a ser la
+tercera copia. Ahora vive en `core/format.js` y las tres la importan.
+
+### Un fallo de mi propia comprobación
+
+Al mover la tolerancia a minutos comprobé con `grep -c '_HUECO_TOLERADO\b'` que no
+quedaban usos, y salió 1 — la definición. Pero `\b` casa también dentro de
+`_HUECO_TOLERADO_MIN`, así que el recuento escondía un segundo uso en `en_marcha`, que
+multiplicaba muestras por el paso para llegar a los mismos quince minutos. Lo cazó la
+regresión con un `NameError`; la comprobación estaba mal, no el código.
+
 ## 0.63.0
 
 ### Al abrir una fila del desglose, lo que la suma del mes esconde

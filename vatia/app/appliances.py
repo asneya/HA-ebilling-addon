@@ -37,13 +37,18 @@ _DIAS = 14
 _PASO_MIN = 5
 
 # Un ciclo tiene que durar algo y gastar algo: por debajo de esto es ruido del
-# sensor o un encendido de un minuto para nada.
-_MIN_MUESTRAS = 2          # 10 minutos
+# sensor o un encendido de un minuto para nada. La duración va en minutos por lo
+# mismo que la tolerancia: el paso ya no es siempre de cinco.
+_MIN_DURACION_MIN = 10
 _MIN_KWH = 0.02
-# Cuántas muestras por debajo del umbral se toleran dentro de un ciclo. Un
-# lavavajillas baja a reposo entre el lavado y el secado; sin esta tolerancia un
-# ciclo se contaba como tres, cada uno con un tercio de la duración.
-_HUECO_TOLERADO = 3        # 15 minutos
+# Cuánto reposo se tolera dentro de un ciclo. Un lavavajillas baja a reposo entre el
+# lavado y el secado; sin esta tolerancia un ciclo se contaba como tres, cada uno con
+# un tercio de la duración.
+#
+# Va en **minutos** y no en muestras porque el paso ya no es siempre de cinco: con
+# InfluxDB se puede recorrer un mes entero con un paso más grueso, y una tolerancia
+# contada en muestras valdría quince minutos con un paso y una hora con otro.
+_HUECO_TOLERADO_MIN = 15
 # Con menos ciclos no se habla de «lo que suele durar»: se dice que se está
 # aprendiendo.
 _MIN_CICLOS = 2
@@ -107,8 +112,8 @@ def instantaneo(states: dict[str, Any], lista: list[dict[str, Any]]) -> list[dic
     return out
 
 
-def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
-               ) -> list[dict[str, Any]]:
+def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float,
+               paso_min: int = _PASO_MIN) -> list[dict[str, Any]]:
     """Parte la curva de potencia en ciclos: tramos seguidos por encima del umbral.
 
     Devuelve, por ciclo, cuándo empezó, cuánto duró (horas) y cuántos kWh se
@@ -123,7 +128,13 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
     truncado la mueve. Sus horas y sus kWh son los de **hasta ahora**, que es
     exactamente lo que hace falta para decir por dónde va.
     """
-    paso_h = _PASO_MIN / 60.0
+    paso_h = paso_min / 60.0
+    # La tolerancia, del reposo que se aguanta a las muestras que son con este paso.
+    # Al menos una: con un paso más grueso que la tolerancia, un hueco de una muestra
+    # ya es más largo de lo que se tolera, y sin el suelo no se toleraría ninguno y un
+    # programa con pausas volvería a contarse como varios ciclos.
+    tolerado = max(1, round(_HUECO_TOLERADO_MIN / paso_min))
+    minimas = max(1, round(_MIN_DURACION_MIN / paso_min))
     ciclos: list[dict[str, Any]] = []
     actual: list[tuple[datetime, float]] = []
     hueco = 0
@@ -139,10 +150,10 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
             actual.pop()
         if actual:
             kwh = sum(w for _t, w in actual) * paso_h / 1000.0
-            if len(actual) >= _MIN_MUESTRAS and kwh >= _MIN_KWH:
+            if len(actual) >= minimas and kwh >= _MIN_KWH:
                 ciclos.append({
                     "start": actual[0][0],
-                    "end": actual[-1][0] + timedelta(minutes=_PASO_MIN),
+                    "end": actual[-1][0] + timedelta(minutes=paso_min),
                     "hours": len(actual) * paso_h,
                     "kwh": kwh,
                     "peak_w": max(w for _t, w in actual),
@@ -157,7 +168,7 @@ def _ciclos_de(muestras: list[tuple[datetime, float]], umbral: float
             hueco = 0
         elif actual:
             hueco += 1
-            if hueco > _HUECO_TOLERADO:
+            if hueco > tolerado:
                 cerrar()
             else:
                 # El hueco se queda dentro del ciclo: su consumo es el real (casi
@@ -547,7 +558,10 @@ def en_marcha(
         fin = datetime.fromisoformat(abierto["end"])
     except (KeyError, TypeError, ValueError):
         return False
-    return (now - fin) <= timedelta(minutes=_HUECO_TOLERADO * _PASO_MIN)
+    # La misma tolerancia que el detector, y ahora directamente en minutos: era
+    # `_HUECO_TOLERADO * _PASO_MIN`, que multiplicaba muestras por el paso para llegar
+    # a los mismos quince. Con la constante ya en minutos la multiplicación sobraba.
+    return (now - fin) <= timedelta(minutes=_HUECO_TOLERADO_MIN)
 
 
 async def learn(

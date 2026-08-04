@@ -13,6 +13,7 @@
  *   6. nada se sale de su tarjeta
  *   7. al abrir una fila: los días, los tramos, el día caro y la tira de 24 horas
  *      partida por origen
+ *   8. y con InfluxDB la misma fila habla de **ciclos**, con su duración típica
  *   7. sin errores de consola
  *
  * El punto 3 se mide contra el propio texto de la tarjeta a propósito: que el
@@ -226,6 +227,8 @@ async function comoEstaba(p, valor) {
   ok(det && !/2026-08-02/.test(det.texto), "con la fecha en cristiano, no en ISO");
   ok(det && /no un ciclo/.test(det.nota),
     "y se dice que un tramo no es un ciclo, que a esta resolución no se puede saber");
+  ok(det && /InfluxDB/.test(det.nota),
+    "y que con InfluxDB sí se cuentan, que es lo que hay que hacer para tenerlos");
   // La barra de las 13 va casi entera en ámbar y la de las 22 sin nada: es la mitad
   // que da el consejo, y sin ella la tira solo diría «cuándo» y no «a qué precio».
   const trece = det && det.barras[13];
@@ -244,6 +247,42 @@ async function comoEstaba(p, valor) {
   await p.waitForTimeout(250);
   ok(!(await p.evaluate(() => !!document.querySelector(".sp-det"))),
     "y se cierra tocándola otra vez");
+
+  console.log("\n8 · con InfluxDB la misma fila habla de ciclos");
+  // La resolución cambia lo que se puede afirmar, así que la tarjeta tiene que decir
+  // una cosa u otra. Llamarlos igual en los dos casos sería prometer con unos datos lo
+  // que solo sostienen los otros.
+  await ctx.close();
+  ({ ctx, p } = await abrir(b, { tarifa: id, retoque: (c) => {
+    if (!c.detail) return;
+    c.detail.cycles = true;
+    const f = (c.detail.rows || []).find((r) => r.kind === "aparato");
+    if (!f) return;
+    f.detail = {
+      days: 4, runs: 5, cycles: 5, median_h: 1.83,
+      starts_by_hour: Array.from({ length: 24 }, (_, h) => (h === 22 ? 4 : h === 13 ? 1 : 0)),
+      worst_day: { date: "2026-08-02", eur: 0.42, kwh: 2.1, grid_kwh: 1.4 },
+      by_hour: Array.from({ length: 24 }, (_, h) => (h === 13 ? 2.0 : h === 22 ? 1.0 : 0)),
+      free_by_hour: Array.from({ length: 24 }, (_, h) => (h === 13 ? 1.8 : 0)),
+    };
+  } }));
+  await p.click('#split-rows .sp-row[data-abre]');
+  await p.waitForTimeout(300);
+  const conInflux = await p.evaluate(() => {
+    const d = document.querySelector(".sp-det");
+    return d ? {
+      texto: d.querySelector(".sp-det-l").textContent.replace(/\s+/g, " ").trim(),
+      nota: d.querySelector(".sp-det-n").textContent.replace(/\s+/g, " ").trim(),
+    } : null;
+  });
+  ok(conInflux && /5 ciclos/.test(conInflux.texto),
+    `los llama ciclos («${conInflux && conInflux.texto.slice(0, 46)}…»)`);
+  ok(conInflux && !/tramos/.test(conInflux.texto), "y no tramos");
+  ok(conInflux && /1 h 50 min/.test(conInflux.texto),
+    "con lo que suele durar uno, que un tramo no podía decir");
+  ok(conInflux && !/no un ciclo/.test(conInflux.nota),
+    `y la nota ya no avisa de lo que no son («${conInflux && conInflux.nota.slice(0, 52)}…»)`);
+  ok(conInflux && /InfluxDB/.test(conInflux.nota), "sino de dónde se han contado");
 
   await p.screenshot({
     path: path.join(capturas(), "facturaparto.png"),
