@@ -407,11 +407,23 @@ def free_window(
     tarjeta, y mezclando medida y previsión dejaría de ser comparable. El dibujo
     dice lo que ha pasado; el titular, lo que se espera del día.
     """
+    def _redondo(valor: float | None) -> float | None:
+        return None if valor is None else round(valor, 1)
+
     umbral = baseline if callable(baseline) else (lambda _t: float(baseline))
     end_of_day = day + timedelta(days=1)
     curve = [(t, w) for t, w in points if day <= t < end_of_day]
     if len(curve) < 2:
         return None
+
+    # Con qué pendiente cruza la curva el umbral en cada corte, en W por hora. Se
+    # anota **aquí**, que es el único sitio donde se sabe: en el mismo par de puntos
+    # con el que se interpola el corte. Sirve para traducir el error del umbral a
+    # minutos —si el consumo típico se equivoca 300 W y ahí la curva sube 3.000 W/h,
+    # la hora se mueve seis minutos— y esa traducción no la puede hacer quien no
+    # tenga la geometría delante. Lo que sí es de otro: **cuánto** se equivoca el
+    # umbral, que lo sabe el perfil y no esta función.
+    pendientes: dict[datetime, float] = {}
 
     # Cruce de dos rectas: la previsión entre dos puntos y el umbral entre esos
     # mismos dos instantes. Con umbral plano se reduce al caso de siempre.
@@ -421,7 +433,11 @@ def free_window(
         if span == 0:
             return a[0]
         ratio = max(min(-d0 / span, 1.0), 0.0)
-        return a[0] + (b[0] - a[0]) * ratio
+        corte = a[0] + (b[0] - a[0]) * ratio
+        horas = (b[0] - a[0]).total_seconds() / 3600.0
+        if horas > 0:
+            pendientes[corte] = abs(span) / horas
+        return corte
 
     # Tramos con excedente. Se recorre la curva marcando dónde entra y dónde sale
     # de por encima del umbral; con el perfil horario puede entrar y salir varias
@@ -489,6 +505,12 @@ def free_window(
             "start": a.isoformat(), "end": b.isoformat(),
             "hours": round((b - a).total_seconds() / 3600.0, 3),
             "kwh": round(wh / 1000.0, 3),
+            # La pendiente de cada corte. `null` cuando ese extremo no es un cruce
+            # sino el borde de la previsión —un día que amanece o se acuesta
+            # generando—: ahí la hora no sale de cortar dos rectas y no hay
+            # holgura que calcular, y decir cero sería decir «infinita».
+            "start_slope_w_h": _redondo(pendientes.get(a)),
+            "end_slope_w_h": _redondo(pendientes.get(b)),
         })
 
     gaps = [

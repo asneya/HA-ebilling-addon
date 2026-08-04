@@ -2,6 +2,58 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.66.0
+
+### La ventana dice cuánto puede moverse su hora
+
+En la 0.61.0 el perfil de consumo empezó a medir **cuánto se equivoca**, fuera de
+muestra, y ese número se quedó donde nació: en la letra pequeña de Ajustes, en vatios.
+Pero la ventana no habla de vatios. Habla de horas — «tu ventana abre a las 11:40» — y
+300 W no dicen nada sobre las 11:40 hasta que se dividen por la **pendiente con la que la
+curva del sol cruza tu consumo** en ese punto:
+
+    minutos = error del consumo típico (W) ÷ pendiente del cruce (W/h) × 60
+
+Y ahí está lo interesante: con el mismo perfil y el mismo error, el resultado cambia de
+un día a otro por un factor de quince.
+
+| El día | Pendiente del cruce | 300 W de error son |
+|---|---|---|
+| mañana clara | 3.000 W/h | **5 min** — la hora es fina |
+| día de nubes | 200 W/h | **1 h 30 min** |
+
+La tarjeta daba las dos con el mismo aplomo. Ahora, cuando la holgura pasa del cuarto de
+hora, lo dice: *«Esa hora puede irse ±30 min: es lo que la mueve lo que varía tu
+consumo.»* Y si pasa de los tres cuartos, que hoy esa hora no vale y por qué — el sol
+cruza el consumo casi de lado, así que un poco más o menos de gasto la mueve mucho.
+
+### Y por debajo del cuarto de hora se calla
+
+A propósito. Una mañana clara cruza subiendo tres kilovatios por hora casi todos los
+días, así que decirlo entonces sería una coletilla fija cuyo contenido es «la hora está
+bien» — exactamente de lo que ya se quejó esta tarjeta una vez: *«aburre ver siempre lo
+mismo»*. Además la previsión llega cada media hora, así que anunciar «±6 min» sería
+precisión inventada por el otro lado.
+
+Tampoco se dice nada cuando no se puede saber, y son tres casos distintos que antes no
+existían y ahora hay que separar: sin histórico para apartar un día no hay error medido;
+un extremo de la ventana que no es un cruce sino el borde de la previsión —un día que
+amanece ya generando de sobra— no tiene pendiente; y una pendiente de cero daría holgura
+infinita, que no es una cifra.
+
+### Lo que esta cifra no incluye
+
+**El error del sol.** La previsión solar tiene el suyo —para eso están el sesgo del tejado
+y el desvío del día— y no se publica como una desviación que se pueda sumar a esta. Así
+que la holgura es la parte de la duda que pone **el consumo de la casa**, no toda la duda.
+Está dicho en la documentación y en el código, porque es la clase de cosa que se lee como
+«±30 min y ya está».
+
+Por dentro, la geometría y el error siguen separados: `series.free_window` publica la
+pendiente de cada corte, que es lo único que sabe —está en el mismo par de puntos con el
+que interpola la hora—, y quien conoce el error del perfil hace la división. Así no hay
+dos sitios calculando el mismo cruce.
+
 ## 0.65.0
 
 ### La batería entra en «lo que había sobre la mesa»

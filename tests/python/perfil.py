@@ -8,6 +8,8 @@
   6. el hueco pone el estado en «pre» con la hora de reapertura
   7. free_window con umbral plano sigue dando exactamente lo de antes
   8. el perfil dice cuánto se equivoca, medido contra un día que no vio
+  9. y ese error se traduce a **minutos** por la pendiente del cruce: los mismos
+     vatios valen cinco minutos en una mañana clara y hora y media con nubes
 """
 import asyncio
 import math
@@ -191,6 +193,68 @@ async def main():
               for d in range(2) for h in range(24)]
     comprobar(L._perfil_de(cortas, "recorder", 2).error is None,
               "con dos días de histórico no se publica desviación")
+
+    print("\n9 · el error del perfil, traducido a minutos por la pendiente del cruce")
+    # El paso que le faltaba al número de §8 para servir de algo. La ventana no habla
+    # de vatios, habla de horas: «tu ventana abre a las 11:40». Un error de 300 W no
+    # dice nada sobre las 11:40 hasta que se divide por la pendiente con la que el sol
+    # cruza el umbral, y **esa pendiente cambia muchísimo de un día a otro**, que es
+    # justo la razón de hacer la cuenta.
+    #
+    # Dos días con el mismo perfil (500 W planos) y el mismo error medido (300 W):
+    #
+    #   · mañana clara: la curva sube 3.000 W/h ⇒ 300/3000 × 60 = 6 min → 5 (redondeo)
+    #   · día de nubes: sube 200 W/h           ⇒ 300/200  × 60 = 90 min
+    #
+    # Las dos cuentas salen a mano, y la segunda es la que importa: ese día la tarjeta
+    # daba la hora con el mismo aplomo que la mañana clara.
+    plano = L.HouseProfile({}, 500.0, "recorder", 5,
+                           {"mae_w": 300.0, "mae_pct": 12, "day": "2026-08-03",
+                            "hours": 24, "mean_w": 2500.0})
+
+    def curva(subida, arranque):
+        """Una rampa de `subida` W/h desde `arranque` W a las 08:00, y de vuelta."""
+        pts = []
+        for k in range(48):
+            h = k / 2
+            if h < 8.0:
+                w = 0.0
+            elif h <= 14.0:
+                w = arranque + subida * (h - 8.0)
+            else:
+                w = max(0.0, arranque + subida * 6.0 - subida * (h - 14.0) * 3)
+            pts.append((medianoche + timedelta(hours=h), w))
+        return pts
+
+    for etiqueta, subida, arranque, espera in (
+        ("mañana clara", 3000.0, 0.0, 5),
+        ("día de nubes", 200.0, 400.0, 90),
+    ):
+        v = S.free_window(curva(subida, arranque), plano.at, medianoche)
+        tramo = v["spans"][0]
+        comprobar(abs(tramo["start_slope_w_h"] - subida) < 1.0,
+                  f"{etiqueta}: la pendiente del corte es la de la rampa "
+                  f"({tramo['start_slope_w_h']} W/h de {subida:.0f})")
+        holgura = L._holgura_de(plano, v, tramo["start"], "start")
+        comprobar(holgura == espera,
+                  f"{etiqueta}: 300 W de error son {holgura} min ({espera} a mano)")
+
+    # Y cuándo **no** se dice: sin error medido no hay nada que traducir, y un extremo
+    # que no es un cruce sino el borde de la previsión no tiene pendiente. Decir cero
+    # ahí sería decir «holgura infinita».
+    v = S.free_window(curva(200.0, 400.0), plano.at, medianoche)
+    sin_error = L.HouseProfile({}, 500.0, "recorder", 5, None)
+    comprobar(L._holgura_de(sin_error, v, v["spans"][0]["start"], "start") is None,
+              "sin desviación medida no se dice holgura, en vez de una inventada")
+    # Un día que amanece ya por encima del umbral: el primer extremo es el borde de la
+    # previsión, no un cruce.
+    amanece = [(medianoche + timedelta(hours=k / 2), 2000.0 if k / 2 < 20 else 0.0)
+               for k in range(48)]
+    va = S.free_window(amanece, plano.at, medianoche)
+    comprobar(va["spans"][0]["start_slope_w_h"] is None,
+              "un extremo que no es un cruce no lleva pendiente")
+    comprobar(L._holgura_de(plano, va, va["spans"][0]["start"], "start") is None,
+              "y entonces tampoco holgura")
 
     print("\n" + (f"{len(fallos)} comprobaciones fallidas" if fallos else "todo en verde"))
     return 1 if fallos else 0
