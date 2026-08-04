@@ -2,6 +2,100 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.61.0
+
+### Lo que había sobre la mesa, en el resumen del final del día
+
+Es el «perfect optimization» de EMHASS traído a lo que Vatia puede afirmar. Aquella
+resuelve el óptimo del día para **mandar** consignas a los interruptores; esto lo
+calcula sobre un día **ya cerrado**, con el sol, el consumo y los precios que de verdad
+hubo, y no manda nada: mide.
+
+Y va en el **resumen del final del día**, colgado de «Lo que se puso hoy», porque es su
+momento: la tarjeta del cierre sale sola al anochecer, cuando el sol ya se ha puesto,
+el día está hecho y lo único que queda es contarlo. Cada ciclo dice ahí mismo a qué
+hora habría salido más barato, y el pie resume lo que había en total.
+
+Eso trae además una ventaja que no se buscaba: **no cuesta ninguna consulta**. Todo lo
+que la cuenta necesita —el reparto hora a hora del día, lo que cada aparato gastó en
+cada hora (`today_by_hour`, que ya se publicaba) y los precios— estaba en el mismo
+payload con el que se dibuja la Home. El endpoint que se había escrito para esto se
+retira, con su import: un endpoint que nadie llama es peso muerto.
+
+Y esa es toda la diferencia que importa. Un plan del día que viene depende de una
+previsión, y la previsión falla —el propio sesgo medido baja al 0,85 en días que se
+desvían—. Un repaso de ayer no depende de ninguna. Por eso se puede decir sin
+condicionales, y por eso cierra el bucle que la aplicación tenía abierto desde el
+principio: prometía «gratis a las 13:00» y nunca volvía a mirar si salió gratis.
+
+Con los datos del banco: el lavavajillas dice «↑ mejor a las 10:00 (+0,39 €)» debajo de
+su fila, el coche «↑ mejor a las 11:00 (+0,19 €)», el horno no dice nada porque ya
+estaba donde tocaba, y el pie remata: *«puestos en su mejor hueco te habrías ahorrado
+0,58 €»*.
+
+Solo hablan las filas que ganaban algo. Poner «ya era su mejor hueco» en cinco filas
+seguidas sería ruido, y además el pie ya lo resume — cuando no había nada que ganar lo
+dice él: «aprovechaste el sol prácticamente todo lo que se podía».
+
+### Se publica una diferencia, y eso es deliberado
+
+El modelo de esta tarjeta es más simple que el del desglose de la factura: **no tiene
+batería**. Publicar «tus aparatos costaron X» pondría dos cifras del mismo día en dos
+pantallas, que es exactamente el defecto que esta aplicación lleva corrigiendo desde la
+0.48 —y que la 0.59.1 volvió a encontrar en la nevera—. Así que se publica lo único que
+este modelo sostiene: **cuánto había que ganar moviéndolos**, calculado dos veces con la
+misma cuenta y restado.
+
+El banco lo vigila: comprueba que ninguna clave del payload se pueda leer como una
+factura, y en la pantalla, que en ningún sitio se afirme lo que se gastó.
+
+### Dos defectos que salieron de mirar la respuesta, no de planearla
+
+**Le proponía una hora mejor a la nevera.** Un continuo no tiene hora que elegir —eso
+se decidió en la 0.52.0— y ahí estaba, con «mejor a las 04:00». Ahora solo entran los
+movibles, y el filtro va **antes de restar**: si la nevera se descontara del consumo de
+la casa y luego no se colocara, su energía se perdería del modelo. Quedándose fuera cae
+donde le toca, en el suelo que no se puede mover.
+
+**Un empate movía el aparato.** El horno decía «mejor a las 12:00» habiéndose puesto a las 13:00
+con 0,00 € de ahorro, porque las dos horas costaban lo mismo y el barrido empieza por la
+primera. Ahora se parte de la hora a la que se puso de verdad y solo se cambia por una
+mejora estricta —con medio céntimo de margen, que por debajo de ahí es el redondeo del
+reparto horario y no un hueco mejor—. De paso, «ya era su mejor hueco» puede decirse,
+que antes no salía nunca.
+
+### Y un tercero que cazó la regresión, no yo
+
+Al mover la cuenta al payload de la Home, las dos piezas que necesita —el reparto
+horario y los precios— salen de un bloque que **solo corre si hay aparatos
+configurados**. Sin ellos quedaban sin asignar y `/api/live` se caía entero con un
+`UnboundLocalError`: la Home en blanco, no solo esta tarjeta. Con la fixture que tiene
+aparatos no se veía; la regresión levanta instancias que no los tienen y ahí salió.
+
+### Del forecaster de EMHASS: casi nada, y por buenas razones
+
+Se miró también [su forecaster de aprendizaje automático](https://emhass.readthedocs.io/en/latest/mlforecaster.html)
+—lags autorregresivos, variables de calendario, doce regresores de scikit-learn y
+ajuste bayesiano con optuna— y la conclusión honesta es que **lo que propone ya está
+hecho, más simple**:
+
+- Las **variables de calendario** que su modelo aprende, el perfil de la casa ya las
+  tiene por construcción: se agrupa por `(laborable o fin de semana, hora)` con
+  mediana, y con respaldos al otro tipo de día y a las horas de al lado. Fui a añadir
+  el día de la semana y ya estaba.
+- El **horizonte largo** juega en nuestra contra, no a favor: su propia documentación
+  avisa de que un modelo recursivo multipaso acumula error a 24 h o más, que es
+  justo nuestro horizonte. Una mediana no acumula nada.
+- Y **doce regresores con ajuste bayesiano** son `scikit-learn` + `optuna` dentro de un
+  add-on que hoy es FastAPI y JavaScript vendorizado, con ejecuciones de tuning de
+  quince a veinte minutos que su documentación llama «computing intense».
+
+Lo único que sí falta de esa página, y queda apuntado: **el perfil de la casa no mide su
+propio error**. La previsión solar sí aprende su sesgo y publica su desvío del día; el
+perfil publica de dónde sale, cuántos días lleva y su mínimo y su máximo, pero nada
+sobre cuánto se equivoca. Un backtest con su error medio —lo que EMHASS reporta como
+MAE— diría cuánto hay que fiarse del plan, y hoy no hay forma de saberlo.
+
 ## 0.60.0
 
 ### El sol de una hora es uno

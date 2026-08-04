@@ -519,6 +519,42 @@ Detalles que conviene saber:
   contadores distintos, con errores propios—, se escalan todos a la baja por igual
   y el recorte se dice al pie.
 
+### Lo que había sobre la mesa
+
+En el **resumen del final del día** —la tarjeta que sale sola al anochecer—, debajo de
+«Lo que se puso hoy», cada ciclo dice también a qué hora habría salido más barato, con
+el sol, el consumo y los precios **que de verdad hubo**.
+
+Va ahí y no en otro sitio porque es el momento: el sol ya se ha puesto, el día está
+hecho y lo que toca es contarlo. Y por eso se puede decir sin condicionales — aquí no
+entra ninguna previsión. Un plan del día que viene depende de una que falla; un repaso
+de un día terminado no depende de ninguna. Es también lo que cierra el bucle que la
+aplicación tenía abierto: prometía «gratis a las 13:00» y no volvía a mirar si salió
+gratis.
+
+No cuesta ninguna consulta extra: todo lo que la cuenta necesita —el reparto hora a
+hora del día, lo que cada aparato gastó en cada hora y los precios— ya está en el mismo
+payload con el que se dibuja la Home.
+
+Lo que se publica es **una diferencia**: «puestos en su mejor hueco te habrías ahorrado
+0,58 €». Nunca «lo que gastaste». El modelo de esta tarjeta es más simple que el del
+desglose de la factura —no tiene batería— y publicar un coste absoluto pondría dos
+cifras del mismo día en dos pantallas.
+
+Solo se le propone otra hora a los aparatos **movibles**, y solo cuando de verdad se
+ganaba algo: a una nevera no hay hora que proponerle, a un fijo tampoco, y decir «ya
+era su mejor hueco» en cinco filas seguidas sería ruido —eso lo resume el pie—. El
+resto de la casa, la nevera incluida, es el suelo contra el que se busca hueco, igual
+que en el desglose.
+
+Lo que el modelo no tiene, y conviene saber:
+
+| | |
+|---|---|
+| **La batería** | Mueve energía de una hora a otra, y meterla pediría simular su carga en las dos hipótesis. Las dos cifras se calculan igual, así que su diferencia sigue valiendo; lo que no valdría es leer una de ellas como una factura. |
+| **La forma del programa** | Un ciclo se coloca como un rectángulo, su energía repartida por igual entre sus horas. En una lavadora el calentamiento va al principio, así que un hueco de sol le vale algo más de lo que aquí sale. |
+| **Las razones humanas** | Que el lavavajillas se pudiera poner a las tres de la madrugada no significa que se pudiera. La tarjeta dice lo que **había** sobre la mesa, no lo que se hizo mal. |
+
 ## Pantalla «Energía»
 
 Se abre pulsando el **resumen de energía** de la Home.

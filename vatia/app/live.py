@@ -17,6 +17,7 @@ from typing import Any
 import aiohttp
 
 import appliances as appliances_mod
+import optimo
 import billing
 import datasources
 import planner
@@ -1489,6 +1490,8 @@ def day_close(
     savings: dict[str, Any] | None = None,
     appliance_list: list[dict[str, Any]] | None = None,
     aprendido: dict[str, dict[str, Any]] | None = None,
+    por_horas: dict[str, dict[str, float]] | None = None,
+    precio_at: Any = None,
 ) -> dict[str, Any] | None:
     """El cierre del día, al anochecer. ``None`` mientras haya sol.
 
@@ -1551,8 +1554,72 @@ def day_close(
         "appliances": appliances_mod.del_cierre(
             appliance_list or [], aprendido or {}, window
         ),
+        # Lo que había sobre la mesa: el mejor orden posible del día que se acaba.
+        # Va aquí y no en su propia petición porque **todo lo que necesita ya está
+        # en este payload**: el reparto hora a hora del día (`por_horas`), lo que
+        # cada aparato ha gastado en cada hora (`today_by_hour`, que `learn` ya
+        # publica) y los precios. Ni una consulta más, y solo se calcula después de
+        # la puesta de sol, que es cuando esta tarjeta existe — y cuando el sol del
+        # día ya no va a cambiar, que es lo que hace que la cuenta sea una medición
+        # y no una previsión.
+        "best": _lo_que_habia(appliance_list, aprendido, por_horas, precio_at, now),
         "tomorrow": (window or {}).get("tomorrow"),
     }
+
+
+def _lo_que_habia(
+    lista: list[dict[str, Any]] | None,
+    aprendido: dict[str, dict[str, Any]] | None,
+    por_horas: dict[str, dict[str, float]] | None,
+    precio_at: Any,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Prepara lo que `optimo.del_dia` necesita, con lo que ya hay en el payload.
+
+    Tres traducciones y ninguna consulta:
+
+    · **Solo los movibles.** A una nevera no hay hora que proponerle y a un fijo
+      tampoco; lo demás es el suelo contra el que se busca hueco. La forma de uso
+      ya está resuelta en `datos["kind"]`, que la pone el bucle de `build`.
+    · **De hora del día a hora con fecha.** `today_by_hour` va indexado por la hora
+      (0-23) porque solo habla de hoy; `por_horas` va por el ISO de la hora. Aquí se
+      llevan las dos al mismo índice, que es lo que `optimo` espera.
+    · **El sol de cada hora** sale del propio reparto: `to_home + to_battery +
+      to_grid` **es** lo que generó el tejado. Pedirlo aparte sería tener dos cifras
+      del mismo tejado.
+    """
+    if not lista or not aprendido or not por_horas:
+        return None
+    medianoche = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    movibles = [
+        a for a in lista
+        if (aprendido.get(a["id"]) or {}).get("kind") == "movible"
+    ]
+    if not movibles:
+        return None
+    por_aparato: dict[str, dict[str, float]] = {}
+    for a in movibles:
+        crudo = (aprendido.get(a["id"]) or {}).get("today_by_hour") or {}
+        if not crudo:
+            continue
+        por_aparato[a["id"]] = {
+            medianoche.replace(hour=int(h)).isoformat(): kwh
+            for h, kwh in crudo.items() if str(h).isdigit()
+        }
+    solar = {
+        iso: (v.get("to_home") or 0.0) + (v.get("to_battery") or 0.0)
+             + (v.get("to_grid") or 0.0)
+        for iso, v in por_horas.items()
+    }
+    def precio_de(iso: str) -> float | None:
+        if precio_at is None:
+            return None
+        try:
+            return precio_at(datetime.fromisoformat(iso))
+        except ValueError:
+            return None
+    return optimo.del_dia(movibles, medianoche, por_aparato, por_horas, solar,
+                          precio_de)
 
 
 async def build(
@@ -1628,6 +1695,12 @@ async def build(
     ahora_aparatos = appliances_mod.instantaneo(states, aparatos)
     aprendido: dict[str, dict[str, Any]] = {}
     plan = None
+    # Estas dos salen del bloque de abajo y las usa además el cierre del día, así
+    # que se inicializan aquí: sin aparatos configurados el bloque no corre y el
+    # payload entero se caía con un `UnboundLocalError`. Lo cazó la regresión, que
+    # levanta instancias sin aparatos; con la fixture que sí los tiene no se veía.
+    por_horas: dict[str, dict[str, float]] | None = None
+    precio_at = None
     if aparatos:
         aprendido = await appliances_mod.learn(settings, states, aparatos, now.tzinfo, now)
         fuentes = await _fuentes(curva, settings, states, soc, now.tzinfo, now)
@@ -1741,7 +1814,8 @@ async def build(
         "appliances": ahora_aparatos,
         "plan": plan,
         "close": day_close(
-            states, energy_summary, buckets, window, now, savings, aparatos, aprendido
+            states, energy_summary, buckets, window, now, savings, aparatos, aprendido,
+            por_horas, precio_at,
         ),
         "generated_at": now.isoformat(),
     }
