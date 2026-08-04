@@ -1812,3 +1812,36 @@ body.scrolled .scroll-top { opacity: .95; }
   font-variant-numeric: tabular-nums; }
 #best-note { font-size: 11.5px; color: var(--ink-3); margin: 12px 0 0;
   text-wrap: pretty; line-height: 1.5; }
+
+/* El detalle de una fila del desglose: los días, el día caro y la tira de 24 horas.
+   La tira es la pieza que da el consejo sin escribirlo — el bulto de la noche se ve
+   de un vistazo, y en el total del mes no se veía. */
+.sp-row[data-abre] { cursor: pointer; }
+.sp-row.open { border-bottom: 0; }
+.sp-det { padding: 2px 0 12px 48px; }
+.sp-det-l { font-size: 12.5px; color: var(--ink-2); text-wrap: pretty; }
+.sp-det-l b { color: var(--ink); }
+/* Las barras van de la línea de base hacia arriba, con un mínimo visible: una hora en
+   la que se usó y no se ve es una hora que la tira esconde. */
+.sp-horas { display: flex; align-items: flex-end; gap: 2px; height: 40px;
+  margin: 9px 0 3px; }
+.sp-horas i { flex: 1; min-height: 0; border-radius: 2px 2px 0 0; position: relative;
+  background: color-mix(in srgb, var(--s-grid) 62%, transparent); }
+/* La parte que no hubo que comprar, desde abajo: la barra dice «cuándo» con su alto y
+   «a qué precio» con su color, que es la mitad que faltaba. */
+.sp-horas u { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0 0 2px 2px;
+  background: color-mix(in srgb, var(--s-solar) 72%, transparent); }
+/* Y una línea de base, para que las horas vacías se lean como «aquí no se usó» y no
+   como una tira a medio pintar. */
+.sp-horas { border-bottom: 1px solid var(--hair); }
+.sp-det-k { display: flex; align-items: center; gap: 5px; font-size: 10.5px;
+  color: var(--ink-3); margin-top: 7px; }
+.sp-det-k i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.sp-det-k i + * { margin-left: 0; }
+.sp-det-k .k-libre { background: color-mix(in srgb, var(--s-solar) 72%, transparent); }
+.sp-det-k .k-red { background: color-mix(in srgb, var(--s-grid) 62%, transparent);
+  margin-left: 8px; }
+.sp-det-x { display: flex; justify-content: space-between; font-size: 10.5px;
+  color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sp-det-n { font-size: 11px; color: var(--ink-3); margin: 9px 0 0; text-wrap: pretty;
+  line-height: 1.45; }

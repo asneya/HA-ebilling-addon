@@ -503,6 +503,20 @@ Hay dos filas que no son un aparato y que no sobran:
 | **Cargar la batería desde la red** | Kilovatios comprados que se guardaron, normalmente de madrugada. Están en la factura y ningún aparato los consumió a esa hora: se gastarán más tarde, y entonces aparecen como batería en las demás filas. Sin esta fila el desglose sumaría siempre de menos. |
 | **Sin asignar** | Energía comprada que el reparto no pudo colocar, porque el contador de la casa marca menos de lo que la red le entregó. Solo aparece si de verdad sobra, y se dice en vez de repartirla entre las demás para que la tabla parezca limpia. |
 
+**Al tocar una fila se abre**, y ahí está lo que la suma del mes esconde: cuántos días
+se usó, en cuántos tramos, qué día salió más caro, y una **tira de 24 barras** con lo
+que gastó a cada hora del día. Cada barra va partida por origen —en ámbar lo que puso
+el sol o la batería, en azul lo comprado— porque el «cuándo» sin el «a qué precio» es
+media respuesta: dos barras iguales a las 13 y a las 22 no cuestan lo mismo.
+
+Esa tira es la pieza accionable de toda la pantalla: un lavavajillas con todo su bulto
+en la banda de la noche se ve de un golpe, y en el total del mes no se veía.
+
+Un **tramo** son horas seguidas con consumo, y no un ciclo. Aquí la resolución es la
+hora —es lo que Home Assistant guarda de un mes entero—, así que dos lavados en la
+misma hora son un tramo y uno que cruza una hora sin gastar son dos. Llamarlos ciclos
+sería publicar un recuento que estos datos no sostienen.
+
 Detalles que conviene saber:
 
 - **Los euros son de una tarifa**, la marcada como **«la mía»**, porque un precio

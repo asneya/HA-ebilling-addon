@@ -14,6 +14,7 @@ import { SUM_COLORS } from "../core/colors.js";
 
 let simulation = null;
 let breakdown = null;
+let openSplitId = null;
 let cyclesBack = 0;
 let projection = false;
 let openBillId = null;
@@ -140,8 +141,10 @@ function filaDelReparto(f, maxKwh) {
   // lado del nombre.
   const pct = f.eur != null && breakdown?.detail?.eur
     ? Math.round((f.eur / breakdown.detail.eur) * 100) : null;
+  const abierta = f.id === openSplitId && f.detail && f.detail.days;
   return `
-    <div class="sp-row" data-kind="${esc(f.kind)}" data-id="${esc(f.id)}">
+    <div class="sp-row${abierta ? " open" : ""}" data-kind="${esc(f.kind)}"
+         data-id="${esc(f.id)}"${f.detail && f.detail.days ? ' data-abre="1"' : ""}>
       <span class="ad-chip"${f.color ? ` style="--ap:${esc(f.color)}"` : ""}>
         <svg class="i"><use href="#i-${esc(f.icon)}"/></svg>
       </span>
@@ -154,6 +157,49 @@ function filaDelReparto(f, maxKwh) {
         <b>${f.eur == null ? "—" : fmtEUR.format(f.eur)}</b>
         <span>${fmtNum.format(f.kwh)} kWh</span>
       </div>
+    </div>
+    ${abierta ? detalleDeFila(f) : ""}`;
+}
+
+/* Lo que la suma del mes esconde. Una fila que dice «7,2 kWh · 1,19 €» no deja hacer
+   nada con la información: lo que se puede cambiar es **la hora**, y eso solo se ve
+   abriéndola.
+
+   La tira de 24 barras es la pieza que da el consejo sin escribirlo: un lavavajillas
+   con todo su bulto en la banda de la noche se ve de un vistazo, y en el total del mes
+   no se veía. Y cada barra va partida por origen —lo que no hubo que comprar en ámbar,
+   lo comprado en azul— porque el «cuándo» sin el «a qué precio» es media respuesta:
+   dos barras iguales a las 13 y a las 22 no cuestan lo mismo. */
+function detalleDeFila(f) {
+  const d = f.detail;
+  const max = Math.max(...d.by_hour, 0.0001);
+  // No se pinta con la ventana de hoy, que sería otro día: se pinta con **de dónde
+  // salió lo de esa hora**, que es lo que el reparto de ese mes ya sabe.
+  const libre = d.free_by_hour || [];
+  const barras = d.by_hour.map((v, h) => {
+    const alto = Math.max(v > 0 ? 8 : 0, (v / max) * 100);
+    const gratis = v > 0 ? Math.min(100, ((libre[h] || 0) / v) * 100) : 0;
+    return `<i style="height:${alto.toFixed(0)}%" title="${esc(
+      `${h}:00 · ${fmtNum.format(v)} kWh${gratis >= 1
+        ? ` · ${Math.round(gratis)} % sin comprar` : ""}`)}"
+      ><u style="height:${gratis.toFixed(0)}%"></u></i>`;
+  }).join("");
+  const peor = d.worst_day;
+  const tramos = d.runs === 1 ? "un tramo" : `${d.runs} tramos`;
+  return `
+    <div class="sp-det">
+      <div class="sp-det-l">
+        Se usó <b>${d.days} ${d.days === 1 ? "día" : "días"}</b>, en ${tramos}${
+          peor ? ` · el más caro fue el <b>${esc(fmtDay(peor.date, false))}</b>${
+            peor.eur == null ? "" : ` (${fmtEUR.format(peor.eur)})`}` : ""}.
+      </div>
+      <div class="sp-horas" role="img" aria-label="Consumo por hora del día">${barras}</div>
+      <div class="sp-det-x"><span>0 h</span><span>12 h</span><span>23 h</span></div>
+      <div class="sp-det-k"><i class="k-libre"></i>sol o batería
+        <i class="k-red"></i>comprado</div>
+      <p class="sp-det-n">Un <b>tramo</b> son horas seguidas con consumo, no un ciclo: a
+        esta resolución —la hora, que es lo que se guarda de un mes entero— dos lavados
+        en la misma hora son un tramo.</p>
     </div>`;
 }
 
@@ -176,6 +222,13 @@ function renderBreakdown() {
   }
   const maxKwh = Math.max(...d.rows.map((f) => f.kwh || 0));
   caja.innerHTML = d.rows.map((f) => filaDelReparto(f, maxKwh)).join("");
+  // Se abre una a la vez, como las tarjetas de tarifa de arriba: dos abiertas dejan la
+  // pantalla en una lista de tiras que no se comparan entre sí.
+  caja.querySelectorAll("[data-abre]").forEach((fila) =>
+    fila.addEventListener("click", () => {
+      openSplitId = openSplitId === fila.dataset.id ? null : fila.dataset.id;
+      renderBreakdown();
+    }));
 
   // El encabezado dice de qué tarifa son los euros, porque un precio por hora es
   // de una tarifa y no de todas.

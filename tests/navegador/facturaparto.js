@@ -11,6 +11,8 @@
  *      no hay euros, en vez de poner los de una tarifa cualquiera
  *   5. con tarifa marcada aparecen los euros
  *   6. nada se sale de su tarjeta
+ *   7. al abrir una fila: los días, los tramos, el día caro y la tira de 24 horas
+ *      partida por origen
  *   7. sin errores de consola
  *
  * El punto 3 se mide contra el propio texto de la tarjeta a propósito: que el
@@ -24,7 +26,7 @@ const YO = "ffbanco00000000000000000000000f";
 const fallos = [];
 const ok = (c, t) => { if (!c) fallos.push(t); console.log((c ? "  ok    " : "  FALLA ") + t); };
 
-async function abrir(b, { tarifa } = {}) {
+async function abrir(b, { tarifa, retoque } = {}) {
   const ctx = await b.newContext({
     viewport: { width: 414, height: 1400 },
     extraHTTPHeaders: { "X-Remote-User-Id": YO, "X-Remote-User-Display-Name": "Banco" },
@@ -39,6 +41,14 @@ async function abrir(b, { tarifa } = {}) {
     await p.request.put(BASE + "api/settings", {
       headers: { "X-Remote-User-Id": YO, "Content-Type": "application/json" },
       data: { my_tariff_id: tarifa },
+    });
+  }
+  if (retoque) {
+    await p.route("**/api/breakdown*", async (ruta) => {
+      const resp = await ruta.fetch();
+      const cuerpo = await resp.json();
+      retoque(cuerpo);
+      await ruta.fulfill({ response: resp, json: cuerpo });
     });
   }
   await p.goto(BASE);
@@ -170,6 +180,70 @@ async function comoEstaba(p, valor) {
   ok(!v.scrollX, "y la pantalla no gana scroll horizontal");
   ok(v.filas.every((f) => f.ancho <= v.anchoPanel + 1),
     `ninguna barra se pasa del ancho del panel (${Math.max(...v.filas.map((f) => Math.round(f.ancho)))} ≤ ${Math.round(v.anchoPanel)})`);
+
+
+  console.log("\n7 · al abrir una fila, lo que la suma del mes esconde");
+  // Con datos inyectados: que el aparato del fake tenga sol a según qué horas depende
+  // del día, y lo que se comprueba aquí es la tira, no el calendario.
+  await ctx.close();
+  ({ ctx, p } = await abrir(b, { tarifa: id, retoque: (c) => {
+    const f = (c.detail?.rows || []).find((r) => r.kind === "aparato");
+    if (!f) return;
+    f.detail = {
+      days: 4, runs: 5,
+      worst_day: { date: "2026-08-02", eur: 0.42, kwh: 2.1, grid_kwh: 1.4 },
+      // Bulto a las 13 (casi todo del sol) y a las 22 (todo comprado).
+      by_hour: Array.from({ length: 24 }, (_, h) => (h === 13 ? 2.0 : h === 22 ? 1.0 : 0)),
+      free_by_hour: Array.from({ length: 24 }, (_, h) => (h === 13 ? 1.8 : 0)),
+    };
+  } }));
+  const antes = await p.evaluate(() => !!document.querySelector(".sp-det"));
+  ok(!antes, "la fila empieza cerrada: el detalle no ocupa sitio sin pedirlo");
+  await p.click('#split-rows .sp-row[data-abre]');
+  await p.waitForTimeout(300);
+  const det = await p.evaluate(() => {
+    const d = document.querySelector(".sp-det");
+    if (!d) return null;
+    const barras = [...d.querySelectorAll(".sp-horas i")].map((i) => ({
+      alto: Math.round(i.getBoundingClientRect().height),
+      libre: i.querySelector("u") ? Math.round(i.querySelector("u").getBoundingClientRect().height) : 0,
+      titulo: i.getAttribute("title"),
+    }));
+    return {
+      texto: d.querySelector(".sp-det-l").textContent.replace(/\s+/g, " ").trim(),
+      nota: d.querySelector(".sp-det-n").textContent.replace(/\s+/g, " ").trim(),
+      barras,
+      n: barras.length,
+      ancho: d.getBoundingClientRect().width,
+      panel: document.querySelector("#split-panel").getBoundingClientRect().width,
+    };
+  });
+  ok(det !== null, "al tocarla se abre");
+  ok(det && det.n === 24, `la tira tiene una barra por hora (${det && det.n})`);
+  ok(det && /4 días/.test(det.texto) && /5 tramos/.test(det.texto),
+    `dice los días y los tramos («${det && det.texto.slice(0, 44)}…»)`);
+  ok(det && /0,42/.test(det.texto), "y lo que costó el día más caro");
+  ok(det && !/2026-08-02/.test(det.texto), "con la fecha en cristiano, no en ISO");
+  ok(det && /no un ciclo/.test(det.nota),
+    "y se dice que un tramo no es un ciclo, que a esta resolución no se puede saber");
+  // La barra de las 13 va casi entera en ámbar y la de las 22 sin nada: es la mitad
+  // que da el consejo, y sin ella la tira solo diría «cuándo» y no «a qué precio».
+  const trece = det && det.barras[13];
+  const veintidos = det && det.barras[22];
+  ok(trece && trece.alto > 0 && veintidos && veintidos.alto > 0,
+    `las dos horas con consumo se dibujan (${trece && trece.alto} y ${veintidos && veintidos.alto} px)`);
+  ok(trece && trece.libre / trece.alto > 0.8,
+    `la de mediodía va casi entera en ámbar (${trece && Math.round(trece.libre / trece.alto * 100)} %)`);
+  ok(veintidos && veintidos.libre === 0,
+    `y la de la noche, nada (${veintidos && veintidos.libre} px)`);
+  ok(det && det.barras[3].alto === 0, "una hora sin consumo no dibuja barra");
+  ok(det && det.ancho <= det.panel + 1, "y el detalle no se sale del panel");
+  // Y se cierra tocándola otra vez: dos abiertas dejarían la pantalla en una lista de
+  // tiras que no se comparan entre sí.
+  await p.click('#split-rows .sp-row[data-abre]');
+  await p.waitForTimeout(250);
+  ok(!(await p.evaluate(() => !!document.querySelector(".sp-det"))),
+    "y se cierra tocándola otra vez");
 
   await p.screenshot({
     path: path.join(capturas(), "facturaparto.png"),
