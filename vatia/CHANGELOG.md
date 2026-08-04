@@ -2,6 +2,61 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.62.0
+
+### «De más» y no «ahorro»
+
+De una corrección a la 0.61.0: *«la cifra de ahorro por electrodoméstico no debería ser
+negativa?»*. Ninguna de las dos, pero el problema era real: **ahorrar es prospectivo y
+ese día ya pasó**, así que el «↑ mejor a las 10:00 (+0,39 €)» que salió se lee como
+dinero que entró, cuando es dinero que salió. Negativa tampoco, porque no se resta de
+ningún saldo: es un **sobrecoste ya pagado**.
+
+La fila pasa a decirlo con el importe delante y la hora como el porqué, que es lo que se
+pedía:
+
+```
+● Lavavajillas ▬▭▭▭ 2,4 kWh · 12 % con sol
+  ↑ 0,39 € de más · mejor a las 10:00
+```
+
+Y el pie: «entre todos, **0,58 € de más** de lo que la misma energía habría costado en su
+hueco». El campo del payload pasa de `saving_eur` a `extra_eur`, y el banco comprueba que
+no quede ninguna clave con «saving» dentro — para que el nombre no arrastre otra vez el
+significado viejo.
+
+### El perfil de la casa ya dice cuánto se equivoca
+
+Era lo que quedaba apuntado del forecaster de EMHASS en la 0.61.0, y era un hueco raro: la
+previsión solar aprende su sesgo y publica su desvío del día, mientras el perfil de la casa
+publicaba de dónde sale, cuántos días lleva y su mínimo y su máximo, pero **nada sobre
+cuánto acierta**. Con la ventana de energía gratis calculada a partir de él, no había forma
+de saber cuánto fiarse de la hora que propone.
+
+Ahora publica su **error absoluto medio** —lo que EMHASS reporta como MAE— y en Ajustes se
+lee en una frase: «se desvía 67 W de media (9 % del consumo del día), medido contra el 4 de
+agosto, que es un día que este cálculo no había visto».
+
+**Medido fuera de muestra, que es la única forma de que el número signifique algo.** Se
+aparta el último día completo del histórico, se construye un perfil con lo demás y se
+compara contra el día apartado. Medirlo contra los mismos datos con que se construyó daría
+un error bonito y falso: la mediana pasa por medio de sus propios puntos por definición. Y
+no es una diferencia teórica — está medida. Con el banco de cinco días (cuatro a 500 W y el
+último a 800), fuera de muestra el error son **300 W**, los que salen a mano; midiéndolo
+por dentro, **60 W**. Cinco veces menos, y ninguno de los dos números habría dado un aviso.
+
+Dos detalles que también son decisiones:
+
+- **El porcentaje es del consumo medio del día, no punto a punto.** A las cuatro de la
+  mañana la casa gasta 90 W y equivocarse en 45 es un 50 % que no dice nada de nada.
+- **Con menos de tres días no se publica.** Con dos, el «día apartado» es la mitad del
+  histórico y el perfil que queda no se parece al que decide la ventana. Callar es más
+  honesto que dar un número que mide otra cosa.
+
+Y el perfil que **se usa** sigue construido con todo el histórico: la desviación es una
+medida *sobre* un perfil reducido, no un cambio en el que decide la ventana. El banco lo
+comprueba, porque confundir las dos cosas habría empeorado la ventana para poder medirla.
+
 ## 0.61.0
 
 ### Lo que había sobre la mesa, en el resumen del final del día
@@ -28,20 +83,12 @@ desvían—. Un repaso de ayer no depende de ninguna. Por eso se puede decir sin
 condicionales, y por eso cierra el bucle que la aplicación tenía abierto desde el
 principio: prometía «gratis a las 13:00» y nunca volvía a mirar si salió gratis.
 
-Con los datos del banco: el lavavajillas dice «↑ 0,39 € de más · mejor a las 10:00»
-debajo de su fila, el coche «↑ 0,19 € de más · mejor a las 11:00», el horno no dice nada
-porque ya estaba donde tocaba, y el pie remata: *«entre todos, 0,58 € de más de lo que la
-misma energía habría costado en su hueco»*.
+Con los datos del banco: el lavavajillas dice «↑ mejor a las 10:00 (+0,39 €)» debajo de
+su fila, el coche «↑ mejor a las 11:00 (+0,19 €)», el horno no dice nada porque ya
+estaba donde tocaba, y el pie remata: *«puestos en su mejor hueco te habrías ahorrado
+0,58 €»*.
 
-**Y «de más», no «ahorro».** De una corrección: *«la cifra de ahorro por electrodoméstico
-no debería ser negativa?»*. Ninguna de las dos, en realidad — pero el problema era real:
-ahorrar es prospectivo y **este día ya pasó**, así que un «+0,39 €» al lado de una flecha
-se lee como dinero que entró, cuando es dinero que salió. Negativa tampoco, porque no se
-resta de ningún saldo: es un **sobrecoste ya pagado**, y eso lo dicen una flecha hacia
-arriba y las palabras «de más». El campo del payload pasa de `saving_eur` a `extra_eur`, y
-el banco comprueba que no quede ninguna clave con «saving» dentro.
-
-Solo hablan las filas que costaron de más. Poner «ya era su mejor hueco» en cinco filas
+Solo hablan las filas que ganaban algo. Poner «ya era su mejor hueco» en cinco filas
 seguidas sería ruido, y además el pie ya lo resume — cuando no había nada que ganar lo
 dice él: «aprovechaste el sol prácticamente todo lo que se podía».
 
@@ -98,40 +145,11 @@ hecho, más simple**:
   add-on que hoy es FastAPI y JavaScript vendorizado, con ejecuciones de tuning de
   quince a veinte minutos que su documentación llama «computing intense».
 
-Lo único que sí valía de esa página no era el modelo: era **el número que reporta**. Y eso
-sí se ha hecho — ver abajo.
-
-### El perfil de la casa ya dice cuánto se equivoca
-
-Faltaba, y era un hueco raro: la previsión solar aprende su sesgo y publica su desvío del
-día, mientras el perfil de la casa publicaba de dónde sale, cuántos días lleva y su mínimo
-y su máximo, pero **nada sobre cuánto acierta**. Con la ventana de energía gratis
-calculada a partir de él, no había forma de saber cuánto fiarse de la hora que propone.
-
-Ahora publica su **error absoluto medio** —lo que EMHASS reporta como MAE— y en Ajustes se
-lee en una frase: «se desvía 67 W de media (9 % del consumo del día), medido contra el 4
-de agosto, que es un día que este cálculo no había visto».
-
-**Medido fuera de muestra, que es la única forma de que el número signifique algo.** Se
-aparta el último día completo del histórico, se construye un perfil con lo demás y se
-compara contra el día apartado. Medirlo contra los mismos datos con que se construyó daría
-un error bonito y falso: la mediana pasa por medio de sus propios puntos por definición. Y
-no es una diferencia teórica — está medida. Con el banco de cinco días (cuatro a 500 W y
-el último a 800), fuera de muestra el error son **300 W**, que es el que sale a mano;
-midiéndolo por dentro, **60 W**. Cinco veces menos, y ninguno de los dos números habría
-dado un aviso.
-
-Dos detalles que también son decisiones:
-
-- **El porcentaje es del consumo medio del día, no punto a punto.** A las cuatro de la
-  mañana la casa gasta 90 W y equivocarse en 45 es un 50 % que no dice nada de nada.
-- **Con menos de tres días no se publica.** Con dos, el «día apartado» es la mitad del
-  histórico y el perfil que queda no se parece al que decide la ventana. Callar es más
-  honesto que dar un número que mide otra cosa.
-
-Y el perfil que **se usa** sigue construido con todo el histórico: la desviación es una
-medida *sobre* un perfil reducido, no un cambio en el que decide la ventana. El banco lo
-comprueba, porque confundir las dos cosas habría empeorado la ventana para poder medirla.
+Lo único que sí falta de esa página, y queda apuntado: **el perfil de la casa no mide su
+propio error**. La previsión solar sí aprende su sesgo y publica su desvío del día; el
+perfil publica de dónde sale, cuántos días lleva y su mínimo y su máximo, pero nada
+sobre cuánto se equivoca. Un backtest con su error medio —lo que EMHASS reporta como
+MAE— diría cuánto hay que fiarse del plan, y hoy no hay forma de saberlo.
 
 ## 0.60.0
 
