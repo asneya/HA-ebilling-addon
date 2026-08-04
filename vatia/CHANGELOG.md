@@ -2,6 +2,59 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.57.0
+
+### Un aro verde alrededor del icono, en vez de un punto que late
+
+De una petición: *«en cuanto a los electrodomésticos en funcionamiento, prefiero verlos
+en la tabla con un borde verde brillante semigrueso alrededor del icono. Esto incluye a
+los que están siempre en marcha»*.
+
+Hecho, y es mejor que el punto: un aro se lee en la fila entera sin buscarlo, no tapa
+parte del glifo, y sin animación no pide la atención que la fila no necesita. Va en
+`box-shadow` y no en `border` porque un borde de verdad empujaría el contenido del chip
+dos píxeles y el glifo bailaría al arrancar el aparato.
+
+**Y lo llevan también los de siempre encendido**, que antes se quedaban fuera. Es de
+las dos cosas que se pedían y la que tenía más fondo: hasta ahora «en marcha» quería
+decir «tiene un ciclo abierto», y un continuo no tiene ciclos —eso se decidió en la
+0.52.0 y sigue en pie—, así que una nevera nunca aparecía como encendida aunque lo esté
+siempre. Ahora la marca es más ancha que el ciclo: dice **si está dando ahora mismo**,
+vale para las tres formas, aparece en cuanto el sensor ve consumo aunque el histórico
+aún no lo sepa, y aguanta las pausas de un programa.
+
+En un continuo el aro es permanente, y no por comodidad: su compresor entrando y
+saliendo cada veinte minutos no es encenderse y apagarse, y hacer parpadear el aro con
+él sería ruido de la misma familia que publicar «el ciclo típico de tu nevera son 20
+minutos».
+
+### Los diez glifos nuevos ya estaban, pero nadie los vigilaba
+
+De una duda: *«he añadido glifos nuevos de electrodomésticos que no aparecen disponibles
+para seleccionar»*. Están conectados desde la 0.56.0 —el editor ofrece los quince y se
+dibujan todos—, así que era cuestión de reiniciar el add-on. Pero al comprobarlo salió
+algo que sí faltaba: **nada mantenía en su sitio las tres listas**.
+
+El sprite, la lista del selector y la lista blanca del servidor se escriben a mano en
+tres ficheros distintos, y las tres formas de desparejarse fallan calladas:
+
+- un id en el selector que no está dibujado pinta un **botón vacío**;
+- uno que el servidor no acepta se guarda como «potencia» al grabar, **sin decir nada**;
+- y un glifo de aparato dibujado y no ofrecido no aparece por ningún sitio, que es
+  justo lo que se temía.
+
+El banco nuevo `tests/python/glifos.py` cruza las tres, leyendo los diez dibujados a
+mano del propio generador del sprite para no crear un cuarto sitio con la misma lista.
+Comprobado que tiene dientes: quitando un glifo del selector sale en rojo por dos vías.
+
+### Y un banco que medía un estado imposible
+
+El de los huecos entre tarjetas (0.55.1) forzaba visible la tarjeta del cierre para
+poder medirla de día, y de día esa tarjeta **no tiene datos**: dibuja nada, mide cero, y
+un hijo de altura cero en un contenedor con `gap` se come dos huecos. Salía un 28 que en
+la aplicación no existe, porque ahí una tarjeta vacía siempre va con `hidden` —fuera del
+flujo—. Ahora se le inyecta el cierre en el payload, que es el estado de verdad.
+
 ## 0.56.0
 
 ### Diez glifos más para «Tus aparatos»

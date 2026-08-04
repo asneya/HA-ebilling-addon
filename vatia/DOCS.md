@@ -328,15 +328,21 @@ cuesta** en euros o «Gratis» si no hay que comprar nada. Barra e importe salen
 mismo reparto: si la barra no tiene rojo, el importe es cero.
 
 Al lado del nombre, un **glifo dice de qué va la fila** —pasa el dedo o el ratón por
-encima y lo pone en palabras—, y un **punto verde que late** sobre el icono señala lo
-que está funcionando ahora mismo:
+encima y lo pone en palabras—, y un **aro verde alrededor del icono** señala lo que
+está dando ahora mismo:
 
 | | Qué dice |
 |---|---|
 | 🕐 reloj | hay una hora que elegir (movible) |
 | 🏠 casa | la hora la manda la casa, no el sol (fijo) |
 | ⚡ rayo | siempre encendido (continuo) |
-| · punto verde | en marcha ahora mismo |
+| aro verde | está dando ahora mismo |
+
+El aro lo llevan también los de **siempre encendido**, y de forma permanente: una
+nevera está en marcha, y su compresor entrando y saliendo cada veinte minutos no es
+encenderse y apagarse. Aparece en cuanto el sensor ve consumo, aunque el histórico aún
+no lo sepa, y aguanta las pausas de un programa —el reposo de un lavavajillas entre el
+lavado y el secado no lo apaga—.
 
 Lo que cambia de una fila a otra es **la pregunta que contesta**, y eso depende de
 la forma de uso:

@@ -332,9 +332,13 @@ function barraOrigen(o, pct) {
        cuando hace calor—, que es exactamente por lo que «fijo» no se detecta;
      · y el rayo, en los que están enchufados y no se apagan nunca.
 
-   «En marcha» no lleva glifo sino un **punto que late** sobre el icono del aparato:
-   es el mismo lenguaje que la pastilla de «ahora mismo» de la cabecera, se ve sin
-   leer y funciona encima de cualquiera de las tres formas. */
+   «En marcha» no lleva glifo: el icono del aparato se rodea de un **aro verde**.
+   Empezó siendo un punto que latía en una esquina y se cambió a petición —*«prefiero
+   verlos con un borde verde brillante semigrueso alrededor del icono»*—, que además
+   es mejor: un aro se lee en la fila entera y no hay que buscarlo, no tapa parte del
+   glifo, y sin animación no pide la atención que la fila no necesita.
+
+   Lo llevan también los de siempre encendido, como se pidió. */
 const INSIGNIA = {
   movible: ["reloj", "Puedes elegir la hora"],
   fijo: ["casa", "Lo pones cuando hace falta, no cuando pica el sol"],
@@ -427,10 +431,10 @@ function renderPlan(plan) {
     const [glifo, queEs] = INSIGNIA[r.kind] || [];
     return `
       <div class="ad-row ap-fila" data-kind="${esc(r.kind)}"${
-        r.running ? ' data-running="1"' : ""}>
-        <span class="ad-chip" style="--ap:${esc(r.color)}">
+        r.running ? ' data-running="1"' : ""}${r.on ? ' data-on="1"' : ""}>
+        <span class="ad-chip" style="--ap:${esc(r.color)}"${
+          r.on ? ' title="En marcha ahora mismo"' : ""}>
           <svg class="i"><use href="#i-${esc(r.icon)}"/></svg>
-          ${r.running ? '<i class="ap-late" title="En marcha"></i>' : ""}
         </span>
         <span class="ad-txt">
           <b>${esc(r.name)}${glifo ? `<svg class="ap-insignia i" role="img"

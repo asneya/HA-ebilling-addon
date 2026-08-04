@@ -21,7 +21,7 @@
  *   9. un aparato de siempre encendido no trae hora, trae lo que lleva hoy
  *  10. y uno en marcha dice por dónde va, sin proponerle una hora ya pasada
  *  11. la barra del progreso es la misma del origen, y puede pasarse
- *  12. la forma de uso va en un glifo, y «en marcha» en un punto que late
+ *  12. la forma de uso va en un glifo, y «en marcha» en un aro verde
  *  13. sin errores de consola
  */
 const { abrirNavegador, base } = require("./camino");
@@ -81,7 +81,10 @@ async function abrir(plan) {
       // a dos renglones de texto.
       insignia: f.querySelector(".ap-insignia use")?.getAttribute("href") || null,
       rotulo: f.querySelector(".ap-insignia title")?.textContent || null,
-      late: !!f.querySelector(".ap-late"),
+      // El aro verde alrededor del icono: «en marcha» sin escribirlo.
+      aro: f.dataset.on === "1",
+      anillo: f.querySelector(".ad-chip") ?
+        getComputedStyle(f.querySelector(".ad-chip")).boxShadow : null,
       sub: f.querySelector(".ad-txt small")?.textContent.trim(),
       valor: f.querySelector(".ad-verdict b")?.textContent.trim(),
       porque: f.querySelector(".ad-verdict small")?.textContent.trim(),
@@ -208,17 +211,17 @@ let navegador;
     so_far: { kwh: 0.42, sun_kwh: 0.21, battery_kwh: 0.13, grid_kwh: 0.08,
               eur: 0.02 },
     tail: { hours: 0.83, sun_kwh: 0.5, battery_kwh: 0, grid_kwh: 0, sun_pct: 100 },
-    best: null, saving_eur: null, worth_waiting: false,
+    best: null, saving_eur: null, worth_waiting: false, on: true,
     verdict: { kind: "parcial", value: 0.02, sub: "50 % lo pone el sol" },
     ...extra,
   });
   v = await abrir({ battery: null, rows: [enMarcha({})] });
   ok(v.filas[0].marcha, "la fila se sabe en marcha");
-  // Sin escribir «en marcha»: eso lo dice el punto que late sobre su icono (§12).
+  // Sin escribir «en marcha»: eso lo dice el aro verde de su icono (§12).
   ok(/lleva 40 min/.test(v.filas[0].sub),
     `dice lo que lleva puesto, que es lo medido («${v.filas[0].sub}»)`);
   // La hora sale en la zona del navegador, que aquí es UTC: las 11:50 de Madrid.
-  ok(/~termina a las 09:50/.test(v.filas[0].porque),
+  ok(/~termina (mañana )?a las 09:50/.test(v.filas[0].porque),
     `y la hora de fin, que es el número accionable («${v.filas[0].porque}»)`);
   ok(!/mejor/.test(v.filas[0].sub) && !/mejor/.test(v.filas[0].porque),
     "sin proponer una hora óptima de algo que ya está puesto");
@@ -295,16 +298,30 @@ let navegador;
     `y el continuo, el rayo («${con.rotulo}»)`);
   ok(!/siempre encendido/i.test(con.sub),
     `y ya no se escribe en el renglón («${con.sub}»)`);
-  ok(v.filas.every((f) => !f.late), "sin nada en marcha, ningún punto");
+  ok(v.filas.every((f) => !f.aro), "nada en marcha, ningún aro");
   ok(!/a las \d\d:\d\d/.test(mov.sub) || /mejor \d\d:\d\d|mejor mañana \d\d:\d\d/.test(mov.sub),
     `y la hora va sin «a las», que se iba a tres líneas («${mov.sub}»)`);
 
   v = await abrir({ battery: null, rows: [enMarcha({})] });
-  ok(v.filas[0].late, "en marcha, el punto que late sobre su icono");
+  ok(v.filas[0].aro, "en marcha, el aro alrededor de su icono");
+  // Y que el aro se pinta de verdad, no solo que esté el atributo: dos sombras
+  // —el anillo y su brillo— y ninguna es «none».
+  ok(/rgb/.test(v.filas[0].anillo || "") && v.filas[0].anillo !== "none",
+    `y se dibuja (box-shadow «${(v.filas[0].anillo || "").slice(0, 46)}…»)`);
   ok(!/en marcha/i.test(v.filas[0].sub),
     `y tampoco se escribe («${v.filas[0].sub}»)`);
   ok(v.filas[0].insignia === "#i-reloj",
     "sigue siendo un movible: la insignia no cambia por estar puesto");
+  // Y los de siempre encendido llevan aro también, como se pidió: una nevera está
+  // en marcha, y su compresor entrando y saliendo no es encenderse y apagarse.
+  v = await abrir({ battery: null, rows: [{
+    id: "nev", name: "Nevera", icon: "congelador", color: "#08f",
+    kind: "continuo", kind_auto: true, on: true,
+    today: { kwh: 0.67, sun_kwh: 0.31, battery_kwh: 0.3, grid_kwh: 0.06, eur: 0.01 },
+    verdict: { kind: "parcial", value: 0.01, sub: "46 % lo pone el sol" },
+  }] });
+  ok(v.filas[0].aro, "un continuo también va rodeado");
+  ok(/rgb/.test(v.filas[0].anillo || ""), "y su aro se dibuja igual");
 
   await (await navegador).close();
   if (fallos.length) { console.log("\n--- fallos ---"); [...new Set(fallos)].forEach((f) => console.log("  " + f)); }

@@ -1683,6 +1683,23 @@ async def build(
         for a in aparatos:
             datos = aprendido.setdefault(a["id"], {})
             datos["kind"] = appliances_mod.forma(a, datos)
+            umbral = float(a.get("standby_w") or 0)
+            w = vatios.get(a["id"])
+            # **Si está dando ahora mismo**, que es lo que la tarjeta rodea de verde.
+            # Es más ancho que «tiene un ciclo abierto»: vale para las tres formas y
+            # se sostiene en la lectura de este momento, así que aparece en cuanto el
+            # enchufe tira aunque el histórico aún no lo sepa.
+            #
+            # Un continuo va rodeado **siempre**, y no es una excepción caprichosa:
+            # una nevera está en marcha, y su compresor entrando y saliendo cada
+            # veinte minutos no es encenderse y apagarse. Hacer parpadear el aro con
+            # el ciclo del compresor sería ruido, y de la misma familia que publicar
+            # «el ciclo típico de tu nevera son 20 minutos».
+            datos["encendido"] = (
+                datos["kind"] == "continuo"
+                or appliances_mod.en_marcha(datos, w, umbral, now)
+                or (w is not None and w > umbral)
+            )
             if datos["kind"] == "continuo":
                 datos["today_split"] = appliances_mod.atribuir_por_horas(
                     datos.get("today_by_hour"), por_horas, precio_de_la_hora)
@@ -1691,8 +1708,7 @@ async def build(
             # lleva —atribuido, porque ya pasó— y de dónde saldrá lo que le queda,
             # que eso sí se puede simular. Las dos mitades del mismo ciclo con la
             # cuenta que le toca a cada una.
-            if not appliances_mod.en_marcha(
-                    datos, vatios.get(a["id"]), float(a.get("standby_w") or 0), now):
+            if not appliances_mod.en_marcha(datos, w, umbral, now):
                 continue
             marcha = appliances_mod.progreso(datos.get("open"), datos.get("cycle"), now)
             if not marcha:

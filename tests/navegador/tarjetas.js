@@ -280,13 +280,28 @@ const catalogo = (p) => p.evaluate(() =>
     method: "PUT", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ home_order: todas, home_hidden: [] }),
   }), TODAS);
+  // La tarjeta del cierre solo sale tras la puesta de sol, y el banco pasa a
+  // cualquier hora: se le **inyecta el cierre en el payload** en vez de quitarle la
+  // clase `hidden`. No es lo mismo, y la diferencia importa: sin datos el componente
+  // no dibuja nada, la tarjeta mide cero, y como hijo de un contenedor con `gap` un
+  // hijo de altura cero se come dos huecos y sale un 28 que no existe en la
+  // aplicación —donde una tarjeta vacía siempre va con `hidden`, o sea fuera del
+  // flujo—. Medir un estado imposible es medir otra cosa.
+  await p.route("**/api/live", async (ruta) => {
+    const resp = await ruta.fetch();
+    const cuerpo = await resp.json();
+    cuerpo.close = cuerpo.close || {
+      date: new Date().toISOString().slice(0, 10),
+      sunset: new Date().toISOString(), minutes_since: 30,
+      produced: 24.3, consumed: 11.2, self_pct: 78,
+      in_window: { kwh: 6.4, pct: 57 }, saved: null,
+      appliances: [], tomorrow: null,
+    };
+    await ruta.fulfill({ response: resp, json: cuerpo });
+  });
   await p.goto(BASE);
   await p.waitForFunction(() => !document.querySelector("#boot"), { timeout: 25000 });
-  await p.waitForTimeout(1500);
-  // La tarjeta del cierre solo sale tras la puesta de sol: se fuerza para poder
-  // medirla a cualquier hora, que es cuando pasa el banco.
-  await p.evaluate(() => document.querySelector("#close-panel")?.classList.remove("hidden"));
-  await p.waitForTimeout(300);
+  await p.waitForTimeout(1800);
   let pares = await huecos(p);
   ok(pares.length >= 2, `hay tarjetas seguidas que medir (${pares.length} pares)`);
   const iguales = (lista) => new Set(lista.map((x) => x.hueco)).size === 1;
