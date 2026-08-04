@@ -8,8 +8,11 @@
  *   2. solo se dice de los que costaron de más: «ya era su mejor hueco» en cinco
  *      filas sería ruido, y el pie ya lo resume
  *   3. el pie es una **diferencia**, y en ninguna parte se afirma «lo que
- *      gastaste»: el modelo de aquí no tiene batería y el desglose de la factura
- *      sí, así que dos cifras del mismo día se contradirían
+ *      gastaste»: el desglose de la factura reparte la energía entre orígenes
+ *      medidos y este coloca rectángulos, así que dos cifras del mismo día se
+ *      contradirían
+ *   3b. y la coletilla dice la verdad sobre la batería, que desde la 0.65.0 depende
+ *      del día: si el reparto la vio, está dentro de la cuenta y el pie lo dice
  *   4. sin tarifa marcada se dice por qué no hay euros, en vez de inventarlos
  *   5. un día que se aprovechó no se calla: se dice que no había nada que ganar,
  *      y sin el bloque la tarjeta sigue exactamente como estaba
@@ -37,7 +40,10 @@ const base_cierre = () => ({
     { id: "horno", name: "Horno", color: "#c9822b", runs: 1, kwh: 2.2, pct: 96 },
   ],
   best: {
-    date: "2026-08-04", extra_eur: 0.58, sun_kwh: 21.4, free_kwh: 9.1, movable: 3,
+    // Una casa **sin** batería: los 9,1 kWh que sobraron se vertieron enteros. Es el
+    // caso en que el modelo viejo acertaba, y el que deja ver el otro por contraste.
+    date: "2026-08-04", extra_eur: 0.58, sun_kwh: 21.4, free_kwh: 9.1,
+    stored_kwh: 0, battery: false, battery_eur_kwh: null, movable: 3,
     rows: [
       { id: "lavav", name: "Lavavajillas", kwh: 2.4, hours: 2,
         ran_at: "2026-08-04T22:00:00+02:00", best_at: "2026-08-04T10:00:00+02:00",
@@ -129,11 +135,45 @@ const leer = (p) => p.evaluate(() => {
   ok(!/(gastaste|te costó|coste del día)/i.test(v.todo),
     "y en ninguna parte de la tarjeta se afirma lo que se gastó");
   ok(/no lo que se hizo mal/.test(v.pie), "se dice que es lo que había, no un reproche");
-  ok(/batería no entra/.test(v.pie), "y que la batería no está en esta cuenta");
+  ok(!/batería/.test(v.pie),
+    "y sin batería en el día no se la menciona, ni para decir que no está");
+  await ctx.close();
+
+  console.log("\n3b · con batería, el pie dice que está dentro");
+  // El texto de antes prometía lo contrario —«la batería no entra en esta cuenta»— y
+  // desde la 0.65.0 sí entra. Una coletilla que se queda vieja es peor que ninguna:
+  // dice al usuario que desconfíe de una cifra que ya es buena.
+  let c = base_cierre();
+  c.best.battery = true;
+  c.best.battery_eur_kwh = 0.2814;
+  c.best.free_kwh = 1.2;
+  c.best.stored_kwh = 7.9;
+  ({ ctx, p } = await abrir(b, c));
+  v = await leer(p);
+  ok(/batería entra en esta cuenta/.test(v.pie),
+    `se dice que está dentro («${v.pie.slice(-96)}»)`);
+  ok(!/batería no entra/.test(v.pie), "y no queda la promesa vieja");
+  ok(/una hora cualquiera/.test(v.pie), "sin perder lo que sí queda fuera");
+  await ctx.close();
+
+  console.log("\n3c · y un día con batería que se aprovechó no parece un día malo");
+  // El caso que más se va a ver en una casa con batería: el sobrecoste baja de cinco
+  // céntimos **porque el sol que sobraba se guardó**. Sin decirlo, «no había nada que
+  // ganar» se lee como que el día salió flojo, y fue justo lo contrario.
+  c = base_cierre();
+  c.best.battery = true;
+  c.best.free_kwh = 0;
+  c.best.stored_kwh = 9.1;
+  c.best.extra_eur = 0.01;
+  for (const r of c.best.rows) { r.extra_eur = 0.0; r.already_best = true; }
+  ({ ctx, p } = await abrir(b, c));
+  v = await leer(p);
+  ok(/se guardó en la batería/.test(v.pie),
+    `se dice que el sol no se perdió («${v.pie.slice(-72)}»)`);
   await ctx.close();
 
   console.log("\n4 · sin tarifa marcada, no se inventan euros");
-  let c = base_cierre();
+  c = base_cierre();
   c.best.extra_eur = null;
   for (const r of c.best.rows) r.extra_eur = null;
   ({ ctx, p } = await abrir(b, c));

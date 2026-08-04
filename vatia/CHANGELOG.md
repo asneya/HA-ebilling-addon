@@ -2,6 +2,78 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.65.0
+
+### La batería entra en «lo que había sobre la mesa»
+
+La tarjeta del cierre del día dice cuánto costó de más poner los electrodomésticos a la
+hora a la que se pusieron. Su cuenta **no tenía batería dentro**, y eso lo advertía la
+propia tarjeta — pero una advertencia no arregla una cifra mal. El sobrante de mediodía
+no se tira: se guarda. Una lavadora movida al sol no se ahorra el kilovatio entero de la
+noche, porque ese kilovatio la batería ya lo estaba guardando para la noche.
+
+Cuánto se equivocaba, contra una simulación exacta de la batería hora a hora sobre el
+mismo día y el mismo aparato:
+
+| El día | Lo cierto | Lo que se publicaba |
+|---|---|---|
+| la batería se vació y entró la red | 0,40 € de más | 0,60 € |
+| a la batería le sobró energía | **0,00 €** | 0,60 € |
+
+La segunda línea es la grave: el aparato **ya estaba en su mejor hueco** —moverlo al sol
+no habría cambiado un céntimo— y la tarjeta le señalaba un sobrecoste de sesenta
+céntimos. Un consejo inventado sobre un día que se hizo bien.
+
+Ahora el modelo parte cada hora en cuatro escalones, y el precio de cada uno es lo que
+ese kilovatio le quita a otro sitio:
+
+1. **lo que se vertía** — sale gratis: no le quita nada a nadie;
+2. **lo que se guardaba** — cuesta la ida y vuelta de la batería, porque el kilovatio que
+   no entra es uno que luego no sale;
+3. **lo que la batería entregó a esa hora** — cuesta lo que valía su kilovatio, y **solo
+   hasta lo que entregó**: pasado ese tope no consta que pudiera dar más. Sin ese tope,
+   un coche colocado a las tres de la mañana se llevaba gratis diez kilovatios de una
+   batería que a esa hora dio uno y medio;
+4. **la red** — lo que quede, al precio de la hora.
+
+No van del más barato al más caro: van en el orden en que la instalación los usa, que es
+un orden físico y no una elección.
+
+### Y lo que decide entre las dos líneas de la tabla
+
+**Si la batería se llegó a vaciar.** Si llegó a la mañana siguiente con energía sin
+gastar, un kilovatio suyo no valía nada ese día y el segundo escalón sale gratis; si se
+quedó vacía y la red tomó el relevo, cada kilovatio que no entró hubo que comprarlo. Se
+mira sin estado de carga y sin un sensor nuevo: si la casa importó **después de la última
+hora en que la batería estaba cargando**.
+
+Sin esa pregunta el modelo se equivocaba de signo, no de magnitud. Fue el fallo de mi
+primera versión de esto, y lo cazó una simulación exacta puesta en el banco al lado del
+modelo — a mano no se deriva una cuenta con estado, porque el estado es justo lo que se
+olvida.
+
+### Un resultado que parece un error y no lo es
+
+En un día con la batería atada y una tarifa con madrugada barata, el modelo puede decir
+que **las tres de la mañana era mejor hora que el mediodía**. Y tiene razón: la batería
+ya convertía ese sol en energía de la noche, así que consumirlo directo solo se ahorra el
+10 % de la ida y vuelta —tres céntimos— frente a los veinte de diferencia entre tarifas.
+La simulación exacta lo confirma (3,225 € por la madrugada contra 3,565 € por el sol), y
+está en el banco justamente para que nadie «corrija» el modelo para que nunca salga de
+noche.
+
+### Lo que la tarjeta dice ahora
+
+La coletilla decía «la batería no entra en esta cuenta». Ahora entra, y lo dice. Y
+cuando el sobrecoste baja de cinco céntimos **porque el sol que sobraba se guardó**, se
+dice también: sin eso, «no había nada que ganar» se lee como que el día salió flojo, y
+fue justo lo contrario.
+
+Una cifra que ya no se publica con ese nombre: `grid_kwh` por fila pasa a `paid_kwh`. Con
+la batería dentro, lo que un aparato no cubrió con el sobrante se lo dieron la red y la
+batería a medias, y llamar red a la mitad que salió de la batería sería la clase de cifra
+que este proyecto lleva quitando.
+
 ## 0.64.0
 
 ### Con InfluxDB, ciclos de verdad en vez de tramos de hora
