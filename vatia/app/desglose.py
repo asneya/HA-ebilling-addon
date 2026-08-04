@@ -203,6 +203,90 @@ def _escalar(
     return escalado, recortado
 
 
+def _detalle(
+    consumo: dict[str, float],
+    reparto: dict[str, dict[str, float]],
+    precio_de: Any,
+) -> dict[str, Any]:
+    """Lo que la suma del mes esconde: cuándo se usó y qué día salió caro.
+
+    Una fila que dice «lavavajillas · 7,2 kWh · 1,19 €» no deja hacer nada con la
+    información. Lo que se puede cambiar es **la hora**, y para verlo hace falta
+    abrir la fila.
+
+    Tres cosas, y las tres medidas:
+
+    · **Los días que se usó** y **en cuántos tramos**. Y tramos, no ciclos: aquí la
+      resolución es la hora —es lo que Home Assistant guarda para un mes entero— así
+      que un tramo son horas seguidas con consumo. Dos lavados cortos en la misma
+      hora son un tramo, y uno que cruza una hora sin gastar son dos. Llamarlos
+      ciclos sería publicar un recuento que estos datos no sostienen.
+    · **El día que más costó**, que es donde se ve si fue una vez o es la costumbre.
+    · **A qué horas se pone**, sumado por hora del día. Es la cifra accionable: un
+      lavavajillas con todo su bulto a las 22:00 tiene un problema que se arregla
+      tocando un botón, y en el total del mes no se ve.
+
+    El coste por día sale de `appliances.atribuir`, la misma función que da el de la
+    fila entera: aquí solo se le pasan las horas de un día. Repetir la cuenta habría
+    sido tener dos cifras del mismo lavavajillas.
+    """
+    con_algo = {iso: k for iso, k in consumo.items() if k > _MIGAJA_KWH / 24}
+    if not con_algo:
+        return {}
+    horas = sorted(con_algo)
+
+    # Tramos: horas seguidas. El salto de una hora es lo que los separa.
+    tramos = 1
+    for antes, ahora in zip(horas, horas[1:]):
+        try:
+            a, b = datetime.fromisoformat(antes), datetime.fromisoformat(ahora)
+        except ValueError:
+            continue
+        if (b - a).total_seconds() > 3600 + 1:
+            tramos += 1
+
+    por_dia: dict[str, dict[str, float]] = {}
+    por_hora = [0.0] * 24
+    # Y de eso, cuánto lo puso el sol. Sin esta pieza la tira de horas dice **cuándo**
+    # se usó y no **cuándo salió gratis**, que es la mitad que da el consejo: dos barras
+    # iguales a las 13 y a las 22 no cuestan lo mismo, y la tira lo tiene que enseñar
+    # sin que haya que leer nada. La fracción es la del reparto de esa hora, la misma
+    # que usa `atribuir`: la parte del aparato es proporcional a la de la casa.
+    sol_por_hora = [0.0] * 24
+    for iso, kwh in con_algo.items():
+        por_dia.setdefault(iso[:10], {})[iso] = kwh
+        try:
+            h = datetime.fromisoformat(iso).hour
+        except ValueError:
+            continue
+        por_hora[h] += kwh
+        split = reparto.get(iso) or {}
+        casa = split.get("home_total") or 0.0
+        if casa > 0:
+            limpio = (split.get("from_solar") or 0.0) + (split.get("from_battery") or 0.0)
+            sol_por_hora[h] += kwh * min(limpio / casa, 1.0)
+
+    peor = None
+    for dia, horas_del_dia in por_dia.items():
+        cuenta = appliances_mod.atribuir(horas_del_dia, reparto, precio_de)
+        if not cuenta:
+            continue
+        clave = cuenta["eur"] if cuenta["eur"] is not None else cuenta["grid_kwh"]
+        if peor is None or clave > peor[0]:
+            peor = (clave, {"date": dia, "eur": cuenta["eur"],
+                            "kwh": cuenta["kwh"], "grid_kwh": cuenta["grid_kwh"]})
+    return {
+        "days": len(por_dia),
+        "runs": tramos,
+        "worst_day": peor[1] if peor else None,
+        "by_hour": [round(v, 3) for v in por_hora],
+        # La parte de cada hora que no hubo que comprar: sol y batería juntos, que es
+        # lo que la fila ya trata igual —ninguno de los dos se cobra— y lo que hace que
+        # la barra se lea de un golpe.
+        "free_by_hour": [round(v, 3) for v in sol_por_hora],
+    }
+
+
 def filas(
     lista: list[dict[str, Any]],
     por_aparato: dict[str, dict[str, float]],
@@ -250,6 +334,8 @@ def filas(
             "id": a["id"], "name": a["name"],
             "color": a["color"], "icon": a["icon"],
             "kind": "aparato", **cuenta,
+            # Lo que la suma del mes esconde, para cuando se abre la fila.
+            "detail": _detalle(ajustado.get(a["id"]) or {}, reparto, precio_de),
         })
 
     resto = appliances_mod.atribuir(resto_por_hora, reparto, precio_de)

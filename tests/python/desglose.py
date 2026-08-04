@@ -26,6 +26,7 @@ mano en vez de comparar contra lo que salga:
      red le entregó, y no aparece cuando los contadores se llevan bien
   6. dos enchufes que suman más que la casa se escalan, y el recorte se declara
   7. sin tarifa no hay euros inventados
+  8. y al abrir una fila: los días, los tramos, el día más caro y a qué horas se pone
 """
 import sys
 from pathlib import Path
@@ -192,6 +193,56 @@ ok(d4["eur"] is None, "el total va sin euros")
 ok(all(f["eur"] is None for f in d4["rows"]), "y ninguna fila se los inventa")
 ok(casi(sum(f["grid_kwh"] for f in d4["rows"]), d4["imported_kwh"]),
    "pero los kWh y su origen siguen cuadrando")
+
+print("\n8 · lo que la suma del mes esconde")
+# Una fila que dice «7,2 kWh · 1,19 €» no deja hacer nada. Lo accionable es la hora, y
+# para eso hace falta abrir la fila. Se comprueba con dos días hechos a mano: el
+# lavavajillas a las 21 y 22 del día 10 y otra vez a las 13 del 11.
+D10 = "2026-03-10T"
+D11 = "2026-03-11T"
+def hh(base, h):
+    return f"{base}{h:02d}:00:00"
+
+CONT2 = {}
+for base in (D10, D11):
+    for h in (13, 21, 22):
+        CONT2[hh(base, h)] = {
+            "pv_energy": 4.0 if h == 13 else 0.0,
+            "battery_charge_energy": 0.0, "grid_export_energy": 0.0,
+            "grid_import_energy": 0.0 if h == 13 else 3.0,
+            "battery_discharge_energy": 0.0,
+            "home_energy": 3.0,
+        }
+PRECIOS2 = {hh(D10, 13): 0.15, hh(D10, 21): 0.30, hh(D10, 22): 0.30,
+            hh(D11, 13): 0.15, hh(D11, 21): 0.30, hh(D11, 22): 0.30}
+LAVAV = [{"id": "lavav", "name": "Lavavajillas", "color": "#1", "icon": "lavavajillas"}]
+# Día 10: dos horas seguidas de noche (caro). Día 11: una hora al mediodía (gratis).
+USO = {"lavav": {hh(D10, 21): 1.0, hh(D10, 22): 1.0, hh(D11, 13): 1.0}}
+d8 = desglose.filas(LAVAV, USO, reparto_de(CONT2), importada_de(CONT2), PRECIOS2.get)
+# Por id y no por posición: las filas van ordenadas por lo que cuestan, y «el resto de
+# la casa» puede ir primero — no lleva detalle, porque no es un aparato que se mueva.
+por_id8 = {f["id"]: f for f in d8["rows"]}
+ok("detail" not in por_id8.get(desglose.ID_RESTO, {}),
+   "«el resto de la casa» no lleva detalle: no es algo que se pueda mover")
+det = por_id8["lavav"]["detail"]
+ok(det.get("days") == 2, f"cuenta los días que se usó ({det.get('days')})")
+ok(det.get("runs") == 2,
+   f"y los tramos, que no son ciclos: dos horas seguidas cuentan una vez ({det.get('runs')})")
+peor = det.get("worst_day") or {}
+ok(peor.get("date") == "2026-03-10",
+   f"el día más caro es el de la noche ({peor.get('date')})")
+# Las dos horas de noche: su parte es 1,0 de los 3,0 de la casa, y a esas horas la casa
+# se lo lleva todo de la red → 2 × (1/3 × 3,0) × 0,30 = 0,60 €.
+ok(casi(peor.get("eur"), 0.60), f"con lo que costó ese día ({peor.get('eur')} €)")
+ok(det["by_hour"][21] > 0 and det["by_hour"][22] > 0 and det["by_hour"][13] > 0,
+   "y a qué horas se pone, sumado por hora del día")
+ok(sum(det["by_hour"]) > 2.9 and abs(sum(det["by_hour"]) - 3.0) < 0.01,
+   f"que suma lo que gastó ({sum(det['by_hour'])} de 3,0 kWh)")
+# Un tramo es horas **seguidas**: tres sueltas son tres tramos, no uno.
+sueltas = {"lavav": {hh(D10, 13): 1.0, hh(D10, 21): 1.0, hh(D11, 13): 1.0}}
+d8b = desglose.filas(LAVAV, sueltas, reparto_de(CONT2), importada_de(CONT2), PRECIOS2.get)
+sueltos = {f["id"]: f for f in d8b["rows"]}["lavav"]["detail"]["runs"]
+ok(sueltos == 3, f"horas sueltas son tramos sueltos ({sueltos})")
 
 print()
 if fallos:

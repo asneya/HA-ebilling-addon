@@ -2,6 +2,46 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.63.0
+
+### Al abrir una fila del desglose, lo que la suma del mes esconde
+
+Una fila que dice «lavavajillas · 7,2 kWh · 1,19 €» no deja hacer nada con la
+información. Lo que se puede cambiar es **la hora**, y para verla hay que abrirla:
+
+- cuántos **días** se usó y en cuántos **tramos**;
+- qué **día salió más caro**, que es donde se ve si fue una vez o es la costumbre;
+- y una **tira de 24 barras** con lo que gastó a cada hora del día.
+
+La tira es la pieza accionable de toda la pantalla. Con los datos del banco, el
+lavavajillas tiene todo su bulto en las 21 y 22 h: eso se ve de un golpe, y en el total
+del mes no se veía.
+
+### Cada barra va partida por origen
+
+Primero la escribí solo con el «cuándo», y al mirarla salió que era media respuesta: dos
+barras iguales a las 13 y a las 22 dicen lo mismo y no cuestan lo mismo. Ahora cada barra
+lleva en ámbar lo que puso el sol o la batería y en azul lo comprado, con la fracción del
+reparto de esa hora —la misma que usa la atribución de la fila, no una segunda cuenta—.
+
+De paso, la tira lleva línea de base: sin ella las horas vacías se leían como una tira a
+medio pintar en vez de como «aquí no se usó».
+
+### «Tramos», no «ciclos», y eso es una decisión
+
+A esta resolución —la hora, que es lo que Home Assistant guarda de un mes entero— **no se
+puede contar ciclos**. Dos lavados en la misma hora son un tramo, y uno que cruza una hora
+sin gastar son dos. El recuento se publica con el nombre de lo que es, y la nota al pie lo
+dice, en vez de llamarlos ciclos y publicar una cifra que estos datos no sostienen.
+
+Los ciclos de verdad se aprenden con estadísticas de cinco minutos, que el recorder guarda
+unos diez días: sirven para la Home, no para un mes.
+
+### Y «el resto de la casa» no se abre
+
+No es algo que se pueda mover a otra hora, así que no tiene detalle que enseñar. El banco
+lo comprueba, porque una fila que se abre para no decir nada es peor que una que no se abre.
+
 ## 0.62.0
 
 ### «De más» y no «ahorro»
