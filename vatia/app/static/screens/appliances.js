@@ -24,7 +24,7 @@ const ICONOS = [
   ["lavadora", "Lavadora"], ["lavavajillas", "Lavavajillas"],
   ["horno", "Horno"], ["coche", "Coche"],
   ["aire-acondicionado", "Aire acondicionado"], ["ordenador", "Ordenador"],
-  ["movil", "Móvil"], ["congelador", "Congelador"],
+  ["movil", "Móvil"], ["nevera", "Nevera"], ["congelador", "Congelador"],
   ["iluminacion", "Iluminación"], ["cortacesped", "Cortacésped"],
   ["microondas", "Microondas"], ["television", "Televisión"],
   ["freidora", "Freidora de aire"], ["ventilador", "Ventilador"],

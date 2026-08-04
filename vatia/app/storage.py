@@ -242,13 +242,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 DEFAULT_APPLIANCES: list[dict[str, Any]] = []
 
 # Glifos disponibles para un electrodoméstico (los del sprite) y color por
-# defecto. Los cuatro primeros vienen dibujados del prototipo del diseño; los
-# diez de después se añadieron a mano en el sprite para cubrir más aparatos.
+# defecto. Lavadora, lavavajillas y coche vienen dibujados del prototipo del
+# diseño; el horno y los demás se dibujaron a mano en el sprite para cubrir más
+# aparatos. El último es el comodín: cualquier glifo desconocido cae en él.
 APPLIANCE_ICONS = (
     "lavadora", "lavavajillas", "horno", "coche",
-    "aire-acondicionado", "ordenador", "movil", "congelador", "iluminacion",
-    "cortacesped", "microondas", "television", "freidora", "ventilador",
-    "potencia",
+    "aire-acondicionado", "ordenador", "movil", "nevera", "congelador",
+    "iluminacion", "cortacesped", "microondas", "television", "freidora",
+    "ventilador", "potencia",
 )
 APPLIANCE_COLOR = "#0f7d8a"
 # Las tres formas de uso que se pueden elegir a mano. Vacío = detectarlo, y

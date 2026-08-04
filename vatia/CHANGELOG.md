@@ -2,6 +2,43 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.58.0
+
+### El horno era una casa
+
+De una observación al ver la lista de glifos: *«ok arregla ese icono»*. El `horno` venía
+extraído del prototipo del diseño y era, trazo por trazo, **la misma casa** que el glifo
+`casa`: tejado a dos aguas y una puerta. En un catálogo de electrodomésticos eso no dice
+«horno», dice «casa», y con la insignia de la forma de uso al lado se leía como un error
+del programa.
+
+Redibujado con lo que distingue a un horno de todo lo demás: cuerpo, el panel de mandos
+arriba con sus dos ruedas y la ventana ancha de la puerta. Es justo lo que lo separa del
+`microondas`, donde el panel va al lado y la puerta no ocupa el ancho.
+
+Es la primera vez que se descarta un glifo del handoff, así que se ha hecho **con
+nombre**: `tools/generar-sprite.py` lleva un conjunto `REDIBUJADOS` con un solo id, y el
+glifo nuevo vive en `A_MANO` como los demás dibujados a mano. El resto del prototipo se
+sigue extrayendo tal cual, y una regeneración del sprite ya no puede traer la casa de
+vuelta. Una excepción con nombre, no una puerta abierta a redibujar lo que apetezca.
+
+### Y una nevera, que es distinta de un congelador
+
+*«Y mete otro de nevera»*. Sube a dieciséis el catálogo del selector, y es un hueco que
+se notaba: la nevera es el aparato continuo por excelencia —el que sale en la fila con
+el aro permanente— y hasta ahora había que representarla con el congelador o con el rayo
+genérico.
+
+El nombre del glifo solo aparece en el rótulo al pasar por encima, así que la nevera
+tenía que distinguirse del congelador **por la forma**, no por la etiqueta: el
+congelador lleva un copo en el cuerpo grande; la nevera, los dos tiradores. Uno dice
+«frío» y el otro «se abre», que es la diferencia que hay entre los dos aparatos.
+Comprobado a 21 px, que es el tamaño en el que se ve en la fila.
+
+Las tres listas —sprite, selector y lista blanca del servidor— se han movido juntas, y
+`tests/python/glifos.py` lo verifica: quitando la nevera de una de ellas sale en rojo
+por dos vías.
+
 ## 0.57.0
 
 ### Un aro verde alrededor del icono, en vez de un punto que late
