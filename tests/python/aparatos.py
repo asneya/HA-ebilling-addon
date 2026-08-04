@@ -264,22 +264,36 @@ if BASE:
     for n in continuos:
         ok(bool(otra.get(n, {}).get("today")),
            f"y {n} sigue trayendo su día en la segunda, no solo en la primera")
-    # El coche del Home Assistant falso está siempre cargando, y lleva siempre 40
-    # minutos: si esta fila no sale, el camino de «en marcha» no lo recorre nadie.
+    # Lo que valga para cualquiera que esté en marcha, para todos: en un día par el
+    # Home Assistant falso también pone la lavadora, y dar por hecho que solo hay uno
+    # ponía este banco en rojo por el calendario y no por el código.
     marcha = [n for n, r in una.items() if r.get("running")]
     ok(bool(marcha), f"y algo en marcha, que si no este camino no se prueba ({marcha})")
     for n in marcha:
-        r, p = una[n], una[n]["running"]
+        r = una[n]
         ok(bool(otra[n].get("so_far")),
            f"{n} en marcha: su origen medido aguanta la caché")
         ok(r["best"] is None and not r["worth_waiting"],
-           f"y no se le propone hora ni se le pide esperar")
-        ok(abs(p["elapsed_h"] - 0.67) < 0.09,
-           f"lleva los 40 min que lleva ({p['elapsed_h']} h)")
-        ok(p["typical_h"] and abs(p["typical_h"] - 1.0) < 0.2,
+           f"y a {n} no se le propone hora ni se le pide esperar")
+    # Y las cifras, atadas al coche, que es el único que el falso garantiza en marcha
+    # a cualquier hora: arrancó hace 40 minutos, siempre, de un ciclo de una hora.
+    coche = una.get("Coche", {}).get("running")
+    ok(bool(coche), "el coche está cargando, que es el que el falso garantiza")
+    if coche:
+        ok(abs(coche["elapsed_h"] - 0.67) < 0.09,
+           f"lleva los 40 min que lleva ({coche['elapsed_h']} h)")
+        ok(coche["typical_h"] and abs(coche["typical_h"] - 1.0) < 0.2,
            f"con el ciclo típico de los días anteriores, no el de hoy a medias "
-           f"({p['typical_h']} h)")
-        ok(p["over"] is False and 50 < p["pct"] < 85, f"y va por el {p['pct']} %")
+           f"({coche['typical_h']} h)")
+        ok(coche["over"] is False and 50 < coche["pct"] < 85,
+           f"y va por el {coche['pct']} %")
+    # El aro verde: lo llevan los que están dando ahora, y **también los continuos**.
+    encendidos = [n for n, r in una.items() if r.get("on")]
+    ok("Coche" in encendidos, f"el coche va rodeado ({encendidos})")
+    ok(all(n in encendidos for n in continuos),
+       f"y los de siempre encendido también, que es lo que se pidió ({continuos})")
+    apagados = [n for n, r in una.items() if not r.get("on")]
+    ok(bool(apagados), f"y los que no están dando, no ({apagados})")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

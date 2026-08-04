@@ -386,6 +386,10 @@ def plan(
             # `True` cuando la forma la ha decidido la aplicación y no su ficha:
             # así la tarjeta puede decirlo y quien la lea puede corregirla.
             "kind_auto": not str(a.get("kind") or "").strip(),
+            # Si está dando ahora mismo. Lo resuelve `live` —es quien tiene la
+            # lectura del momento delante— y vale para las tres formas, así que va
+            # aquí arriba y no en la rama de los movibles.
+            "on": bool(datos.get("encendido")),
         }
         if cual == "continuo":
             # No tiene ciclo ni hora que elegir: lo que lleva hoy y de dónde salió.

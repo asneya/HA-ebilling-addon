@@ -87,6 +87,7 @@ PYTHON = [
     ("modulos.py", ["modulos.py"], {}),
     ("fixtures.py", ["fixtures.py"], {}),
     ("barra.py", ["barra.py"], {}),
+    ("glifos.py", ["glifos.py"], {}),
     ("forma.py", ["forma.py"], {}),
     ("sesgo.py", ["sesgo.py"], {}),
     ("desvio.py", ["desvio.py"], {}),
