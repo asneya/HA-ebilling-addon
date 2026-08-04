@@ -10,8 +10,10 @@ import { fmtEUR, fmtNum, fmtDay, periodShort } from "../core/format.js";
 import { settings, workingPeriod, reloadConfig } from "../core/config.js";
 import { ensureBars, renderReadout } from "../core/graficos.js";
 import { showView, showSub, currentSub } from "../core/nav.js";
+import { SUM_COLORS } from "../core/colors.js";
 
 let simulation = null;
+let breakdown = null;
 let cyclesBack = 0;
 let projection = false;
 let openBillId = null;
@@ -87,6 +89,117 @@ function renderSimulation() {
 
   renderBills(sim);
   renderDailyChart(sim.consumption.daily);
+}
+
+/* ------------- quién se ha gastado la factura ------------- */
+
+/* Va en su propia petición y no en la comparativa: pide los contadores del ciclo
+   por horas y la potencia por horas de cada aparato, y la lista de tarifas —que es
+   lo primero que se ve al entrar— no tiene por qué esperar eso. */
+async function loadBreakdown() {
+  $("#split-rows").innerHTML =
+    `<p class="empty">Repartiendo el ciclo hora a hora…</p>`;
+  $("#split-note").textContent = "";
+  $("#split-sub").textContent = "";
+  try {
+    breakdown = await api(`breakdown?cycles_back=${cyclesBack}`);
+    renderBreakdown();
+  } catch (err) {
+    breakdown = null;
+    // Sin desglose la pantalla sigue sirviendo: la comparativa está arriba. Se
+    // dice qué ha fallado en su tarjeta y no en el banner de la pantalla.
+    $("#split-rows").innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+  }
+}
+
+/* Una fila: icono, nombre, la barra de origen y lo que cuesta. La barra es la
+   misma que en la Home —sol, batería y red con los colores de las series— porque
+   es la misma pregunta: de dónde salió esa energía.
+
+   El ancho de la barra son **kWh**, y no euros. Se probaron los euros, que era lo
+   que parecía pedir la pantalla, y se leen mal: un horno que gasta 8,8 kWh de sol
+   cuesta 0,00 €, y con la barra en euros salía un muñón de tres píxeles al lado de
+   un coche de 4,8 kWh. El ojo lee el muñón como «no ha gastado nada», que es lo
+   contrario de lo que pasó. Con la barra en energía la fila cuenta la historia
+   entera: barra larga y ámbar, cero euros. Eso es justo el consejo de toda la
+   aplicación, y el dinero está a la derecha, donde se compara mejor de todos
+   modos porque va en columna. */
+function filaDelReparto(f, maxKwh) {
+  const partes = [
+    ["from_solar", f.sun_kwh || 0], ["from_battery", f.battery_kwh || 0],
+    ["from_grid", f.grid_kwh || 0],
+  ];
+  const suma = partes.reduce((a, [, v]) => a + v, 0);
+  const trozos = suma <= 0 ? "" : partes
+    .filter(([, v]) => v / suma >= 0.02)
+    .map(([k, v]) => `<i style="width:${((v / suma) * 100).toFixed(1)}%;background:${
+      SUM_COLORS[k]}" title="${esc(`${fmtNum.format(v)} kWh`)}"></i>`).join("");
+  const peso = maxKwh > 0 ? f.kwh / maxKwh : 0;
+  // Y el porcentaje sí es del dinero, que es la pregunta del título. Con la barra
+  // en energía las dos cosas no se confunden: una está en el renglón y la otra al
+  // lado del nombre.
+  const pct = f.eur != null && breakdown?.detail?.eur
+    ? Math.round((f.eur / breakdown.detail.eur) * 100) : null;
+  return `
+    <div class="sp-row" data-kind="${esc(f.kind)}" data-id="${esc(f.id)}">
+      <span class="ad-chip"${f.color ? ` style="--ap:${esc(f.color)}"` : ""}>
+        <svg class="i"><use href="#i-${esc(f.icon)}"/></svg>
+      </span>
+      <div class="sp-mid">
+        <div class="sp-name">${esc(f.name)}${
+          pct != null ? `<span class="sp-pct">${pct}%</span>` : ""}</div>
+        <span class="sp-barra" style="width:${Math.max(3, peso * 100).toFixed(0)}%">${trozos}</span>
+      </div>
+      <div class="sp-num">
+        <b>${f.eur == null ? "—" : fmtEUR.format(f.eur)}</b>
+        <span>${fmtNum.format(f.kwh)} kWh</span>
+      </div>
+    </div>`;
+}
+
+function renderBreakdown() {
+  const b = breakdown;
+  const caja = $("#split-rows");
+  if (!b) return;
+  if (!b.appliances) {
+    caja.innerHTML = `<p class="empty">Sin electrodomésticos medidos no hay a quién
+      repartir la factura. Se añaden en Ajustes → Electrodomésticos, con su sensor
+      de potencia.</p>`;
+    $("#split-sub").textContent = "";
+    return;
+  }
+  const d = b.detail;
+  if (!d || !d.rows.length) {
+    caja.innerHTML = `<p class="empty">No hay estadísticas horarias del ciclo con
+      las que repartirlo.</p>`;
+    return;
+  }
+  const maxKwh = Math.max(...d.rows.map((f) => f.kwh || 0));
+  caja.innerHTML = d.rows.map((f) => filaDelReparto(f, maxKwh)).join("");
+
+  // El encabezado dice de qué tarifa son los euros, porque un precio por hora es
+  // de una tarifa y no de todas.
+  $("#split-sub").innerHTML = b.tariff
+    ? `Al precio de <b>${esc(b.tariff.name)}</b> hora a hora · término de energía
+       ${d.eur == null ? "" : `<b>${fmtEUR.format(d.eur)}</b>`}`
+    : `Marca una tarifa como <b>«la mía»</b> arriba y esto se pone en euros. Sin
+       ella se enseña la energía y de dónde salió.`;
+
+  const notas = [];
+  if (b.pvpc_error) notas.push(`Sin precios PVPC: ${esc(b.pvpc_error)}`);
+  if (d.trimmed_kwh > 0) {
+    notas.push(`Se han recortado ${fmtNum.format(d.trimmed_kwh)} kWh en las horas en
+      que los enchufes sumaban más que el contador de la casa.`);
+  }
+  const sin = d.rows.find((f) => f.kind === "descuadre");
+  if (sin) {
+    notas.push(`«Sin asignar» es energía comprada que el reparto no pudo colocar:
+      el contador de la casa marca menos de lo que la red le entregó.`);
+  }
+  notas.push(`Repartido sobre las ${d.hours} horas del ciclo con datos, cada una a
+    su precio y cobrando solo lo que salió de la red: lo que puso el sol no cuesta.
+    Las filas suman los ${fmtNum.format(d.imported_kwh)} kWh importados.`);
+  $("#split-note").innerHTML = notas.join(" ");
 }
 
 /* La tarjeta de tarifa del prototipo: barra de color, total grande y el resto
@@ -262,9 +375,9 @@ function prefillCustom() {
 
 /* ------------- controles ------------- */
 
-$("#prev-cycle").addEventListener("click", () => { cyclesBack += 1; loadSimulation(); });
-$("#next-cycle").addEventListener("click", () => { if (cyclesBack > 0) { cyclesBack -= 1; loadSimulation(); } });
-$("#refresh-btn").addEventListener("click", loadSimulation);
+$("#prev-cycle").addEventListener("click", () => { cyclesBack += 1; recargar(); });
+$("#next-cycle").addEventListener("click", () => { if (cyclesBack > 0) { cyclesBack -= 1; recargar(); } });
+$("#refresh-btn").addEventListener("click", recargar);
 $("#projection-toggle").addEventListener("change", (e) => {
   projection = e.target.checked;
   if (simulation) renderBills(simulation);
@@ -288,9 +401,34 @@ on("vista", ({ name }) => {
   // defecto), sin tener que pulsar su segmento.
   if (!$(".subview.active")) showSub(currentSub() || "sim");
   if (!simulation) loadSimulation();
+  // El desglose se pide **al entrar** y no en el arranque, que es donde se pide
+  // la comparativa: son dos consultas más —los contadores del ciclo por horas y
+  // la potencia por horas de cada aparato— y arrancar la aplicación en la Home no
+  // tiene por qué pagarlas. Y va por su cuenta y no colgado de `simulation`,
+  // porque el arranque ya deja la comparativa cargada: comprobar esa sí dejaba el
+  // desglose sin pedir nunca.
+  if (!breakdown) loadBreakdown();
 });
-on("datos", () => loadSimulation());
+on("datos", () => recargar());
 // La tarifa contratada y el nombre de las tarifas salen de la configuración:
 // si cambia, las tarjetas se repintan con lo que ya hay, sin pedir nada.
-on("config", () => { if (simulation) renderBills(simulation); });
-on("tema", () => { if (simulation) renderSimulation(); });
+let miTarifa = null;
+on("config", () => {
+  if (simulation) renderBills(simulation);
+  // El desglose sí hay que volver a pedirlo: sus euros son los precios hora a
+  // hora de **esa** tarifa, así que con otra marcada son otros.
+  const ahora = settings()?.my_tariff_id || "";
+  if (breakdown && ahora !== miTarifa) { miTarifa = ahora; loadBreakdown(); }
+});
+on("tema", () => {
+  if (simulation) renderSimulation();
+  if (breakdown) renderBreakdown();
+});
+
+/* Las dos peticiones de la pantalla, en el orden en que se miran: primero la
+   comparativa, que es lo que se ve al entrar, y el desglose detrás. */
+async function recargar() {
+  miTarifa = settings()?.my_tariff_id || "";
+  await loadSimulation();
+  await loadBreakdown();
+}

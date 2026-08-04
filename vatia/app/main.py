@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 import billing
 import datasources
+import desglose
 import live
 import panel
 import pvpc
@@ -1055,6 +1056,105 @@ async def detail(
     cycles_back: int = Query(0, ge=0, le=24),
 ):
     return await _run_detail(cycles_back=cycles_back, start=start, end=end)
+
+
+async def _run_breakdown(
+    cycles_back: int = 0,
+    start: str | None = None,
+    end: str | None = None,
+    tariff_id: str | None = None,
+) -> dict:
+    """De la factura del ciclo, qué parte es de cada cosa.
+
+    Va aparte de `/api/simulate` y no dentro a propósito: pide dos consultas más
+    —los contadores por horas del ciclo entero y la potencia por horas de cada
+    aparato— y la comparativa de tarifas, que es lo primero que se ve al entrar en
+    Facturación, no tiene por qué esperarlas.
+
+    Los euros salen de **una** tarifa, porque un precio por hora es de una tarifa y
+    no de todas: la marcada como «la mía», o la que se pida. Sin ninguna marcada se
+    publican los kWh y su origen, que ya es la mitad de la respuesta, y la interfaz
+    dice por qué no hay euros en vez de poner los de una tarifa cualquiera.
+    """
+    config = storage.load()
+    settings = config["settings"]
+    tz = _tz(settings)
+    now = datetime.now(tz)
+    cycle_start, cycle_end, is_current = _resolve_period(
+        settings, now, cycles_back, start, end
+    )
+    fetch_end = min(cycle_end, now)
+    if fetch_end <= cycle_start:
+        raise HTTPException(400, "El periodo pedido está en el futuro.")
+
+    lista = config["appliances"]
+    quiero = tariff_id or settings.get("my_tariff_id") or ""
+    tarifa = next((t for t in config["tariffs"] if t["id"] == quiero), None)
+
+    holidays = set(settings.get("holidays") or [])
+    pvpc_prices = None
+    pvpc_error = None
+    if tarifa is not None and tarifa["energy"]["type"] == "pvpc":
+        try:
+            pvpc_prices = await pvpc.get_prices(cycle_start, fetch_end, tz)
+        except Exception as err:  # noqa: BLE001 - sin precios se publican los kWh
+            pvpc_error = str(err)
+
+    def precio_de(iso: str) -> float | None:
+        if tarifa is None:
+            return None
+        try:
+            momento = datetime.fromisoformat(iso)
+        except ValueError:
+            return None
+        return billing.price_now(tarifa, momento, holidays, pvpc_prices)[0]
+
+    try:
+        states = await live.fetch_states(settings)
+        reparto, importada = await desglose.reparto_del_periodo(
+            settings, states, tz, cycle_start, fetch_end
+        )
+        por_aparato = await desglose.por_horas_de_aparatos(
+            settings, states, lista, tz, cycle_start, fetch_end
+        )
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error construyendo el desglose del ciclo", exc_info=True)
+        raise HTTPException(502, f"No se pudo construir el desglose: {err}") from err
+
+    detalle = desglose.filas(lista, por_aparato, reparto, importada, precio_de)
+    return {
+        "period": {
+            "start": cycle_start.isoformat(),
+            "end": cycle_end.isoformat(),
+            "is_current": is_current,
+        },
+        "tariff": None if tarifa is None else {
+            "id": tarifa["id"], "name": tarifa.get("name"),
+            "color": tarifa.get("color"),
+            "energy_type": tarifa["energy"]["type"],
+        },
+        # Por qué no hay euros, si no los hay: sin tarifa marcada (`tariff` en nulo)
+        # o con un PVPC cuyos precios no se han podido traer. Callarlo dejaba una
+        # tabla de kWh sin explicación.
+        "pvpc_error": pvpc_error,
+        "appliances": len(lista),
+        "detail": detalle,
+        "generated_at": now.isoformat(),
+    }
+
+
+@app.get("/api/breakdown")
+async def breakdown(
+    start: str | None = Query(None),
+    end: str | None = Query(None),
+    cycles_back: int = Query(0, ge=0, le=24),
+    tariff: str | None = Query(None),
+):
+    return await _run_breakdown(
+        cycles_back=cycles_back, start=start, end=end, tariff_id=tariff
+    )
 
 
 @app.get("/api/health")
