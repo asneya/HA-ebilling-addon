@@ -78,6 +78,13 @@ filas = re.findall(
     r'<svg width="19"[^>]*>(.*?)</svg>.*?<div style="font-size:15px[^"]*">([^<]+)</div>',
     tarjeta, re.S)
 ALIAS = {"cargar el coche": "coche"}
+# El horno del prototipo es, trazo por trazo, **la misma casa** que el glifo `casa`:
+# tejado a dos aguas y una puerta. En una lista de electrodomésticos eso no dice
+# «horno», dice «casa», y con la insignia de la forma de uso al lado se leía como un
+# error del programa. Se descarta el del diseño y se redibuja abajo, en `A_MANO`.
+# El resto del prototipo se respeta como siempre: esto es una excepción con nombre,
+# no una puerta abierta a redibujar lo que apetezca.
+REDIBUJADOS = {"horno"}
 if len(filas) != 4:
     raise SystemExit(f"esperaba 4 electrodomésticos en el prototipo, encontré {len(filas)}")
 # Un glifo son formas y nada más. Sin esta comprobación se colaron un `</div>` y
@@ -87,6 +94,8 @@ PERMITIDAS = {"path", "circle", "rect", "line", "polyline", "polygon", "ellipse"
 for svg, nombre in filas:
     nombre = html.unescape(nombre).strip()
     ident = ALIAS.get(nombre.lower(), slug(nombre))
+    if ident in REDIBUJADOS:
+        continue
     if ident in vistos:
         raise SystemExit(f"nombre repetido: {ident}")
     vistos.add(ident)
@@ -98,13 +107,25 @@ for svg, nombre in filas:
         raise SystemExit(f"«{ident}» trae algo que no es una forma: {sorted(etiquetas - PERMITIDAS)}")
     simbolos.append(f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>')
 
-# --- los diez añadidos a mano, sin handoff ------------------------------------
+# --- los doce añadidos a mano, sin handoff ------------------------------------
 # «Aumentar los glifos disponibles para representar electrodomésticos» pidió más
 # aparatos de los que hay en el diseño (que solo trae los 4 del prototipo). No
 # hay handoff del que extraerlos, así que van dibujados aquí mismo —mismo trazo,
 # misma caja de 24— y sobreviven a una regeneración porque el script los añade
 # después de leer los documentos, no antes.
 A_MANO = {
+    # El horno que sustituye al del prototipo: cuerpo, panel de mandos arriba con
+    # sus dos ruedas y la ventana de la puerta. Es justo lo que lo distingue de un
+    # microondas —ahí el panel va al lado y la puerta no ocupa el ancho— y de la casa.
+    "horno": '<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2"/>'
+        '<path d="M3.4 9.4h17.2"/><path d="M6.8 7h.1M9.8 7h.1"/>'
+        '<rect x="6.4" y="12" width="11.2" height="5" rx="1.2"/>',
+    # Nevera: cuerpo, el congelador de arriba y **los tiradores**. El nombre solo va
+    # en el rótulo al pasar por encima, así que tiene que distinguirse del congelador
+    # por la forma: aquel lleva un copo en la parte de abajo y este, tiradores. Uno
+    # dice «frío» y el otro «se abre», que es la diferencia que hay.
+    "nevera": '<rect x="5" y="3.4" width="14" height="17.2" rx="2"/>'
+        '<path d="M5 8.6h14"/><path d="M15.4 4.8v2.2M15.4 10.6v4.8"/>',
     "aire-acondicionado": '<rect x="3" y="5.6" width="18" height="7" rx="2.4"/>'
         '<path d="M7 9.1h10"/><path d="M6.4 16.2c.7 1.6 1.5 1.6 2.2 0'
         'M11.9 16.2c.7 1.9 1.5 1.9 2.2 0M17.4 16.2c.6 1.3 1.2 1.3 1.8 0"/>',
@@ -140,13 +161,13 @@ for ident, cuerpo in A_MANO.items():
 cabecera = (
     "<!--\n"
     f"  Set de iconos de Vatia: {len(simbolos)} glifos, trazo de 1,75, remate\n"
-    "  redondo y caja de 24. Los primeros 46 vienen extraídos del diseño: los 42\n"
-    "  del documento de sistema y los 4 de electrodoméstico de las filas del\n"
-    "  prototipo. Los 10 últimos —aire acondicionado, ordenador, móvil, congelador,\n"
-    "  iluminación, cortacésped, microondas, televisión, freidora y ventilador— no\n"
-    "  están en ningún handoff: se dibujaron a mano para ampliar el catálogo de\n"
-    "  electrodomésticos, con el mismo trazo y la misma caja. `tools/generar-sprite.py`\n"
-    "  los añade después de la extracción, así que sobreviven a una regeneración.\n\n"
+    "  redondo y caja de 24. Los primeros 45 vienen extraídos del diseño: los 42\n"
+    "  del documento de sistema y 3 de los 4 de electrodoméstico de las filas del\n"
+    "  prototipo —el horno de ahí era la misma casa que el glifo `casa`, así que se\n"
+    "  descarta y se redibuja—. Los 12 últimos no están en ningún handoff: se\n"
+    "  dibujaron a mano para ampliar el catálogo de electrodomésticos, con el mismo\n"
+    "  trazo y la misma caja. `tools/generar-sprite.py` los añade después de la\n"
+    "  extracción, así que sobreviven a una regeneración.\n\n"
     "  Ninguno lleva relleno, degradado ni color fijo: el color entra por\n"
     "  `stroke: currentColor` desde el CSS, así que el mismo glifo sirve en\n"
     "  tinta de nivel 1, 2 o 3 y en color de estado.\n\n"
