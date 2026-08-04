@@ -14,7 +14,6 @@ import { SUM_COLORS } from "../core/colors.js";
 
 let simulation = null;
 let breakdown = null;
-let bestDay = null;
 let cyclesBack = 0;
 let projection = false;
 let openBillId = null;
@@ -341,89 +340,6 @@ function renderDailyChart(daily) {
   renderReadout("daily-chart", null, "Toca un día para ver su reparto");
 }
 
-/* ------------- lo que había sobre la mesa ayer ------------- */
-
-/* El «perfect optimization» de EMHASS, pero sobre un día ya cerrado: con el sol, el
-   consumo y los precios que de verdad hubo. Por eso se puede decir sin condicionales
-   —no depende de ninguna previsión— y por eso cierra el bucle que la aplicación tenía
-   abierto: prometía «gratis a las 13:00» y no volvía a mirar si salió gratis.
-
-   Lo que se enseña es **una diferencia** y nunca «lo que gastaste»: el modelo de ahí
-   no tiene batería, y publicar un coste absoluto pondría dos cifras del mismo día en
-   dos pantallas. Ver `optimo.py`. */
-async function loadBestDay() {
-  $("#best-rows").innerHTML = `<p class="empty">Repasando el día de ayer…</p>`;
-  $("#best-note").textContent = "";
-  $("#best-sub").textContent = "";
-  try {
-    bestDay = await api("bestday");
-    renderBestDay();
-  } catch (err) {
-    bestDay = null;
-    $("#best-rows").innerHTML = `<p class="empty">${esc(err.message)}</p>`;
-  }
-}
-
-function renderBestDay() {
-  const b = bestDay;
-  const caja = $("#best-rows");
-  if (!b) return;
-  if (!b.movable) {
-    caja.innerHTML = `<p class="empty">Sin electrodomésticos que se puedan mover no hay
-      nada que repasar. Una nevera no tiene hora que elegir; una lavadora sí.</p>`;
-    return;
-  }
-  const d = b.best;
-  if (!d || !d.rows.length) {
-    caja.innerHTML = `<p class="empty">Ayer no hubo ciclos medidos, o el tejado no dejó
-      hueco libre en ninguna hora.</p>`;
-    return;
-  }
-  caja.innerHTML = d.rows.map((f) => {
-    const movido = !f.already_best;
-    return `
-    <div class="bd-row${movido ? " bd-movido" : ""}" data-id="${esc(f.id)}">
-      <span class="ad-chip"${f.color ? ` style="--ap:${esc(f.color)}"` : ""}>
-        <svg class="i"><use href="#i-${esc(f.icon)}"/></svg>
-      </span>
-      <div class="bd-mid">
-        <div class="bd-name">${esc(f.name)}</div>
-        <div class="bd-when">${movido
-          ? `se puso <b>${cuandoHora(f.ran_at)}</b> · mejor <b>${cuandoHora(f.best_at)}</b>`
-          : `a las <b>${cuandoHora(f.ran_at)}</b> · ya era su mejor hueco`}</div>
-      </div>
-      <div class="bd-num">
-        <b>${f.saving_eur == null ? "—"
-          : f.saving_eur > 0 ? `+${fmtEUR.format(f.saving_eur)}` : "—"}</b>
-        <span>${fmtNum.format(f.kwh)} kWh</span>
-      </div>
-    </div>`;
-  }).join("");
-
-  const total = d.saving_eur;
-  $("#best-sub").innerHTML = total == null
-    ? `Sin una tarifa marcada como <b>«la mía»</b> se enseñan las horas, no los euros.`
-    : total >= 0.05
-      ? `Moviendo los ciclos de ayer a su mejor hueco te habrías ahorrado
-         <b>${fmtEUR.format(total)}</b>.`
-      : `Ayer aprovechaste el sol prácticamente todo lo que se podía: moviendo los
-         ciclos no había ni cinco céntimos que ganar.`;
-
-  $("#best-note").innerHTML = `Con el sol, el consumo y los precios que de verdad hubo
-    el ${esc(fmtDay(d.date, false))} —aquí no entra ninguna previsión—. Es lo que <b>había</b> sobre la
-    mesa, no lo que se hizo mal: que el lavavajillas se pudiera poner a las tres de la
-    madrugada no significa que se pudiera. La batería queda fuera de esta cuenta, así
-    que la cifra es una diferencia y no una factura: para eso está el desglose de
-    arriba.`;
-}
-
-/* Solo la hora: el día ya lo dice el encabezado, y «ayer a las 22:00» en cada fila
-   sería el renglón largo y pequeño que ya se pidió quitar una vez. */
-function cuandoHora(iso) {
-  return new Date(iso).toLocaleTimeString("es-ES",
-    { hour: "2-digit", minute: "2-digit" });
-}
-
 /* ------------- periodo de trabajo ------------- */
 
 async function applyCustomPeriod() {
@@ -492,7 +408,6 @@ on("vista", ({ name }) => {
   // porque el arranque ya deja la comparativa cargada: comprobar esa sí dejaba el
   // desglose sin pedir nunca.
   if (!breakdown) loadBreakdown();
-  if (!bestDay) loadBestDay();
 });
 on("datos", () => recargar());
 // La tarifa contratada y el nombre de las tarifas salen de la configuración:
@@ -503,17 +418,11 @@ on("config", () => {
   // El desglose sí hay que volver a pedirlo: sus euros son los precios hora a
   // hora de **esa** tarifa, así que con otra marcada son otros.
   const ahora = settings()?.my_tariff_id || "";
-  if (breakdown && ahora !== miTarifa) {
-    miTarifa = ahora;
-    loadBreakdown();
-    // El óptimo de ayer también va en euros de **esa** tarifa.
-    loadBestDay();
-  }
+  if (breakdown && ahora !== miTarifa) { miTarifa = ahora; loadBreakdown(); }
 });
 on("tema", () => {
   if (simulation) renderSimulation();
   if (breakdown) renderBreakdown();
-  if (bestDay) renderBestDay();
 });
 
 /* Las dos peticiones de la pantalla, en el orden en que se miran: primero la
@@ -522,5 +431,4 @@ async function recargar() {
   miTarifa = settings()?.my_tariff_id || "";
   await loadSimulation();
   await loadBreakdown();
-  await loadBestDay();
 }

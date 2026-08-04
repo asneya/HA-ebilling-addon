@@ -4,12 +4,23 @@ Todas las versiones relevantes del add-on Vatia.
 
 ## 0.61.0
 
-### Lo que había sobre la mesa ayer
+### Lo que había sobre la mesa, en el resumen del final del día
 
 Es el «perfect optimization» de EMHASS traído a lo que Vatia puede afirmar. Aquella
 resuelve el óptimo del día para **mandar** consignas a los interruptores; esto lo
 calcula sobre un día **ya cerrado**, con el sol, el consumo y los precios que de verdad
 hubo, y no manda nada: mide.
+
+Y va en el **resumen del final del día**, colgado de «Lo que se puso hoy», porque es su
+momento: la tarjeta del cierre sale sola al anochecer, cuando el sol ya se ha puesto,
+el día está hecho y lo único que queda es contarlo. Cada ciclo dice ahí mismo a qué
+hora habría salido más barato, y el pie resume lo que había en total.
+
+Eso trae además una ventaja que no se buscaba: **no cuesta ninguna consulta**. Todo lo
+que la cuenta necesita —el reparto hora a hora del día, lo que cada aparato gastó en
+cada hora (`today_by_hour`, que ya se publicaba) y los precios— estaba en el mismo
+payload con el que se dibuja la Home. El endpoint que se había escrito para esto se
+retira, con su import: un endpoint que nadie llama es peso muerto.
 
 Y esa es toda la diferencia que importa. Un plan del día que viene depende de una
 previsión, y la previsión falla —el propio sesgo medido baja al 0,85 en días que se
@@ -17,10 +28,14 @@ desvían—. Un repaso de ayer no depende de ninguna. Por eso se puede decir sin
 condicionales, y por eso cierra el bucle que la aplicación tenía abierto desde el
 principio: prometía «gratis a las 13:00» y nunca volvía a mirar si salió gratis.
 
-Con los datos del banco: *«Moviendo los ciclos de ayer a su mejor hueco te habrías
-ahorrado 0,58 €»*, y debajo el lavavajillas que se puso a las 22:00 cuando su hueco
-estaba a las 10:00 (0,39 €), el coche a las 23:00 en vez de las 11:00 (0,19 €) y el
-horno, que ya estaba donde tocaba.
+Con los datos del banco: el lavavajillas dice «↑ mejor a las 10:00 (+0,39 €)» debajo de
+su fila, el coche «↑ mejor a las 11:00 (+0,19 €)», el horno no dice nada porque ya
+estaba donde tocaba, y el pie remata: *«puestos en su mejor hueco te habrías ahorrado
+0,58 €»*.
+
+Solo hablan las filas que ganaban algo. Poner «ya era su mejor hueco» en cinco filas
+seguidas sería ruido, y además el pie ya lo resume — cuando no había nada que ganar lo
+dice él: «aprovechaste el sol prácticamente todo lo que se podía».
 
 ### Se publica una diferencia, y eso es deliberado
 
@@ -42,12 +57,20 @@ movibles, y el filtro va **antes de restar**: si la nevera se descontara del con
 la casa y luego no se colocara, su energía se perdería del modelo. Quedándose fuera cae
 donde le toca, en el suelo que no se puede mover.
 
-**Un empate movía el aparato.** El horno decía «se puso a las 13:00, mejor a las 12:00»
+**Un empate movía el aparato.** El horno decía «mejor a las 12:00» habiéndose puesto a las 13:00
 con 0,00 € de ahorro, porque las dos horas costaban lo mismo y el barrido empieza por la
 primera. Ahora se parte de la hora a la que se puso de verdad y solo se cambia por una
 mejora estricta —con medio céntimo de margen, que por debajo de ahí es el redondeo del
 reparto horario y no un hueco mejor—. De paso, «ya era su mejor hueco» puede decirse,
 que antes no salía nunca.
+
+### Y un tercero que cazó la regresión, no yo
+
+Al mover la cuenta al payload de la Home, las dos piezas que necesita —el reparto
+horario y los precios— salen de un bloque que **solo corre si hay aparatos
+configurados**. Sin ellos quedaban sin asignar y `/api/live` se caía entero con un
+`UnboundLocalError`: la Home en blanco, no solo esta tarjeta. Con la fixture que tiene
+aparatos no se veía; la regresión levanta instancias que no los tienen y ahí salió.
 
 ### Del forecaster de EMHASS: casi nada, y por buenas razones
 

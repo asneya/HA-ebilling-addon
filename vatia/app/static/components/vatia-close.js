@@ -54,14 +54,28 @@
     .ap-head { font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
                font-weight: 600; color: rgba(255,255,255,.7); margin-bottom: 9px; }
     .aparatos ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-    .aparatos li { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+    /* La fila es ahora dos renglones: el de siempre, y debajo la hora que habría
+       salido mejor. Metida dentro del nombre partía en cualquier ancho —la barra se
+       lleva el flex y al nombre le quedaban tres palabras—, así que va suelta y a
+       todo el ancho. */
+    .aparatos li { display: grid; gap: 2px; font-size: 13px; }
+    .ap-linea { display: flex; align-items: center; gap: 9px; }
     .ap-dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
-    .ap-n { color: #fff; }
+    .ap-n { color: #fff; min-width: 0; }
     /* La barra dice de un vistazo cuánto de ese ciclo cayó con sol: es la
        comparación entre aparatos, que en cifras hay que hacer a mano. */
     .ap-bar { flex: 1; min-width: 24px; height: 4px; border-radius: 2px;
               background: rgba(255,255,255,.18); overflow: hidden; }
     .ap-bar i { display: block; height: 100%; background: #7be3b6; }
+    /* La hora que habría salido mejor, colgada del nombre y en su propio renglón:
+       la fila ya iba llena y meterla en línea la partía en cualquier ancho. */
+    /* En ámbar y sangrada hasta debajo del nombre: se lee como una nota de la fila y
+       no como otro aparato. El ámbar es el del sol, que es de lo que habla. */
+    .ap-mejor { font-size: 11.5px; color: #ffd9a3; padding-left: 17px;
+                font-variant-numeric: tabular-nums; }
+    .ap-pie { font-size: 11.5px; line-height: 1.5; margin: 11px 0 0;
+              color: rgba(255,255,255,.66); text-wrap: pretty; }
+    .ap-pie b { color: rgba(255,255,255,.92); }
     .ap-k { flex: none; font-size: 12px; color: rgba(255,255,255,.8);
             font-variant-numeric: tabular-nums; }
     .note { margin: 14px 0 0; padding: 13px 15px; border-radius: 16px;
@@ -114,8 +128,17 @@
        aprovechó, que es lo único que se puede hacer distinto mañana. Cada ciclo
        se reparte por su solape con la ventana, así que una lavadora que empieza
        dentro y acaba fuera no cuenta como todo gratis ni como todo pagado. */
-    _aparatos(lista) {
+    _aparatos(lista, mejor) {
       if (!lista || !lista.length) return "";
+      // La hora que le habría salido mejor, por id, para poder colgarla de la fila
+      // que ya habla de ese aparato. Solo las que de verdad ganaban algo: decir «ya
+      // era su mejor hueco» en cinco filas sería ruido, y el titular ya lo resume.
+      const hueco = new Map();
+      for (const f of (mejor?.rows || [])) {
+        if (!f.already_best && (f.saving_eur == null || f.saving_eur > 0)) {
+          hueco.set(f.id, f);
+        }
+      }
       const filas = lista.slice(0, 5).map((a) => {
         const pct = a.pct == null ? null : a.pct;
         const barra = pct == null ? ""
@@ -123,17 +146,53 @@
         const dicho = pct == null ? `${nf2.format(a.kwh)} kWh`
           : `${nf2.format(a.kwh)} kWh · ${pct} % con sol`;
         const veces = a.runs > 1 ? ` (${a.runs} veces)` : "";
+        const h = hueco.get(a.id);
+        const mejorHora = h
+          ? `<span class="ap-mejor">↑ mejor a las ${esc(hhmm(h.best_at))}${
+              h.saving_eur ? ` (+${esc(nf2.format(h.saving_eur))} €)` : ""}</span>`
+          : "";
         return `<li>
-          <span class="ap-dot" style="background:${esc(a.color)}"></span>
-          <span class="ap-n">${esc(a.name)}${veces}</span>
-          ${barra}
-          <span class="ap-k">${esc(dicho)}</span>
+          <span class="ap-linea">
+            <span class="ap-dot" style="background:${esc(a.color)}"></span>
+            <span class="ap-n">${esc(a.name)}${veces}</span>
+            ${barra}
+            <span class="ap-k">${esc(dicho)}</span>
+          </span>
+          ${mejorHora}
         </li>`;
       }).join("");
       return `<div class="aparatos">
         <div class="ap-head">Lo que se puso hoy</div>
         <ul>${filas}</ul>
+        ${this._sobreLaMesa(mejor)}
       </div>`;
+    }
+
+    /* Lo que había sobre la mesa: el mejor orden posible del día que se acaba, con
+       el sol, el consumo y los precios **que de verdad hubo**. Aquí no entra ninguna
+       previsión, y por eso se puede decir sin condicionales — es lo que cierra el
+       bucle que la aplicación tenía abierto: prometía «gratis a las 13:00» y no
+       volvía a mirar si salió gratis.
+
+       Es **una diferencia** y nunca «lo que gastaste»: este modelo no tiene batería
+       dentro, y un coste absoluto se contradiría con el desglose de la factura. */
+    _sobreLaMesa(mejor) {
+      if (!mejor || !mejor.rows || !mejor.rows.length) return "";
+      const eur = mejor.saving_eur;
+      if (eur == null) {
+        const movibles = mejor.rows.filter((f) => !f.already_best);
+        if (!movibles.length) return "";
+        return `<p class="ap-pie">Marca una tarifa como «la mía» y aquí saldrá lo que
+          te habrías ahorrado moviéndolos.</p>`;
+      }
+      if (eur < 0.05) {
+        return `<p class="ap-pie">Aprovechaste el sol prácticamente todo lo que se
+          podía: moviendo los ciclos no había ni cinco céntimos que ganar.</p>`;
+      }
+      return `<p class="ap-pie">Puestos en su mejor hueco te habrías ahorrado
+        <b>${esc(nf2.format(eur))} €</b>. Es lo que <b>había</b> sobre la mesa, no lo
+        que se hizo mal: la batería no entra en esta cuenta y las tres de la madrugada
+        cuentan como una hora cualquiera.</p>`;
     }
 
     _render() {
@@ -175,7 +234,7 @@
           <h2>${esc(animo)}</h2>
           <p class="body">${cuerpo}</p>
           ${this._stats(d, w)}
-          ${this._aparatos(d.appliances)}
+          ${this._aparatos(d.appliances, d.best)}
           ${nota}
           <button type="button">Ver el día completo</button>
         </div>`;

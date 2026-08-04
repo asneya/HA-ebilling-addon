@@ -519,25 +519,33 @@ Detalles que conviene saber:
   contadores distintos, con errores propios—, se escalan todos a la baja por igual
   y el recorte se dice al pie.
 
-### Lo que había sobre la mesa ayer
+### Lo que había sobre la mesa
 
-En **Facturación**, debajo del desglose, hay una tarjeta que repasa el día de ayer:
-para cada ciclo que se puso, a qué hora fue y a qué hora habría salido más barato,
-con el sol, el consumo y los precios **que de verdad hubo**.
+En el **resumen del final del día** —la tarjeta que sale sola al anochecer—, debajo de
+«Lo que se puso hoy», cada ciclo dice también a qué hora habría salido más barato, con
+el sol, el consumo y los precios **que de verdad hubo**.
 
-Y por eso se puede decir sin condicionales: aquí no entra ninguna previsión. Un plan
-del día que viene depende de una que falla; un repaso de ayer no depende de ninguna.
-Es también lo que cierra el bucle que la aplicación tenía abierto — prometía «gratis
-a las 13:00» y no volvía a mirar si salió gratis.
+Va ahí y no en otro sitio porque es el momento: el sol ya se ha puesto, el día está
+hecho y lo que toca es contarlo. Y por eso se puede decir sin condicionales — aquí no
+entra ninguna previsión. Un plan del día que viene depende de una que falla; un repaso
+de un día terminado no depende de ninguna. Es también lo que cierra el bucle que la
+aplicación tenía abierto: prometía «gratis a las 13:00» y no volvía a mirar si salió
+gratis.
 
-Lo que se publica es **una diferencia**: «moviendo los ciclos de ayer a su mejor hueco
-te habrías ahorrado 0,58 €». Nunca «lo que gastaste». El modelo de esta tarjeta es más
-simple que el del desglose de la factura —no tiene batería— y publicar un coste
-absoluto pondría dos cifras del mismo día en dos pantallas.
+No cuesta ninguna consulta extra: todo lo que la cuenta necesita —el reparto hora a
+hora del día, lo que cada aparato gastó en cada hora y los precios— ya está en el mismo
+payload con el que se dibuja la Home.
 
-Solo entran los aparatos **movibles**: a una nevera no hay hora que proponerle, y a un
-fijo tampoco. El resto de la casa —incluida la nevera— es el suelo contra el que se
-busca hueco, igual que en el desglose.
+Lo que se publica es **una diferencia**: «puestos en su mejor hueco te habrías ahorrado
+0,58 €». Nunca «lo que gastaste». El modelo de esta tarjeta es más simple que el del
+desglose de la factura —no tiene batería— y publicar un coste absoluto pondría dos
+cifras del mismo día en dos pantallas.
+
+Solo se le propone otra hora a los aparatos **movibles**, y solo cuando de verdad se
+ganaba algo: a una nevera no hay hora que proponerle, a un fijo tampoco, y decir «ya
+era su mejor hueco» en cinco filas seguidas sería ruido —eso lo resume el pie—. El
+resto de la casa, la nevera incluida, es el suelo contra el que se busca hueco, igual
+que en el desglose.
 
 Lo que el modelo no tiene, y conviene saber:
 
