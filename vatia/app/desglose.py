@@ -43,6 +43,7 @@ from datetime import datetime
 from typing import Any
 
 import appliances as appliances_mod
+import datasources
 import series as series_mod
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,6 +98,64 @@ async def por_horas_de_aparatos(
         # gastó, y descontarlos aquí los mandaría a «el resto de la casa».
         out[a["id"]] = {iso: max(w, 0.0) / 1000.0 for iso, w in filas.items()}
     return out
+
+
+# Paso con el que se recorre el mes cuando hay InfluxDB. Quince minutos y no cinco:
+# un mes a cinco son 8.640 puntos por aparato y no compra nada —una lavadora de hora y
+# media se resuelve igual de bien a cuarto de hora, y dos ciclos cortos en la misma hora
+# siguen distinguiéndose, que es lo que las estadísticas horarias no podían—.
+PASO_INFLUX_MIN = 15
+
+
+async def ciclos_del_periodo(
+    settings: dict[str, Any],
+    states: dict[str, Any],
+    lista: list[dict[str, Any]],
+    tz,
+    start: datetime,
+    end: datetime,
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Los ciclos de verdad de cada aparato en el periodo, si hay con qué.
+
+    De una corrección: *«HA guarda un mes pero ojo que tb tenemos el influx. Si un
+    usuario usa influx, puedes hacer análisis más profundos»*. Y es cierto — el
+    desglose contaba **tramos de hora** porque las estadísticas de Home Assistant es
+    lo único que guardan de un mes entero, pero quien tenga InfluxDB tiene meses de
+    datos finos, y ahí un ciclo es un ciclo.
+
+    Devuelve ``None`` cuando no hay InfluxDB configurado, que es la señal de que hay
+    que quedarse con los tramos. No es un fallo: es que con esos datos no se puede
+    saber más, y decirlo es mejor que fingir un recuento.
+
+    El detector es el de `appliances`, con su paso: uno solo, para que un ciclo aquí y
+    un ciclo en la Home sean la misma cosa.
+    """
+    if not ((settings.get("influx") or {}).get("url") or "").strip():
+        return None
+    out: dict[str, list[dict[str, Any]]] = {}
+    for a in lista:
+        entity = a.get("power_entity") or ""
+        if not entity:
+            continue
+        unidad = ((states.get(entity, {}).get("attributes") or {})
+                  .get("unit_of_measurement") or "")
+        try:
+            crudo = await datasources.influx_hourly_mean(
+                settings, entity, unidad, start, end, tz, PASO_INFLUX_MIN)
+        except Exception:  # noqa: BLE001 - sin Influx se sigue con los tramos
+            _LOGGER.warning("InfluxDB no dio la curva de %s", entity, exc_info=True)
+            return None
+        if not crudo:
+            continue
+        factor = 1000.0 if unidad.strip().lower() == "kw" else 1.0
+        muestras = [(m, max(w, 0.0) * factor) for m, w in crudo]
+        umbral = float(a.get("standby_w") or 0)
+        ciclos = appliances_mod._ciclos_de(muestras, umbral, PASO_INFLUX_MIN)
+        # El último puede estar abierto solo si el periodo llega hasta ahora; en un
+        # ciclo cerrado del pasado no hay nada en marcha, y contarlo como tal daría
+        # un ciclo a medias en la mediana de «lo que suele durar».
+        out[a["id"]] = [c for c in ciclos if not c.get("open")] or ciclos
+    return out or None
 
 
 async def reparto_del_periodo(
@@ -207,6 +266,7 @@ def _detalle(
     consumo: dict[str, float],
     reparto: dict[str, dict[str, float]],
     precio_de: Any,
+    ciclos: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Lo que la suma del mes esconde: cuándo se usó y qué día salió caro.
 
@@ -275,9 +335,24 @@ def _detalle(
         if peor is None or clave > peor[0]:
             peor = (clave, {"date": dia, "eur": cuenta["eur"],
                             "kwh": cuenta["kwh"], "grid_kwh": cuenta["grid_kwh"]})
+    # Y si hay InfluxDB, los ciclos de verdad en vez del recuento de tramos: cuántos,
+    # lo que suele durar uno y a qué hora se suelen poner. Lo último es más accionable
+    # que la tira de kWh, porque es la hora del botón y no la del consumo.
+    de_ciclos: dict[str, Any] = {}
+    if ciclos:
+        horas_c = sorted(float(c["hours"]) for c in ciclos)
+        arranques = [0] * 24
+        for c in ciclos:
+            arranques[c["start"].hour] += 1
+        de_ciclos = {
+            "cycles": len(ciclos),
+            "median_h": round(horas_c[len(horas_c) // 2], 2),
+            "starts_by_hour": arranques,
+        }
     return {
         "days": len(por_dia),
         "runs": tramos,
+        **de_ciclos,
         "worst_day": peor[1] if peor else None,
         "by_hour": [round(v, 3) for v in por_hora],
         # La parte de cada hora que no hubo que comprar: sol y batería juntos, que es
@@ -293,6 +368,7 @@ def filas(
     reparto: dict[str, dict[str, float]] | None,
     importada: dict[str, float],
     precio_de: Any,
+    ciclos: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any] | None:
     """Las filas del desglose, con su total y lo que no se ha podido colocar.
 
@@ -335,7 +411,8 @@ def filas(
             "color": a["color"], "icon": a["icon"],
             "kind": "aparato", **cuenta,
             # Lo que la suma del mes esconde, para cuando se abre la fila.
-            "detail": _detalle(ajustado.get(a["id"]) or {}, reparto, precio_de),
+            "detail": _detalle(ajustado.get(a["id"]) or {}, reparto, precio_de,
+                               (ciclos or {}).get(a["id"])),
         })
 
     resto = appliances_mod.atribuir(resto_por_hora, reparto, precio_de)
@@ -418,4 +495,7 @@ def filas(
         # Lo que `_escalar` tuvo que recortar. Cero mientras los contadores se
         # lleven bien; si no, sale en la interfaz en vez de quedarse aquí.
         "trimmed_kwh": round(recortado, 2),
+        # Si los tramos son ciclos de verdad, para que la interfaz no los llame de una
+        # manera cuando son de la otra.
+        "cycles": bool(ciclos),
     }

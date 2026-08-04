@@ -10,6 +10,7 @@ Lo que se comprueba:
   7. el reparto del cierre del día, por solape con la ventana
   8. de dónde saldría la energía de un ciclo puesto ahora
   9. y el ciclo que sigue en marcha no cuenta como uno que terminó
+ 10. el detector es uno, y da lo mismo a cinco minutos que a un cuarto de hora
 """
 import sys
 from datetime import datetime, timedelta
@@ -257,6 +258,59 @@ cr = A._ciclos_de(router, 2)
 ok(len(cr) == 1 and cr[0]["open"] is True, "el router da un solo ciclo, y abierto")
 ok(A.forma_de_uso(router, 2, cr, 1) == "continuo",
    "y se sigue detectando como continuo")
+
+
+print("\n10 · el mismo detector con otro paso")
+# De una corrección: «HA guarda un mes pero ojo que tb tenemos el influx. Si un usuario
+# usa influx, puedes hacer análisis más profundos». Con InfluxDB se recorre un mes con
+# paso de cuarto de hora, y el detector tiene que ser **el mismo**: si hubiera dos, un
+# ciclo en el desglose de la factura y un ciclo en la Home serían cosas distintas.
+#
+# La curva: una lavadora de dos horas con una pausa de diez minutos en medio, muestreada
+# a cinco minutos y a quince. Los dos pasos tienen que ver **un** ciclo de dos horas.
+ARRANQUE = datetime(2026, 8, 1, 10, 0, tzinfo=TZ)
+
+
+def curva(paso_min):
+    puntos = []
+    for i in range(int(240 / paso_min)):          # cuatro horas de ventana
+        desde = i * paso_min
+        if desde < 60 or desde >= 180:
+            w = 0.0
+        else:
+            w = 5.0 if 115 <= desde < 125 else 1800.0   # la pausa, a la mitad
+        puntos.append((ARRANQUE + timedelta(minutes=desde), w))
+    return puntos
+
+
+# La integral de verdad: 110 minutos a 1800 W —la pausa no gasta— son 3,30 kWh.
+EXACTO = 1800.0 * (110 / 60) / 1000.0
+for paso in (5, 15):
+    cs = A._ciclos_de(curva(paso), 20.0, paso)
+    ok(len(cs) == 1, f"paso de {paso} min: un solo ciclo, la pausa no lo parte ({len(cs)})")
+    if cs:
+        ok(abs(cs[0]["hours"] - 2.0) < 0.3,
+           f"paso de {paso} min: y dura las dos horas ({cs[0]['hours']:.2f} h)")
+        error = abs(cs[0]["kwh"] - EXACTO) / EXACTO
+        ok(error < 0.06,
+           f"paso de {paso} min: y sus kWh a menos del 6 % ({cs[0]['kwh']:.2f} de "
+           f"{EXACTO:.2f}, {error * 100:.1f} % de error)")
+
+# Lo que cuesta el paso grueso, dicho con un número: el fino clava la integral y el de
+# cuarto de hora se queda corto, porque la pausa cae dentro de una ventana cuya media
+# baja. Es el precio de poder recorrer un mes entero, y hay que saber cuánto es.
+fino = A._ciclos_de(curva(5), 20.0, 5)[0]["kwh"]
+grueso = A._ciclos_de(curva(15), 20.0, 15)[0]["kwh"]
+ok(abs(fino - EXACTO) < 0.02,
+   f"el paso fino clava la integral ({fino:.2f} de {EXACTO:.2f})")
+ok(grueso < fino,
+   f"y el grueso se queda algo corto, no algo largo ({grueso:.2f} < {fino:.2f})")
+
+# Y un encendido de cinco minutos no es un ciclo: el mínimo va en minutos y no en
+# muestras, que si no a paso grueso una sola muestra colaría como ciclo.
+corto = [(ARRANQUE + timedelta(minutes=i * 5), 1800.0 if i == 3 else 0.0)
+         for i in range(24)]
+ok(not A._ciclos_de(corto, 20.0, 5), "un encendido de cinco minutos no es un ciclo")
 
 print("\n" + (f"{len(fallos)} fallos" if fallos else "todo en verde"))
 sys.exit(1 if fallos else 0)

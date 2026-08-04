@@ -512,10 +512,22 @@ media respuesta: dos barras iguales a las 13 y a las 22 no cuestan lo mismo.
 Esa tira es la pieza accionable de toda la pantalla: un lavavajillas con todo su bulto
 en la banda de la noche se ve de un golpe, y en el total del mes no se veía.
 
-Un **tramo** son horas seguidas con consumo, y no un ciclo. Aquí la resolución es la
-hora —es lo que Home Assistant guarda de un mes entero—, así que dos lavados en la
-misma hora son un tramo y uno que cruza una hora sin gastar son dos. Llamarlos ciclos
-sería publicar un recuento que estos datos no sostienen.
+**Con InfluxDB se cuentan ciclos; sin él, tramos.** Y no es lo mismo:
+
+| | Resolución de un mes | Qué se cuenta |
+|---|---|---|
+| Estadísticas de Home Assistant | la hora | **tramos**: horas seguidas con consumo |
+| InfluxDB | cuarto de hora | **ciclos**, con lo que suele durar uno |
+
+Un tramo no es un ciclo: a resolución horaria dos lavados en la misma hora son un
+tramo, y uno que cruza una hora sin gastar son dos. La tarjeta dice cuál de las dos
+cosas está contando, porque llamarlos igual sería prometer con unos datos lo que solo
+sostienen los otros.
+
+El detector es **el mismo** en los dos casos —el que aprende los ciclos de la Home— con
+otro paso. Lo que cuesta el paso grueso está medido: sobre una lavadora de dos horas con
+una pausa, el paso de cinco minutos clava la integral y el de cuarto de hora se queda un
+4,5 % corto. Es el precio de poder recorrer un mes entero.
 
 Detalles que conviene saber:
 

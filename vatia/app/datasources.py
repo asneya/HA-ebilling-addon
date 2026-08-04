@@ -312,23 +312,30 @@ from(bucket: "{bucket}")
 
 
 async def influx_hourly_mean(
-    settings: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime, tz
+    settings: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime, tz,
+    paso_min: int = 60,
 ) -> list[tuple[datetime, float]]:
-    """[(hora local, media)] de un sensor instantáneo, hora a hora.
+    """[(hora local, media)] de un sensor instantáneo, en pasos de ``paso_min``.
 
     ``unit`` es la unidad del sensor: la integración de InfluxDB de Home
     Assistant usa la unidad como nombre de la medida («W» para una potencia),
     así que es lo que hay que buscar. En Flux se filtra además por `entity_id`,
     que es lo que de verdad identifica la serie.
+
+    El paso era fijo de una hora, y por eso el nombre. Se abre porque **Influx
+    guarda meses donde el recorder guarda diez días**: con un paso fino sobre un mes
+    entero se pueden contar los ciclos de verdad de un electrodoméstico, y no solo
+    las horas en las que hubo consumo. El valor por defecto sigue siendo la hora,
+    así que quien ya lo llamaba no cambia de comportamiento.
     """
     influx = dict(settings.get("influx") or {})
     if not (influx.get("url") or "").strip():
         return []
     version = int(influx.get("version") or 2)
     if version == 1:
-        crudo = await _influx_v1_mean(influx, entity, unit, start, end)
+        crudo = await _influx_v1_mean(influx, entity, unit, start, end, paso_min)
     else:
-        crudo = await _influx_v2_mean(influx, entity, unit, start, end)
+        crudo = await _influx_v2_mean(influx, entity, unit, start, end, paso_min)
     out: list[tuple[datetime, float]] = []
     for ts, value in crudo:
         try:
@@ -343,7 +350,8 @@ async def influx_hourly_mean(
 
 
 async def _influx_v1_mean(
-    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime
+    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime,
+    paso_min: int = 60,
 ) -> list[tuple[str, float]]:
     url = (influx.get("url") or "").rstrip("/")
     # La medida es la unidad del sensor. Si no se conoce se prueba con «W», que
@@ -353,7 +361,7 @@ async def _influx_v1_mean(
         f'SELECT mean("value") FROM "{measurement}" '
         f"WHERE time >= '{start.isoformat()}' AND time < '{end.isoformat()}'"
         f" AND \"entity_id\" = '{entity.replace('sensor.', '')}'"
-        " GROUP BY time(1h)"
+        f" GROUP BY time({int(paso_min)}m)"
     )
     params = {"db": influx.get("database") or "homeassistant", "q": query}
     auth = None
@@ -374,7 +382,8 @@ async def _influx_v1_mean(
 
 
 async def _influx_v2_mean(
-    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime
+    influx: dict[str, Any], entity: str, unit: str, start: datetime, end: datetime,
+    paso_min: int = 60,
 ) -> list[tuple[str, float]]:
     url = (influx.get("url") or "").rstrip("/")
     bucket = influx.get("database") or "homeassistant"
@@ -388,7 +397,7 @@ from(bucket: "{bucket}")
   |> range(start: {start.isoformat()}, stop: {end.isoformat()})
   |> filter(fn: (r) =>{medida} r["_field"] == "value"
        and (r["entity_id"] == "{corto}" or r["entity_id"] == "{entity}"))
-  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)
+  |> aggregateWindow(every: {int(paso_min)}m, fn: mean, createEmpty: false)
 """
     headers = {
         "Authorization": f"Token {influx.get('token') or ''}",

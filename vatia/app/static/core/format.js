@@ -59,3 +59,17 @@ export function periodShort(startISO, endISO) {
   const sameYear = startISO.slice(0, 4) === endISO.slice(0, 4);
   return `${fmtDay(startISO, false)} → ${fmtDay(endISO, !sameYear)}`;
 }
+
+/* «2 h 10 min», «50 min», «2 h». Los minutos se redondean a cinco: la duración sale
+   de una mediana de muestras de cinco minutos, y dar «2 h 07 min» sería fingir una
+   precisión que no existe.
+
+   Vive aquí porque la usan tres pantallas. Estaba escrita dos veces —idéntica, carácter
+   por carácter, en la Home y en el editor de electrodomésticos— y el desglose de la
+   factura iba a ser la tercera. */
+export function dur(horas) {
+  const total = Math.max(5, Math.round((horas || 0) * 12) * 5);
+  const h = Math.floor(total / 60), m = total % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}

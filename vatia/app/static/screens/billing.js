@@ -6,7 +6,7 @@ import { $, esc } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fallo } from "../core/banner.js";
-import { fmtEUR, fmtNum, fmtDay, periodShort } from "../core/format.js";
+import { fmtEUR, fmtNum, fmtDay, periodShort, dur } from "../core/format.js";
 import { settings, workingPeriod, reloadConfig } from "../core/config.js";
 import { ensureBars, renderReadout } from "../core/graficos.js";
 import { showView, showSub, currentSub } from "../core/nav.js";
@@ -185,7 +185,17 @@ function detalleDeFila(f) {
       ><u style="height:${gratis.toFixed(0)}%"></u></i>`;
   }).join("");
   const peor = d.worst_day;
-  const tramos = d.runs === 1 ? "un tramo" : `${d.runs} tramos`;
+  // «Ciclos» solo cuando lo son. Con las estadísticas de Home Assistant la resolución
+  // es la hora y lo que se cuenta son tramos; con InfluxDB, que guarda meses de datos
+  // finos, son ciclos de verdad y entonces se puede decir además lo que suele durar
+  // uno. Llamarlos igual en los dos casos sería prometer con unos datos lo que solo
+  // sostienen los otros.
+  const conCiclos = d.cycles != null;
+  const cuantos = conCiclos ? d.cycles : d.runs;
+  const tramos = conCiclos
+    ? `${cuantos} ${cuantos === 1 ? "ciclo" : "ciclos"}${
+        d.median_h ? ` de ${dur(d.median_h)} de media` : ""}`
+    : `${cuantos} ${cuantos === 1 ? "tramo" : "tramos"}`;
   return `
     <div class="sp-det">
       <div class="sp-det-l">
@@ -197,9 +207,12 @@ function detalleDeFila(f) {
       <div class="sp-det-x"><span>0 h</span><span>12 h</span><span>23 h</span></div>
       <div class="sp-det-k"><i class="k-libre"></i>sol o batería
         <i class="k-red"></i>comprado</div>
-      <p class="sp-det-n">Un <b>tramo</b> son horas seguidas con consumo, no un ciclo: a
-        esta resolución —la hora, que es lo que se guarda de un mes entero— dos lavados
-        en la misma hora son un tramo.</p>
+      <p class="sp-det-n">${conCiclos
+        ? `Ciclos contados uno a uno en <b>InfluxDB</b>, con paso de cuarto de hora.`
+        : `Un <b>tramo</b> son horas seguidas con consumo, no un ciclo: con las
+           estadísticas de Home Assistant la resolución de un mes entero es la hora, así
+           que dos lavados en la misma hora son un tramo. Con <b>InfluxDB</b> configurado
+           se cuentan los ciclos de verdad.`}</p>
     </div>`;
 }
 

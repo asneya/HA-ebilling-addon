@@ -27,6 +27,7 @@ mano en vez de comparar contra lo que salga:
   6. dos enchufes que suman más que la casa se escalan, y el recorte se declara
   7. sin tarifa no hay euros inventados
   8. y al abrir una fila: los días, los tramos, el día más caro y a qué horas se pone
+  9. con InfluxDB, ciclos de verdad —y se dice que lo son— en vez de tramos de hora
 """
 import sys
 from pathlib import Path
@@ -243,6 +244,36 @@ sueltas = {"lavav": {hh(D10, 13): 1.0, hh(D10, 21): 1.0, hh(D11, 13): 1.0}}
 d8b = desglose.filas(LAVAV, sueltas, reparto_de(CONT2), importada_de(CONT2), PRECIOS2.get)
 sueltos = {f["id"]: f for f in d8b["rows"]}["lavav"]["detail"]["runs"]
 ok(sueltos == 3, f"horas sueltas son tramos sueltos ({sueltos})")
+
+print("\n9 · con InfluxDB, ciclos de verdad en vez de tramos")
+# De una corrección: «HA guarda un mes pero ojo que tb tenemos el influx». Con las
+# estadísticas de Home Assistant la resolución de un mes es la hora, y lo que se puede
+# contar son tramos; con InfluxDB son ciclos, y entonces se puede decir además lo que
+# suele durar uno. Los ciclos llegan ya detectados —los detecta `appliances`, que es el
+# único sitio que sabe hacerlo— así que aquí se comprueba qué se hace con ellos.
+from datetime import datetime as _dt, timedelta as _td  # noqa: E402
+
+def ciclo(dia, hora, horas, kwh):
+    ini = _dt(2026, 3, dia, hora, 0)
+    return {"start": ini, "end": ini + _td(hours=horas), "hours": horas, "kwh": kwh,
+            "peak_w": 2000.0, "open": False}
+
+CICLOS = {"lavav": [ciclo(10, 21, 1.5, 1.0), ciclo(10, 22, 2.0, 1.0),
+                    ciclo(11, 13, 1.0, 1.0)]}
+d9 = desglose.filas(LAVAV, USO, reparto_de(CONT2), importada_de(CONT2), PRECIOS2.get,
+                    CICLOS)
+det9 = {f["id"]: f for f in d9["rows"]}["lavav"]["detail"]
+ok(det9.get("cycles") == 3, f"cuenta los ciclos, no los tramos ({det9.get('cycles')})")
+ok(casi(det9.get("median_h"), 1.5),
+   f"y lo que suele durar uno, que un tramo no podía decir ({det9.get('median_h')} h)")
+ok(det9.get("starts_by_hour", [0] * 24)[21] == 1
+   and det9["starts_by_hour"][22] == 1 and det9["starts_by_hour"][13] == 1,
+   "con la hora a la que se arranca, que es la del botón y no la del consumo")
+ok(d9["cycles"] is True, "y el desglose dice que son ciclos, para que la interfaz no mienta")
+# Sin ciclos, lo de siempre: tramos, y el aviso de que lo son.
+ok(d8["cycles"] is False,
+   "sin InfluxDB se dice que no lo son, en vez de dejarlo a la interpretación")
+ok("cycles" not in det, "y la fila no trae recuento de ciclos que no se pueda sostener")
 
 print()
 if fallos:

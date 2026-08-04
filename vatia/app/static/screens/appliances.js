@@ -14,7 +14,7 @@
 import { $, $$, esc } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on } from "../core/bus.js";
-import { fmtNum } from "../core/format.js";
+import { fmtNum, dur } from "../core/format.js";
 import { config, reloadConfig } from "../core/config.js";
 import { asegurar, opciones } from "../core/entidades.js";
 import { guardando } from "../core/guardando.js";
@@ -44,15 +44,6 @@ let editando = null;
 let vivo = {};
 
 const lista = () => config()?.appliances || [];
-
-/* «2 h 10 min», «50 min». Redondeado a cinco minutos, que es el paso de las
-   muestras de las que sale la mediana. */
-function dur(horas) {
-  const total = Math.max(5, Math.round((horas || 0) * 12) * 5);
-  const h = Math.floor(total / 60), m = total % 60;
-  if (!h) return `${m} min`;
-  return m ? `${h} h ${m} min` : `${h} h`;
-}
 
 function render() {
   const aparatos = lista();
