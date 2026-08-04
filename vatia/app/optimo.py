@@ -16,9 +16,13 @@ mirar si salió gratis.
 usa un modelo más simple que el desglose de la factura —abajo se dice cuál— y si
 publicara «tus aparatos costaron X» habría dos cifras del mismo día en dos pantallas,
 que es justo el defecto que esta aplicación lleva corrigiendo desde la 0.48. Lo que
-se publica es lo único que este modelo puede sostener: **cuánto había que ganar
-moviéndolos**, calculado dos veces con la misma cuenta —como se hizo y en el mejor
-orden— y restado.
+se publica es lo único que este modelo puede sostener: **cuánto costó de más ponerlos
+donde se pusieron**, calculado dos veces con la misma cuenta —como se hizo y en el
+mejor orden— y restado.
+
+Y «de más», no «ahorro»: ahorrar es prospectivo y este día ya pasó. Lo que hay es un
+sobrecoste que ya se pagó, y por eso la interfaz lo enseña con una flecha hacia arriba
+y no con un signo más — un «+0,39 €» se lee como dinero que entró.
 
 Lo que el modelo hace, hora a hora y sobre medidas:
 
@@ -53,9 +57,9 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-# Por debajo de esto no se dice nada: mover una lavadora para ahorrar dos céntimos
-# es hacerle perder el tiempo a alguien. El mismo umbral que el plan del día.
-MIN_AHORRO_EUR = 0.05
+# Por debajo de esto no se dice nada: señalar dos céntimos de un día que ya pasó es
+# hacerle perder el tiempo a alguien. El mismo umbral que el plan del día.
+MIN_EXTRA_EUR = 0.05
 # Y un aparato que apenas gastó no entra en la cuenta.
 _MIGAJA_KWH = 0.05
 
@@ -153,7 +157,7 @@ def del_dia(
     solar: dict[str, float],
     precio_de: Any,
 ) -> dict[str, Any] | None:
-    """Cuánto había que ganar moviendo los aparatos de un día ya cerrado.
+    """Cuánto costó de más poner los aparatos donde se pusieron, en un día ya cerrado.
 
     ``por_aparato`` es ``{id: {iso de la hora: kWh}}`` medido; ``reparto`` el origen
     del consumo hora a hora de ese día (de donde sale el consumo total de la casa) y
@@ -235,7 +239,7 @@ def del_dia(
     # condiciones; y luego se colocan en ese orden contra lo que va quedando. Un óptimo
     # de verdad pediría probar todas las combinaciones —seis aparatos en 24 horas son
     # 191 millones— y el turno se queda a un pelo por muchísimo menos.
-    def _ventaja(c: dict[str, Any]) -> float:
+    def _de_mas(c: dict[str, Any]) -> float:
         _h, eur, red = _mejor_hueco(c, libre, precio)
         mio = eur if eur is not None else red
         real = c["eur_real"] if c["eur_real"] is not None else c["red_real"]
@@ -246,16 +250,16 @@ def del_dia(
     total_mejor = 0.0
     sabido = True
     filas = []
-    for c in sorted(candidatos, key=lambda c: (-_ventaja(c), c["name"])):
+    for c in sorted(candidatos, key=lambda c: (-_de_mas(c), c["name"])):
         hueco, eur, red = _mejor_hueco(c, sobrante, precio)
         _ocupar(sobrante, hueco, c["largo"], c["por_hora"])
         if c["eur_real"] is None or eur is None:
             sabido = False
-            ahorro = None
+            extra = None
         else:
             total_real += c["eur_real"]
             total_mejor += eur
-            ahorro = round(c["eur_real"] - eur, 2)
+            extra = round(c["eur_real"] - eur, 2)
         filas.append({
             "id": c["id"], "name": c["name"], "color": c["color"], "icon": c["icon"],
             "kwh": c["kwh"],
@@ -265,19 +269,27 @@ def del_dia(
             # Si le tocaba justo donde estuvo, se dice: pasa la mitad de las veces y
             # es la respuesta buena, no un hueco de la tarjeta.
             "already_best": hueco == c["ran"],
-            "saving_eur": ahorro,
+            "extra_eur": extra,
             "grid_kwh": round(c["red_real"], 3),
             "best_grid_kwh": round(red or 0.0, 3),
         })
 
-    filas.sort(key=lambda f: -(f["saving_eur"] or 0.0))
+    filas.sort(key=lambda f: -(f["extra_eur"] or 0.0))
     return {
         "date": horas[0][:10],
         "rows": filas,
         # La diferencia, que es lo único que este modelo sostiene. Nunca «lo que
         # gastaste»: para eso está el desglose de la factura, que tiene la batería
         # dentro y no puede dar la misma cifra.
-        "saving_eur": round(total_real - total_mejor, 2) if sabido else None,
+        #
+        # Y se llama `extra_eur` y no `saving_eur`, que es como estaba: **ahorrar es
+        # prospectivo y este día ya pasó**. De una corrección: «la cifra de ahorro por
+        # electrodoméstico no debería ser negativa?». Ninguna de las dos, en realidad:
+        # no es un ahorro que hayas tenido ni una pérdida que se resta de nada, es lo
+        # que pagaste **de más** de lo que la misma energía habría costado en su hueco.
+        # Con el nombre viejo, un «+0,39 €» al lado de una flecha se lee como dinero
+        # que ganaste, que es justo lo contrario de lo que pasó.
+        "extra_eur": round(total_real - total_mejor, 2) if sabido else None,
         "sun_kwh": round(sum(sol), 2),
         "free_kwh": round(sum(libre), 2),
         "movable": len(filas),

@@ -5,7 +5,7 @@
  *
  *   1. la hora que habría salido mejor cuelga de la fila del aparato que ya
  *      estaba ahí, y no de una tabla nueva
- *   2. solo se dice de los que ganaban algo: «ya era su mejor hueco» en cinco
+ *   2. solo se dice de los que costaron de más: «ya era su mejor hueco» en cinco
  *      filas sería ruido, y el pie ya lo resume
  *   3. el pie es una **diferencia**, y en ninguna parte se afirma «lo que
  *      gastaste»: el modelo de aquí no tiene batería y el desglose de la factura
@@ -37,17 +37,17 @@ const base_cierre = () => ({
     { id: "horno", name: "Horno", color: "#c9822b", runs: 1, kwh: 2.2, pct: 96 },
   ],
   best: {
-    date: "2026-08-04", saving_eur: 0.58, sun_kwh: 21.4, free_kwh: 9.1, movable: 3,
+    date: "2026-08-04", extra_eur: 0.58, sun_kwh: 21.4, free_kwh: 9.1, movable: 3,
     rows: [
       { id: "lavav", name: "Lavavajillas", kwh: 2.4, hours: 2,
         ran_at: "2026-08-04T22:00:00+02:00", best_at: "2026-08-04T10:00:00+02:00",
-        already_best: false, saving_eur: 0.39 },
+        already_best: false, extra_eur: 0.39 },
       { id: "coche", name: "Coche", kwh: 1.2, hours: 1,
         ran_at: "2026-08-04T23:00:00+02:00", best_at: "2026-08-04T11:00:00+02:00",
-        already_best: false, saving_eur: 0.19 },
+        already_best: false, extra_eur: 0.19 },
       { id: "horno", name: "Horno", kwh: 2.2, hours: 1,
         ran_at: "2026-08-04T13:00:00+02:00", best_at: "2026-08-04T13:00:00+02:00",
-        already_best: true, saving_eur: 0.0 },
+        already_best: true, extra_eur: 0.0 },
     ],
   },
   tomorrow: { start: "2026-08-05T10:20:00+02:00", kwh: 8.4 },
@@ -105,10 +105,15 @@ const leer = (p) => p.evaluate(() => {
   ok(v.filas.length === 3, `siguen las tres filas del cierre (${v.filas.length})`);
   const conMejor = v.filas.filter((f) => f.mejor);
   ok(conMejor.length === 2,
-    `solo las dos que ganaban algo llevan la nota (${conMejor.length})`);
+    `solo las dos que costaron de más llevan la nota (${conMejor.length})`);
   ok(/Lavavajillas/.test(v.filas[0].nombre) && /10:00/.test(v.filas[0].mejor || ""),
     `con su hora («${v.filas[0].mejor}»)`);
-  ok(/0,39/.test(v.filas[0].mejor || ""), "y lo que se ganaba con ella");
+  ok(/0,39/.test(v.filas[0].mejor || ""), "y lo que costó de más no haberla usado");
+  // La corrección del signo: una flecha arriba y «de más», nunca un «+0,39 €», que
+  // se lee como dinero que entró.
+  ok(/↑/.test(v.filas[0].mejor || "") && /de más/.test(v.filas[0].mejor || ""),
+    `dicho como sobrecoste y no como ganancia («${v.filas[0].mejor}»)`);
+  ok(!/\+\s*0,39/.test(v.filas[0].mejor || ""), "sin signo más delante del importe");
   const horno = v.filas.find((f) => /Horno/.test(f.nombre || ""));
   ok(horno && !horno.mejor,
     `el que ya estaba en su hueco no dice nada («${horno && horno.mejor}»)`);
@@ -118,7 +123,8 @@ const leer = (p) => p.evaluate(() => {
     `y cabe en un renglón (${conMejor.map((f) => f.altoMejor).join(", ")} px)`);
 
   console.log("\n3 · es una diferencia, no una factura");
-  ok(/te habrías ahorrado/.test(v.pie), `el pie es el ahorro que había («${v.pie.slice(0, 58)}…»)`);
+  ok(/de más/.test(v.pie), `el pie dice lo que costó de más («${v.pie.slice(0, 58)}…»)`);
+  ok(!/ahorrad/.test(v.pie), "y no lo llama ahorro, que este día ya pasó");
   ok(/0,58/.test(v.pie), "con la cifra del día");
   ok(!/(gastaste|te costó|coste del día)/i.test(v.todo),
     "y en ninguna parte de la tarjeta se afirma lo que se gastó");
@@ -128,8 +134,8 @@ const leer = (p) => p.evaluate(() => {
 
   console.log("\n4 · sin tarifa marcada, no se inventan euros");
   let c = base_cierre();
-  c.best.saving_eur = null;
-  for (const r of c.best.rows) r.saving_eur = null;
+  c.best.extra_eur = null;
+  for (const r of c.best.rows) r.extra_eur = null;
   ({ ctx, p } = await abrir(b, c));
   v = await leer(p);
   ok(/Marca una tarifa/.test(v.pie), `se dice por qué («${v.pie.slice(0, 56)}…»)`);
@@ -140,13 +146,13 @@ const leer = (p) => p.evaluate(() => {
 
   console.log("\n5 · un día que se aprovechó");
   c = base_cierre();
-  c.best.saving_eur = 0.0;
+  c.best.extra_eur = 0.0;
   for (const r of c.best.rows) {
-    r.saving_eur = 0.0; r.already_best = true; r.best_at = r.ran_at;
+    r.extra_eur = 0.0; r.already_best = true; r.best_at = r.ran_at;
   }
   ({ ctx, p } = await abrir(b, c));
   v = await leer(p);
-  ok(/no había ni cinco céntimos/.test(v.pie),
+  ok(/ni cinco céntimos menos/.test(v.pie),
     `se felicita en vez de callar («${v.pie.slice(0, 62)}…»)`);
   ok(v.filas.every((f) => !f.mejor), "y ninguna fila propone otra hora");
   await ctx.close();

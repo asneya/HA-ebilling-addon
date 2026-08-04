@@ -13,14 +13,14 @@ calculada dos veces con la misma cuenta y restada.
 
 Lo que se comprueba, con un día hecho a mano para poder derivar la respuesta a mano:
 
-  1. un aparato que se puso de noche, con sol de sobra al mediodía: hay ahorro, y es
-     el que sale de multiplicar a mano
-  2. uno que ya estaba en su mejor hueco: se dice, y su ahorro es cero
+  1. un aparato que se puso de noche, con sol de sobra al mediodía: costó de más, y lo
+     que costó es lo que sale de multiplicar a mano
+  2. uno que ya estaba en su mejor hueco: se dice, y su sobrecoste es cero
   3. dos aparatos no se llevan el mismo hueco (el turno, igual que en el plan)
   4. «el resto de la casa» es el suelo: si la casa ya se come el sol, no hay hueco
   5. sin sol, sin aparatos o sin precios no se inventa nada
   6. la cifra que se publica es la diferencia, y **no** hay ninguna que se pueda leer
-     como «lo que gastaste»
+     como «lo que gastaste» — ni como un ahorro, que es prospectivo y este día ya pasó
 """
 import sys
 from datetime import datetime
@@ -90,13 +90,13 @@ solo_lava = {"lava": {H(22): 1.0, H(23): 1.0}}
 d = optimo.del_dia(APARATOS, DIA, solo_lava, reparto_con(solo_lava), SOLAR, precio_de)
 ok(d is not None, "sale la cuenta")
 fila = d["rows"][0]
-ok(casi(fila["saving_eur"], 0.60),
-   f"el ahorro es el que sale a mano: 2 kWh × 0,30 € ({fila['saving_eur']} €)")
+ok(casi(fila["extra_eur"], 0.60),
+   f"costó de más lo que sale a mano: 2 kWh × 0,30 € ({fila['extra_eur']} €)")
 ok(fila["best_at"][11:13] in ("12", "13"),
    f"y el mejor hueco es una hora de sol ({fila['best_at'][11:16]})")
 ok(fila["ran_at"][11:13] == "22", f"con la hora a la que se puso ({fila['ran_at'][11:16]})")
 ok(fila["already_best"] is False, "y no se dice que ya estuviera bien")
-ok(casi(d["saving_eur"], 0.60), f"y el total es el mismo ({d['saving_eur']} €)")
+ok(casi(d["extra_eur"], 0.60), f"y el total es el mismo ({d['extra_eur']} €)")
 ok(casi(d["free_kwh"], 7.5), f"con el sobrante libre del día ({d['free_kwh']} kWh)")
 
 print("\n2 · uno que ya estaba en su mejor hueco")
@@ -104,8 +104,8 @@ ya = {"lava": {H(12): 1.0, H(13): 1.0}}
 d2 = optimo.del_dia(APARATOS, DIA, ya, reparto_con(ya), SOLAR, precio_de)
 f2 = d2["rows"][0]
 ok(f2["already_best"] is True, "se dice que ya estaba donde tocaba")
-ok(casi(f2["saving_eur"], 0.0), f"y su ahorro es cero ({f2['saving_eur']} €)")
-ok(casi(d2["saving_eur"], 0.0), "y el del día también")
+ok(casi(f2["extra_eur"], 0.0), f"y su sobrecoste es cero ({f2['extra_eur']} €)")
+ok(casi(d2["extra_eur"], 0.0), "y el del día también")
 
 print("\n2b · un empate no mueve nada")
 # Salió mirando la respuesta del endpoint: el horno decía «se puso a las 13:00, mejor
@@ -128,7 +128,7 @@ d3 = optimo.del_dia(APARATOS, DIA, gordos, reparto_con(gordos), SOLAR, precio_de
 horas3 = sorted(f["best_at"][11:13] for f in d3["rows"])
 ok(len(set(horas3)) == 2, f"cada uno a un hueco distinto ({horas3})")
 # Y el segundo no sale gratis: donde le toca hay que comprar, y se dice.
-peor = min(d3["rows"], key=lambda f: f["saving_eur"] or 0)
+peor = min(d3["rows"], key=lambda f: f["extra_eur"] or 0)
 ok(peor["best_grid_kwh"] > 0,
    f"al segundo le toca comprar algo, y se dice ({peor['best_grid_kwh']} kWh de red)")
 
@@ -152,7 +152,7 @@ ok(optimo.del_dia(APARATOS, DIA, solo_lava, reparto_con(solo_lava), vacio,
    "y sin sol tampoco: no hay hueco que buscar")
 sin_precio = optimo.del_dia(APARATOS, DIA, solo_lava, reparto_con(solo_lava), SOLAR,
                             lambda _h: None)
-ok(sin_precio is not None and sin_precio["saving_eur"] is None,
+ok(sin_precio is not None and sin_precio["extra_eur"] is None,
    "sin precios se calla el euro en vez de inventarlo")
 ok(sin_precio["rows"] and sin_precio["rows"][0]["best_at"],
    "pero el hueco sí se dice, que no necesita precios")
@@ -163,8 +163,12 @@ print("\n6 · se publica una diferencia, no una factura")
 claves = set(d["rows"][0]) | set(d)
 prohibidas = {k for k in claves if k in ("eur", "cost", "total_eur", "spent_eur")}
 ok(not prohibidas, f"ninguna clave se puede leer como una factura ({prohibidas})")
-ok("saving_eur" in d and "saving_eur" in d["rows"][0],
-   "lo que se publica es el ahorro que había sobre la mesa")
+# Y tampoco como un ahorro: ahorrar es prospectivo y este día ya pasó. La cifra es un
+# sobrecoste que ya se pagó, y el nombre tiene que decirlo.
+ok(not {k for k in claves if "saving" in k},
+   f"ni como un ahorro ({sorted(k for k in claves if 'saving' in k)})")
+ok("extra_eur" in d and "extra_eur" in d["rows"][0],
+   "lo que se publica es lo que costó de más")
 
 print()
 if fallos:
