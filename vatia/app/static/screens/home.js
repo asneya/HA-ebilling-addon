@@ -477,6 +477,18 @@ function renderPlan(plan) {
       ${fmtEUR.format(bat.peak_eur_kwh)}/kWh. Te ahorras
       <b>${fmtEUR.format(bat.saving_eur)}</b>.`);
   }
+  // El sol de una hora es uno. Cuando el plan ha tenido que mover a alguien porque
+  // otro ya tenía ese hueco, se dice: si no, la hora recomendada cambia de un día
+  // para otro y en la tarjeta no hay nada que lo explique. Va en la nota y no en la
+  // fila a propósito, por lo que ya se pidió una vez: las filas tenían «mucha
+  // información larga y pequeña» y esto no es un dato de la fila, es del reparto.
+  const movidos = rows.filter((r) => (r.displaced_by || []).length && r.alone_at);
+  if (movidos.length) {
+    notas.push(`El sol de una hora es uno, así que el plan lo reparte:
+      ${movidos.map((r) => `<b>${esc(r.name)}</b> iría ${cuando(r.alone_at)}, pero
+        ${r.displaced_by.map((n) => esc(n)).join(" y ")} ya tiene ese hueco`)
+        .join("; ")}.`);
+  }
   // La reserva de la batería. Venía de la tarjeta que se ha retirado y hay que
   // conservarla: explica por qué una batería «al 21 %» no aparece en ninguna de
   // las barras de arriba, que si no parece un error del programa.

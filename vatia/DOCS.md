@@ -439,6 +439,39 @@ Las filas se ordenan por lo que hay que decidir, con lo que **está pasando** po
 delante: primero lo que esté en marcha, luego los movibles (por ahorro
 descendente), después los fijos y al final los continuos.
 
+### El sol de una hora es uno
+
+Si tienes tres aparatos movibles, no se les propone a los tres la misma hora. El
+sobrante del mediodía no da para todos, y prometérselo a cada uno por separado es
+prometer tres veces la misma energía.
+
+El plan los coloca **por turnos**:
+
+1. Lo que está **en marcha** ya está gastando ese sol, así que se aparta primero. Un
+   coche cargando se come el sobrante que el plan le estaba ofreciendo a la lavadora.
+2. Los movibles van después, **el que más se ahorra primero**. Cada uno busca su hora
+   contra el sol que de verdad queda libre, no contra el del tejado entero.
+3. Un **fijo** no reserva sol, porque su cifra no es un plan sino un precio de «si lo
+   pones ahora». Apartarle el sobrante a los demás por algo que puede no ocurrir
+   sería inventarse una escasez.
+
+Cuando a un aparato le toca otra hora por esto, **se dice**, con la hora que habría
+tenido y quién tiene el hueco: «la Lavadora iría a las 13:30, pero el Coche ya tiene
+ese hueco». Sin decirlo, la hora recomendada cambia de un día para otro y no hay nada
+en la tarjeta que lo explique.
+
+El turno se decide con las horas calculadas **en igualdad de condiciones**, y eso es
+a propósito: recalcular la ganancia en cada vuelta sale algo mejor, pero hace que dos
+refrescos seguidos puedan cambiar el orden —y con él las horas de la tarjeta entera—
+porque la previsión se ha movido un poco. Un plan que cambia solo mientras lo miras no
+se puede seguir.
+
+Lo que esto **no** hace: descontar del perfil de la casa lo que cada aparato ya
+aporta. El perfil es la mediana de esa hora, así que contiene a los aparatos en las
+horas en que suelen ponerse, y separarlo pediría un histórico por aparato dentro del
+perfil que no está. Lo que se corrige es lo que no admite dudas: dos aparatos no
+pueden llevarse el mismo kilovatio.
+
 ### Quién se ha gastado la factura
 
 En **Facturación** hay una tarjeta que contesta la pregunta que uno se hace al ver

@@ -19,6 +19,7 @@
  *   7. y si el tejado se desvía de la previsión, se dice aquí también
  *   8. la barra del origen dice de qué depósito sale, con los colores del resumen
  *   9. un aparato de siempre encendido no trae hora, trae lo que lleva hoy
+ *   9c. y la tarjeta explica el reparto del sol entre aparatos
  *  10. y uno en marcha dice por dónde va, sin proponerle una hora ya pasada
  *  11. la barra del progreso es la misma del origen, y puede pasarse
  *  12. la forma de uso va en un glifo, y «en marcha» en un aro verde
@@ -258,6 +259,38 @@ let navegador;
   ok(/guardado/.test(v.filas[0].porque),
     `y se dice por qué el cero es cero («${v.filas[0].porque}»)`);
   ok(v.filas[0].barra.length === 2, "con los dos depósitos de los que salió");
+
+  console.log("\n9c · el sol de una hora es uno, y se dice quién se lo lleva");
+  // Del modelo de EMHASS: todas las cargas contra un único balance. El planificador
+  // ya reparte, y aquí se comprueba que la tarjeta **explique** el reparto: sin eso
+  // la hora recomendada cambia de un día para otro y no hay nada que lo justifique.
+  v = await abrir({ battery: null, rows: [
+    fila({ id: "coche", name: "Coche", icon: "coche-electrico",
+      best: { at: "2026-08-03T13:30:00+02:00", sun_pct: 100, sun_kwh: 2.0,
+              battery_kwh: 0, grid_kwh: 0, eur: 0 },
+      saving_eur: 0.4, worth_waiting: true, displaced_by: [], alone_at: null }),
+    fila({ id: "lavadora", name: "Lavadora",
+      best: { at: "2026-08-03T14:30:00+02:00", sun_pct: 80, sun_kwh: 1.6,
+              battery_kwh: 0, grid_kwh: 0.4, eur: 0.08 },
+      saving_eur: 0.1, worth_waiting: true,
+      displaced_by: ["Coche"], alone_at: "2026-08-03T13:30:00+02:00" }),
+  ] });
+  ok(/El sol de una hora es uno/.test(v.nota),
+    `se dice que el sol se reparte («${v.nota.slice(0, 60)}…»)`);
+  ok(/Lavadora/.test(v.nota) && /Coche/.test(v.nota),
+    "con a quién se le movió la hora y quién tenía el hueco");
+  // La hora que habría tenido a solas. **Sin atarla al reloj**: el navegador del
+  // banco pinta en UTC, así que las 13:30+02:00 salen como 11:30 y con «mañana»
+  // delante. Lo que se comprueba es lo que se afirma: que la nota nombra una hora
+  // **distinta** de la recomendada, que es toda la explicación.
+  const enNota = (v.nota.match(/(\d{1,2}:\d{2})/g) || []);
+  const enFila = (v.filas[1].sub.match(/(\d{1,2}:\d{2})/g) || []);
+  ok(enNota.length > 0 && enFila.length > 0 && enNota[0] !== enFila[0],
+    `y nombra otra hora que la recomendada (nota ${enNota[0]} vs fila ${enFila[0]})`);
+  // Y sin desplazados, no se dice nada: una nota que sale siempre es ruido.
+  v = await abrir({ battery: null, rows: [fila({ displaced_by: [], alone_at: null })] });
+  ok(!/El sol de una hora es uno/.test(v.nota || ""),
+    "y sin nadie desplazado la nota no aparece");
 
   console.log("\n10 · un aparato en marcha");
   // La lavadora puesta hace 40 minutos, de un ciclo de 1 h 30 que siempre dura lo

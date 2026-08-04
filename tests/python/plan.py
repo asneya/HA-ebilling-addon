@@ -7,6 +7,7 @@
   5. sin precios el plan sale igual, ordenado por lo que no pone el sol
   6. un ciclo que no cabe en el horizonte no se planifica
   7. las filas van por lo que más se gana moviéndolas
+ 7b. y dos aparatos no se llevan el mismo kilovatio de sol
   8. cargar de la red: solo si el sol no va a llenar la batería
   9. y solo si el ahorro se nota
  10. sin capacidad o sin carga no se contesta
@@ -141,6 +142,96 @@ ok(len(filas) == 2, f"una fila por aparato ({len(filas)})")
 ok(filas[0]["saving_eur"] >= filas[1]["saving_eur"],
    f"y primero lo que más se gana moviéndolo ({filas[0]['name']} {filas[0]['saving_eur']} € "
    f"≥ {filas[1]['name']} {filas[1]['saving_eur']} €)")
+
+print("\n7b · el sol de una hora es uno")
+# De la pregunta sobre el modelo de EMHASS, que resuelve todas las cargas contra un
+# **único** balance de potencia. Aquí cada aparato buscaba su hora como si estuviera
+# solo en la casa —`simular` recibe la potencia de uno y el perfil, y no sabe de los
+# demás—, así que tres aparatos iguales se llevaban los tres el mismo hueco.
+#
+# Medido antes del arreglo con estas cifras: los tres a las 13:30 con «100 % con sol»,
+# 6,00 kWh de sol prometido sobre los 5,76 kWh que el tejado da en todo el día.
+#
+# El tejado es estrecho a propósito: con uno de sobra los tres cabrían y el banco no
+# diría nada de lo que se quiere comprobar.
+def techo_corto(t):
+    h = t.hour + t.minute / 60.0
+    return max(0.0, 2400.0 * (1 - ((h - 14.0) / 2.2) ** 2))
+
+
+ESTRECHO = {"sol_at": techo_corto, "casa_at": lambda _t: 300.0,
+            "capacity_kwh": 0.0, "reserve_pct": 0.0, "soc_pct": 0.0}
+CICLO_2K = {"hours": 1.0, "kwh": 2.0, "cycles": 6, "days": 14}
+TRES = [{"id": f"a{i}", "name": f"Aparato {i}", "color": "#08f", "icon": "potencia"}
+        for i in (1, 2, 3)]
+p7 = P.plan(TRES, {f"a{i}": {"kind": "movible", "cycle": CICLO_2K} for i in (1, 2, 3)},
+            ESTRECHO, lambda t: 0.30 if 18 <= t.hour < 22 else 0.20,
+            datetime(2026, 8, 4, 9, 0, tzinfo=TZ))
+horas7 = [f["best"]["at"][11:16] for f in p7["rows"]]
+ok(len(set(horas7)) == 3, f"tres aparatos no se llevan la misma hora ({horas7})")
+
+# El invariante que de verdad importa, y que se comprueba paso a paso: la potencia
+# que el plan coloca en cada instante no puede pasarse del sobrante, porque si se
+# pasa el sol que cada fila se promete no se puede entregar.
+puestos = [(datetime.fromisoformat(f["best"]["at"]), f["hours"], f["kwh"])
+           for f in p7["rows"]]
+ARRANQUE = datetime(2026, 8, 4, 9, 0, tzinfo=TZ)
+peor = 0.0
+paso = timedelta(minutes=5)
+t = ARRANQUE
+while t < ARRANQUE + timedelta(hours=24):
+    carga = sum(k * 1000.0 / h for ini, h, k in puestos
+                if ini <= t < ini + timedelta(hours=h))
+    sobra = max(0.0, techo_corto(t) - 300.0)
+    # Solo es sobrepaso si lo que se coloca ahí se está cobrando como sol: por encima
+    # del sobrante la energía sale de la red, y eso el plan lo dice en su cifra.
+    peor = max(peor, carga - max(sobra, 0.0))
+    t += paso
+prometido = sum(f["best"]["sun_kwh"] for f in p7["rows"])
+disponible = sum(max(0.0, techo_corto(ARRANQUE + timedelta(minutes=m)) - 300.0)
+                 for m in range(0, 24 * 60, 5)) * (5 / 60) / 1000
+ok(prometido <= disponible + 0.05,
+   f"el sol prometido cabe en el que hay ({prometido:.2f} de {disponible:.2f} kWh)")
+ok(any(f["best"]["sun_pct"] < 100 for f in p7["rows"]),
+   "y al que llega tarde se le dice que no le toca todo el sol, en vez de prometerlo")
+
+# Y por qué su hora es otra, que sin decirlo parece un error del programa.
+movidos = [f for f in p7["rows"] if f.get("displaced_by")]
+ok(len(movidos) == 2, f"los dos desplazados lo dicen ({len(movidos)})")
+# `movidos and all(...)`, no `all(...)`: sobre una lista vacía `all` es cierto, así
+# que sin el `and` estas dos se ponían verdes justo cuando el arreglo no estaba —
+# comprobado quitándolo.
+ok(bool(movidos) and all(f.get("alone_at") for f in movidos),
+   "con la hora que habrían tenido a solas")
+ok(bool(movidos) and all(
+       f["displaced_by"] and f["displaced_by"][0] in [g["name"] for g in p7["rows"]]
+       for f in movidos),
+   f"y quién se la quitó ({[(f['name'], f['displaced_by']) for f in movidos]})")
+primero = [f for f in p7["rows"] if not f.get("displaced_by")]
+ok(len(primero) == 1 and primero[0]["best"]["sun_pct"] == 100,
+   "el que llega primero se lleva el mejor hueco y no dice que le hayan movido")
+
+# Un aparato **en marcha** también aparta el sol: no es una hipótesis, está dando.
+EN_MARCHA = {
+    "coche": {"kind": "movible", "cycle": CICLO_2K,
+              "progress": {"elapsed_h": 0.0, "typical_h": 1.0, "pct": 0, "over": False}},
+    "lava": {"kind": "movible", "cycle": CICLO_2K},
+}
+DOS = [{"id": "coche", "name": "Coche", "color": "#08f", "icon": "coche-electrico"},
+       {"id": "lava", "name": "Lavadora", "color": "#0a0", "icon": "lavadora"}]
+MEDIODIA = datetime(2026, 8, 4, 13, 0, tzinfo=TZ)
+pm = P.plan(DOS, EN_MARCHA, ESTRECHO, lambda t: 0.20, MEDIODIA)
+lava = next(f for f in pm["rows"] if f["name"] == "Lavadora")
+libre = P.plan([DOS[1]], {"lava": {"kind": "movible", "cycle": CICLO_2K}},
+               ESTRECHO, lambda t: 0.20, MEDIODIA)["rows"][0]
+ok(lava["best"]["at"] != libre["best"]["at"],
+   f"con el coche cargando, la lavadora va a otra hora "
+   f"({lava['best']['at'][11:16]} en vez de {libre['best']['at'][11:16]})")
+ok(lava["best"]["sun_kwh"] < libre["best"]["sun_kwh"],
+   f"y con menos sol, que es el que el coche se está llevando "
+   f"({lava['best']['sun_kwh']:.2f} < {libre['best']['sun_kwh']:.2f} kWh)")
+ok(lava.get("displaced_by") == ["Coche"],
+   f"y se dice quién ({lava.get('displaced_by')})")
 
 print("\n8-10 · cargar la batería de la red")
 # Mañana no sobra nada y la batería está a la mitad: comprar barato compensa.
