@@ -1745,3 +1745,38 @@ body.scrolled .scroll-top { opacity: .95; }
 }
 #diag-fact .li-value code { font-size: 12px; }
 #diag-fact .banner { margin-bottom: 4px; }
+
+/* ── «Quién se ha gastado la factura» ────────────────────────────────────────
+   Una fila por cosa: el icono con su color, el nombre, la barra y lo que cuesta.
+   Reutiliza `.ad-chip` y los colores de las series a propósito: es la misma
+   pregunta que la Home contesta del día —de dónde salió esa energía— aplicada al
+   ciclo entero, y usar otro lenguaje visual la haría parecer otra cosa. */
+#split-panel .sub { font-size: 12.5px; color: var(--ink-3); margin: 0 0 12px;
+  text-wrap: pretty; }
+.sp-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+.sp-row + .sp-row { border-top: 1px solid var(--hair); }
+/* Las filas que no son un aparato —el resto de la casa, la batería y el
+   descuadre— van en tinta suave: forman parte del cuadre, no son cosas que uno
+   pueda mover a otra hora. */
+.sp-row:not([data-kind="aparato"]) .ad-chip {
+  background: color-mix(in srgb, var(--ink-3) 14%, transparent); color: var(--ink-3); }
+.sp-row[data-kind="descuadre"] .ad-chip {
+  background: var(--warn-chip); color: var(--warn); }
+.sp-mid { flex: 1; min-width: 0; }
+.sp-name { font-size: 14px; font-weight: 600; color: var(--ink);
+  display: flex; align-items: baseline; gap: 7px; }
+.sp-row:not([data-kind="aparato"]) .sp-name { font-weight: 500; color: var(--ink-2); }
+.sp-pct { font-size: 11.5px; font-weight: 500; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+/* El ancho de la barra es el peso en euros de esa fila, así que las barras se
+   comparan entre sí: por eso el carril no se dibuja. Dentro, los tres orígenes. */
+.sp-barra { display: flex; height: 5px; border-radius: 3px; overflow: hidden;
+  margin-top: 6px; min-width: 3%; background: var(--hair); }
+.sp-barra i { display: block; height: 100%; }
+.sp-num { text-align: right; flex: none; }
+.sp-num b { display: block; font-size: 14px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.sp-num span { display: block; font-size: 11.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+#split-note { font-size: 11.5px; color: var(--ink-3); margin: 12px 0 0;
+  text-wrap: pretty; line-height: 1.5; }

@@ -389,7 +389,7 @@ def _accumulate_flows(
     Hacer el reparto una sola vez sobre el total del día pierde la correlación
     temporal: si la batería se carga de la red de madrugada y hay sol al
     mediodía, sobre los totales esa carga parece solar. Repartir por intervalos
-    las separa; el reparto lo hace `reparto_por_horas` y esto solo lo suma, para que
+    las separa; el reparto lo hace `series.reparto_por_horas` y esto solo lo suma, para que
     el detalle por horas se pueda usar también en otro sitio —atribuirle un origen
     a un aparato continuo— sin repetir la cuenta.
     """
@@ -402,38 +402,6 @@ def _accumulate_flows(
         for key in keys:
             acc[key] += split[key]
     return {key: value * 1000.0 for key, value in acc.items()}  # kWh → Wh
-
-
-def reparto_por_horas(
-    buckets: dict[str, dict[str, float]], measured_home: bool,
-    partes: tuple[bool, bool] = (False, False),
-) -> dict[str, dict[str, float]] | None:
-    """El reparto de cada hora del día, sin sumar: ``{iso de la hora: split}`` en kWh.
-
-    Lo saca `_accumulate_flows` para sumarlo, y hace falta **sin sumar** para poder
-    atribuirle un origen a un aparato continuo: lo que gastó la nevera a las tres
-    salió del mismo sitio que el resto de la casa a las tres, y esa es la única
-    atribución defendible sin un contador de origen por aparato.
-
-    Se devuelve por horas y no por los cinco minutos en que llegan los datos por el
-    mismo motivo que explica `_accumulate_flows`: seis contadores no publican a la
-    vez, y a cinco minutos el desfase se lee como energía que el sol no explica.
-    """
-    if not buckets:
-        return None
-    out: dict[str, dict[str, float]] = {}
-    for iso, values in series_mod.por_horas(buckets).items():
-        out[iso] = series_mod.split_flows(
-            values.get("pv_energy", 0.0),
-            values.get("battery_charge_energy", 0.0),
-            values.get("grid_export_energy", 0.0),
-            values.get("grid_import_energy", 0.0),
-            values.get("battery_discharge_energy", 0.0),
-            values.get("home_energy") if measured_home else None,
-            values.get("battery_charge_pv_energy") if partes[0] else None,
-            values.get("grid_export_pv_energy") if partes[1] else None,
-        )
-    return out
 
 
 async def daily_energy(
@@ -670,7 +638,7 @@ async def daily_energy(
     # el consumo está medido y qué partes tienen datos. Se usa dos veces: sumado,
     # para el resumen del día; y por horas, para atribuirle un origen a lo que ha
     # gastado un aparato continuo.
-    por_hora = reparto_por_horas(
+    por_hora = series_mod.reparto_por_horas(
         per_bucket, out.get("home_energy") is not None, partes
     )
     flows = _accumulate_flows(por_hora)

@@ -1240,6 +1240,42 @@ def split_flows(
     }
 
 
+def reparto_por_horas(
+    buckets: dict[str, dict[str, float]], measured_home: bool,
+    partes: tuple[bool, bool] = (False, False),
+) -> dict[str, dict[str, float]] | None:
+    """El reparto de cada hora, sin sumar: ``{iso de la hora: split}`` en kWh.
+
+    `live._accumulate_flows` lo suma para el resumen del día, y hace falta **sin
+    sumar** para poder atribuirle un origen a la energía que ya se gastó: lo que
+    gastó la nevera a las tres salió del mismo sitio que el resto de la casa a las
+    tres, y esa es la única atribución defendible sin un contador de origen por
+    aparato.
+
+    Se devuelve por horas y no por los cinco minutos en que llegan los datos por lo
+    que explica `por_horas`: seis contadores no publican a la vez, y a cinco minutos
+    el desfase se lee como energía que el sol no explica.
+
+    Vive aquí, y no en `live`, porque el día no es el único periodo que hay que
+    repartir: el desglose de la factura hace lo mismo con un ciclo entero, y dos
+    copias de esta cuenta serían dos cifras distintas del mismo mes.
+    """
+    if not buckets:
+        return None
+    out: dict[str, dict[str, float]] = {}
+    for iso, values in por_horas(buckets).items():
+        out[iso] = split_flows(
+            values.get("pv_energy", 0.0),
+            values.get("battery_charge_energy", 0.0),
+            values.get("grid_export_energy", 0.0),
+            values.get("grid_import_energy", 0.0),
+            values.get("battery_discharge_energy", 0.0),
+            values.get("home_energy") if measured_home else None,
+            values.get("battery_charge_pv_energy") if partes[0] else None,
+            values.get("grid_export_pv_energy") if partes[1] else None,
+        )
+    return out
+
 
 def casa_cuadra(totals: dict[str, float]) -> bool:
     """¿El contador de la casa es compatible con el balance de los demás?
@@ -1973,18 +2009,12 @@ async def _build_energy(
         for key, buckets in fine.items():
             for iso, value in buckets.items():
                 by_moment.setdefault(iso, {})[key] = max(value, 0.0)
-        if by_moment:
-            per_moment = {
-                iso: split_flows(
-                    v.get("pv_energy", 0.0), v.get("battery_charge_energy", 0.0),
-                    v.get("grid_export_energy", 0.0), v.get("grid_import_energy", 0.0),
-                    v.get("battery_discharge_energy", 0.0),
-                    v.get("home_energy") if measured else None,
-                    v.get("battery_charge_pv_energy"),
-                    v.get("grid_export_pv_energy"),
-                )
-                for iso, v in by_moment.items()
-            }
+        # El mismo constructor que usan la Home y el desglose de la factura. Esto
+        # era una cuarta copia de la misma cuenta, escrita a mano aquí: si alguna
+        # se cambiaba sin las otras, el gráfico del mes y «Origen del consumo»
+        # dejaban de coincidir sin que nada avisara.
+        per_moment = reparto_por_horas(by_moment, measured, (True, True))
+        if per_moment:
             fine_flows = list(per_moment.values())
             fine_home = _group_buckets(
                 {iso: f["home_total"] for iso, f in per_moment.items()}, period, range_key

@@ -159,8 +159,10 @@ ningún otro contador.
   rangos **Día · Semana · Mes · Año · Total** y cinco vistas por iconos:
   **general, solar, casa, batería y red**. Ver la sección
   [Pantalla «Energía»](#pantalla-energía).
-- **Facturación** — el simulador: comparativa de tarifas, **Detalle** con el
-  desglose por día y hora, y gestión de **Tarifas** (crear, editar, CSV).
+- **Facturación** — el simulador: comparativa de tarifas, **Quién se ha gastado la
+  factura** (el ciclo repartido por electrodoméstico), **Detalle** con el desglose
+  por día y hora, y gestión de **Tarifas** (crear, editar, CSV). Ver
+  [Quién se ha gastado la factura](#quién-se-ha-gastado-la-factura).
 - **Ajustes** — un **índice por categorías** (como los Ajustes de iOS), cada una
   con su propia pantalla:
 
@@ -412,6 +414,53 @@ cuadre.
 Las filas se ordenan por lo que hay que decidir, con lo que **está pasando** por
 delante: primero lo que esté en marcha, luego los movibles (por ahorro
 descendente), después los fijos y al final los continuos.
+
+### Quién se ha gastado la factura
+
+En **Facturación** hay una tarjeta que contesta la pregunta que uno se hace al ver
+la comparativa: de esa factura, **qué parte es de cada cosa**. Una fila por
+electrodoméstico medido, con la energía y de dónde salió, y lo que ha costado.
+
+Tres cosas que la hacen creíble, y sin las cuales un desglose es un adorno:
+
+**Está «el resto de la casa».** La cocina, las luces, la bomba de calor y todo lo
+que no tiene un enchufe medido son casi toda la factura. El resto se calcula como
+una **resta** —el consumo de la casa esa hora menos lo que sumaron los aparatos
+medidos—, así que no es una estimación: sale de lo que ya está medido.
+
+**Cuadra, y por construcción.** Precisamente por ser una resta, las filas suman el
+total del ciclo. La cuenta que se mantiene es:
+
+    Σ red(aparatos) + red(el resto) + red→batería + sin asignar = energía importada
+
+**El coste va por origen, no por kWh × precio medio.** Cada hora se reparte con
+**su** origen y **su** precio, y solo se cobra lo que salió de la red: lo que puso
+el sol no cuesta. Un horno que se usa al mediodía puede gastar más kilovatios que
+la lavadora de la noche y costar cero. Repartir la factura a prorrata de los kWh
+borraría justo el consejo que da toda la aplicación.
+
+Hay dos filas que no son un aparato y que no sobran:
+
+| Fila | Qué es |
+|---|---|
+| **Cargar la batería desde la red** | Kilovatios comprados que se guardaron, normalmente de madrugada. Están en la factura y ningún aparato los consumió a esa hora: se gastarán más tarde, y entonces aparecen como batería en las demás filas. Sin esta fila el desglose sumaría siempre de menos. |
+| **Sin asignar** | Energía comprada que el reparto no pudo colocar, porque el contador de la casa marca menos de lo que la red le entregó. Solo aparece si de verdad sobra, y se dice en vez de repartirla entre las demás para que la tabla parezca limpia. |
+
+Detalles que conviene saber:
+
+- **Los euros son de una tarifa**, la marcada como **«la mía»**, porque un precio
+  por hora es de una tarifa y no de todas. Sin ninguna marcada se enseña la energía
+  y su origen, y la tarjeta dice por qué no hay euros.
+- **La barra es energía**, no dinero: su largo son los kWh y sus colores el origen
+  (sol, batería, red). El dinero va a la derecha. Así una barra larga y ámbar con
+  0,00 € se lee como lo que es.
+- El alcance son las **estadísticas horarias** del sensor de potencia de cada
+  aparato, que Home Assistant guarda indefinidamente. Los ciclos de cinco minutos
+  que se usan en la Home solo cubren unos diez días, y un ciclo de facturación es
+  un mes.
+- Si en alguna hora los enchufes suman **más** que el contador de la casa —son
+  contadores distintos, con errores propios—, se escalan todos a la baja por igual
+  y el recorte se dice al pie.
 
 ## Pantalla «Energía»
 

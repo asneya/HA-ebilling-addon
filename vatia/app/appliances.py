@@ -326,7 +326,8 @@ def atribuir_por_horas(
     if not por_hora or not reparto:
         return None
     # El reparto viene indexado por el ISO de la hora; se reindexa por hora del día
-    # para poder cruzarlo con lo del aparato, que va por hora.
+    # para poder cruzarlo con lo del aparato, que va por hora. Solo vale porque el
+    # periodo es un día: ver `_por_horas_hoy`.
     de_la_casa: dict[str, dict[str, float]] = {}
     for iso, split in reparto.items():
         try:
@@ -334,12 +335,30 @@ def atribuir_por_horas(
         except ValueError:
             continue
         de_la_casa[hora] = split
+    return atribuir(por_hora, de_la_casa, precio_de)
+
+
+def atribuir(
+    consumo: dict[str, float] | None,
+    de_la_casa: dict[str, dict[str, float]] | None,
+    precio_de: Any = None,
+) -> dict[str, Any] | None:
+    """La cuenta de la atribución, con las dos series indexadas **igual**.
+
+    Se separó de `atribuir_por_horas` porque hay dos espacios de claves y una sola
+    cuenta: la hora del día (0-23) mientras se habla de hoy, y el ISO de la hora
+    cuando se reparte un ciclo de facturación entero, donde las 23:00 del día 3 y
+    las del 4 son horas distintas. Quien llama decide el índice; lo que se hace con
+    él es esto, en un solo sitio.
+    """
+    if not consumo or not de_la_casa:
+        return None
 
     sol = bat = red = 0.0
     coste = 0.0
     con_precio = precio_de is not None
     sin_atribuir = 0.0
-    for hora, kwh in por_hora.items():
+    for hora, kwh in consumo.items():
         split = de_la_casa.get(hora)
         casa = (split or {}).get("home_total") or 0.0
         if not split or casa <= 0:
@@ -360,7 +379,7 @@ def atribuir_por_horas(
                 con_precio = False
             else:
                 coste += r * p
-    total = sum(por_hora.values())
+    total = sum(consumo.values())
     return {
         "kwh": round(total, 3),
         "sun_kwh": round(sol, 3),

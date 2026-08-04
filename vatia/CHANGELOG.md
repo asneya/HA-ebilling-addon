@@ -2,6 +2,82 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.59.0
+
+### Quién se ha gastado la factura
+
+La comparativa contesta *cuánto* cuesta el ciclo con cada tarifa. Esta tarjeta
+contesta la siguiente pregunta, que es la que uno se hace mirándola: **de eso, qué
+parte es de cada cosa**. Una fila por electrodoméstico medido, con la energía, de
+dónde salió y lo que costó.
+
+Contestarla bien tenía tres condiciones, y las tres estaban en el enunciado desde
+que se aplazó esta pantalla:
+
+**Está «el resto de la casa».** Un desglose que solo enseña los enchufes medidos
+deja fuera casi todo —la cocina, las luces, la bomba de calor— y quien lo mira
+concluye que la aplicación no sabe de dónde sale su dinero. El resto se calcula
+como una **resta**: el consumo de la casa esa hora menos lo que sumaron los
+aparatos. No se estima, sale de lo que ya está medido.
+
+**Cuadra por construcción, no por suerte.** Precisamente por ser una resta, las
+filas suman el total. La identidad que se mantiene, y que el banco comprueba
+reventándola de cuatro maneras distintas:
+
+    Σ red(aparatos) + red(el resto) + red→batería + sin asignar = energía importada
+
+**El coste va por origen, no por kWh × precio medio.** Cada hora se reparte con su
+origen y su precio, y solo se cobra lo que salió de la red. Un horno de mediodía
+puede gastar más kilovatios que la lavadora de la noche y costar cero; a prorrata
+de los kWh los dos pagarían lo mismo, y eso borra el consejo que da toda la
+aplicación. Es la misma atribución que ya hacía la Home con lo que lleva hoy una
+nevera —de hecho es literalmente la misma función—, aplicada al ciclo entero.
+
+### Y una cuarta cosa, sin la que el desglose sumaría siempre de menos
+
+**La factura no cobra lo que la casa consumió de la red: cobra lo importado.** No
+es lo mismo, y la diferencia tiene nombre: los kilovatios que la red metió en la
+batería de madrugada. Están en la factura y ningún aparato los consumió a esa hora
+—se gastarán más tarde, puede que otro día, y entonces salen como batería en las
+demás filas—. Van en su propia fila.
+
+Y otra fila, **«Sin asignar»**, para cuando el contador de la casa marca menos de lo
+que la red le entregó. Podría no aparecer nunca y estaría bien; lo que no puede
+pasar es que ese sobrante se reparta entre las demás filas para que la tabla parezca
+limpia. Si sobra energía comprada que el reparto no coloca, se dice.
+
+### Dos decisiones de la tarjeta que salieron de mirarla
+
+**La barra es energía y no dinero.** Se probaron los euros, que era lo que parecía
+pedir una pantalla que se titula «quién se ha gastado la factura», y se leen mal: un
+horno que gasta 8,8 kWh de sol cuesta 0,00 €, y con la barra en euros salía un muñón
+de tres píxeles al lado de un coche de 4,8 kWh. El ojo lee el muñón como «no ha
+gastado nada», que es lo contrario de lo que pasó. Con la barra en energía la fila
+cuenta la historia entera: barra larga y ámbar, cero euros.
+
+**Los euros son de una tarifa**, la marcada como «la mía», porque un precio por hora
+es de una tarifa y no de todas. Sin ninguna marcada se enseñan la energía y su
+origen —que ya es media respuesta— y la tarjeta dice por qué no hay euros, en vez de
+poner los de una tarifa cualquiera.
+
+### Una cuenta que estaba escrita cuatro veces
+
+Al construir el reparto horario del ciclo salió que la misma cuenta estaba escrita
+en tres sitios a mano: en `live` para el día, dentro de `series._build_energy` para
+el gráfico del mes y su «Origen del consumo», y habría sido la cuarta aquí. Tres
+copias que, si alguien cambia una, dejan de coincidir sin que nada avise: el gráfico
+del mes y el desglose de la factura dirían cifras distintas del mismo mes.
+
+Ahora hay **una**, `series.reparto_por_horas`, y las tres la llaman.
+
+### Alcance
+
+La energía por aparato sale de las estadísticas **horarias** de su sensor de
+potencia, que Home Assistant guarda indefinidamente. Los ciclos de cinco minutos que
+aprende la Home solo cubren unos diez días —el recorder no guarda más— y un ciclo de
+facturación es un mes. La hora es además el grano al que se reparte el origen, así
+que no se pierde nada por el camino.
+
 ## 0.58.0
 
 ### El horno era una casa
