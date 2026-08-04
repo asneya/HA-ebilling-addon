@@ -35,9 +35,26 @@ congelador lleva un copo en el cuerpo grande; la nevera, los dos tiradores. Uno 
 «frío» y el otro «se abre», que es la diferencia que hay entre los dos aparatos.
 Comprobado a 21 px, que es el tamaño en el que se ve en la fila.
 
-Las tres listas —sprite, selector y lista blanca del servidor— se han movido juntas, y
-`tests/python/glifos.py` lo verifica: quitando la nevera de una de ellas sale en rojo
-por dos vías.
+### Y un coche que es un coche, porque el que había era la batería
+
+*«Añade también el glifo para un coche eléctrico»*. Al ir a dibujarlo salió lo mismo que
+con el horno: **el glifo `coche` del prototipo es el glifo `bateria`** —caja, borne y
+línea de nivel— con los números movidos dos décimas. Puestos uno al lado del otro no
+hay forma de decir cuál es cuál.
+
+Este se queda, porque ahí sí dice algo: en el diseño se llamaba «cargar el coche», y una
+batería llenándose es una manera razonable de decirlo. Lo que se corrige es la etiqueta,
+que prometía otra cosa: pasa de «Coche» a **«Carga del coche»**. Y al lado va el coche de
+verdad, `coche-electrico`: perfil de todocamino con el invernadero grande y los pilares
+verticales, que es la silueta que lo separa de una berlina.
+
+Sin rayo dentro, y no por pereza: probado, a 21 px un rayo en la ventanilla es un borrón,
+y el enchufe colgando por detrás desequilibra la silueta y a ese tamaño parece un bulto
+en el techo. Lo eléctrico lo dicen la etiqueta y la batería de al lado.
+
+Las tres listas —sprite, selector y lista blanca del servidor— se han movido juntas en
+los tres casos, y `tests/python/glifos.py` lo verifica: quitando uno de los nuevos de
+una de ellas sale en rojo por dos vías.
 
 ## 0.57.0
 

@@ -107,7 +107,7 @@ for svg, nombre in filas:
         raise SystemExit(f"«{ident}» trae algo que no es una forma: {sorted(etiquetas - PERMITIDAS)}")
     simbolos.append(f'<symbol id="i-{ident}" viewBox="0 0 24 24">{cuerpo}</symbol>')
 
-# --- los doce añadidos a mano, sin handoff ------------------------------------
+# --- los trece añadidos a mano, sin handoff ------------------------------------
 # «Aumentar los glifos disponibles para representar electrodomésticos» pidió más
 # aparatos de los que hay en el diseño (que solo trae los 4 del prototipo). No
 # hay handoff del que extraerlos, así que van dibujados aquí mismo —mismo trazo,
@@ -126,6 +126,17 @@ A_MANO = {
     # dice «frío» y el otro «se abre», que es la diferencia que hay.
     "nevera": '<rect x="5" y="3.4" width="14" height="17.2" rx="2"/>'
         '<path d="M5 8.6h14"/><path d="M15.4 4.8v2.2M15.4 10.6v4.8"/>',
+    # El coche, esta vez el coche. El glifo `coche` del prototipo es —igual que
+    # pasaba con el horno— **la misma batería** que el glifo `bateria`: caja,
+    # borne y nivel, con los números movidos dos décimas. Ahí sí dice algo
+    # («cargar el coche» era su nombre en el diseño), así que se queda, y al lado
+    # va el coche de verdad: perfil de todocamino, con el invernadero grande y los
+    # pilares verticales. Sin rayo dentro: a 21 px, que es el tamaño de la fila, un
+    # rayo en la ventanilla se convierte en un borrón.
+    "coche-electrico": '<path d="M2.8 16.8v-2.8c0-.9.6-1.6 1.5-1.8l2.1-.3 2-4'
+        'a2 2 0 0 1 1.8-1.1h3.6a2 2 0 0 1 1.8 1.1l2 4 2.1.3c.9.2 1.5.9 1.5 1.8v2.8"/>'
+        '<path d="M6.4 11.9h11.2"/>'
+        '<circle cx="7.6" cy="17" r="2"/><circle cx="16.4" cy="17" r="2"/>',
     "aire-acondicionado": '<rect x="3" y="5.6" width="18" height="7" rx="2.4"/>'
         '<path d="M7 9.1h10"/><path d="M6.4 16.2c.7 1.6 1.5 1.6 2.2 0'
         'M11.9 16.2c.7 1.9 1.5 1.9 2.2 0M17.4 16.2c.6 1.3 1.2 1.3 1.8 0"/>',

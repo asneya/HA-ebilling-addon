@@ -246,7 +246,7 @@ DEFAULT_APPLIANCES: list[dict[str, Any]] = []
 # diseño; el horno y los demás se dibujaron a mano en el sprite para cubrir más
 # aparatos. El último es el comodín: cualquier glifo desconocido cae en él.
 APPLIANCE_ICONS = (
-    "lavadora", "lavavajillas", "horno", "coche",
+    "lavadora", "lavavajillas", "horno", "coche", "coche-electrico",
     "aire-acondicionado", "ordenador", "movil", "nevera", "congelador",
     "iluminacion", "cortacesped", "microondas", "television", "freidora",
     "ventilador", "potencia",
