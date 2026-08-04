@@ -796,6 +796,13 @@ El add-on se llamaba **eBilling**. Home Assistant identifica los add-ons por su
 `slug`, así que al cambiarlo lo trata como un add-on **nuevo**: no llega como
 actualización y no se lleva nada consigo. Hay tres cosas que mover.
 
+> **eBilling ya no está en la tienda.** Estuvo un tiempo como versión puente, con el
+> único fin de enseñar este mismo texto a quien tuviera el add-on antiguo, y se ha
+> retirado una vez hecha la migración. Si lo tienes **instalado** sigue funcionando y
+> los pasos de abajo valen igual; lo que ya no se puede es instalarlo de nuevo. Lo que
+> **sí se queda** es que Vatia reconoce el fichero `ebilling.json` y lo adopta: eso no
+> cuesta nada y es lo único que de verdad hace falta conservar.
+
 **1. La configuración.** La forma fácil, sin tocar ficheros del sistema:
 
 1. Abre **eBilling** y, en la pestaña donde se ve su interfaz, añade
