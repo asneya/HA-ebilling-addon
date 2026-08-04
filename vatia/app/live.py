@@ -1700,10 +1700,22 @@ async def build(
         # a pasar lo del «Gratis» con 1,1 kWh de batería debajo.
         precio_ahora = _precio_tras_ventana(settings, tariffs, window, now)
         for fila in (plan or {}).get("rows") or []:
-            # En una fila en marcha lo que se cobra es **lo que lleva**, no lo que
-            # costaría ponerlo: ya está puesto. Sale del mismo sitio que su barra.
-            origen = fila.get("now") or fila.get("today") or fila.get("so_far")
-            fila["verdict"] = appliances_mod.etiqueta_de_origen(origen, precio_ahora)
+            # Y hay **dos** etiquetas, no una, porque hay dos preguntas: lo que
+            # costaría poner un ciclo (una hipótesis, que se simula y en la que la
+            # batería sí se cobra porque habrá que reponerla) y lo que ya ha costado
+            # lo que está gastado (medido y atribuido hora a hora, donde la batería
+            # no se cobra porque se llenó antes). Usar la primera para lo segundo
+            # daba siete veces el coste real de una nevera; ver
+            # `appliances.etiqueta_de_lo_gastado`.
+            #
+            # Cada forma de fila trae exactamente uno de los tres repartos, así que
+            # no hay ambigüedad: `now` en un movible o un fijo, `today` en un
+            # continuo y `so_far` en uno en marcha.
+            gastado = fila.get("today") or fila.get("so_far")
+            fila["verdict"] = (
+                appliances_mod.etiqueta_de_lo_gastado(gastado) if gastado
+                else appliances_mod.etiqueta_de_origen(fila.get("now"), precio_ahora)
+            )
         for fila in ahora_aparatos:
             datos = aprendido.get(fila["id"]) or {}
             fila["cycle"] = datos.get("cycle")

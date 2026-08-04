@@ -710,6 +710,65 @@ def etiqueta_de_origen(
     }
 
 
+def etiqueta_de_lo_gastado(cuenta: dict[str, Any] | None) -> dict[str, Any]:
+    """Lo mismo, pero para energía que **ya se gastó**: un continuo, o lo que lleva
+    un ciclo en marcha.
+
+    Existe porque usar `etiqueta_de_origen` aquí daba una cifra falsa, y de una
+    pregunta: *«¿qué significan los euros que salen junto al congelador? Me aparece
+    que se alimenta solo de solar pero hay un coste»*. Medido en la nevera del banco:
+    0,639 kWh el día —44 % sol, 46 % batería, 10 % red—, coste real **0,01 €** y en
+    pantalla **0,07 €**. Siete veces, y las dos cifras salían del mismo payload.
+
+    Tres errores en uno, y los tres vienen de tratar el pasado como una hipótesis:
+
+    1. **La cuenta estaba hecha y se tiraba.** `atribuir` ya devuelve `eur`: hora a
+       hora, cada hora a su precio, cobrando solo la red. `etiqueta_de_origen` lo
+       ignoraba y multiplicaba de nuevo.
+    2. **Al precio de ahora.** Lo que la nevera gastó a las tres de la mañana no
+       cuesta lo que cuesta el kilovatio de este momento. Es exactamente el «kWh ×
+       precio medio» que el desglose de la factura existe para no hacer.
+    3. **Se cobraba la batería.** Y ahí es donde `etiqueta_de_origen` tiene razón
+       *para lo que se escribió*: si pones la lavadora ahora, la batería que se coma
+       la compras esta noche. Pero esto ya pasó. Esa batería se llenó antes —del sol,
+       casi siempre—, y si se llenó de la red, ese dinero ya está contado en la hora
+       en que se compró. Cobrarlo otra vez al gastarlo es contarlo dos veces.
+
+    El punto 3 es además la convención que ya sigue el desglose de la factura, donde
+    los kWh de batería de un aparato no se cobran y lo que la red metió en la batería
+    tiene su propia línea. Las dos pantallas dicen ahora lo mismo, que es lo que
+    permite sumarlas sin que se contradigan.
+
+    Un continuo que tira del sol y de lo que había guardado sale **«Gratis»**: no es
+    un adorno, es que a esa energía no le corresponde ni un céntimo de esta factura.
+    """
+    if not cuenta:
+        return {"kind": "aprendiendo", "value": "—", "sub": "sin datos de hoy"}
+    de_red = float(cuenta.get("grid_kwh") or 0.0)
+    de_bat = float(cuenta.get("battery_kwh") or 0.0)
+    del_sol = float(cuenta.get("sun_kwh") or 0.0)
+    total = float(cuenta.get("kwh") or 0.0) or (del_sol + de_bat + de_red)
+    pct_sol = round(del_sol / total * 100) if total > 0 else 0
+    eur = cuenta.get("eur")
+
+    if de_red <= _MIGAJA_KWH:
+        # Ni un kilovatio de la red: no ha costado nada, y da igual que parte
+        # viniera de la batería. Se dice de dónde salió para que el cero se entienda.
+        return {
+            "kind": "gratis", "value": "Gratis",
+            "sub": "lo puso el sol" if de_bat <= _MIGAJA_KWH
+                   else "del sol y de lo que tenías guardado",
+        }
+    return {
+        "kind": "parcial",
+        # El coste **atribuido**, no recalculado: es el único que sabe a qué precio
+        # estaba cada hora de las que la nevera ha ido consumiendo.
+        "value": eur,
+        "sub": (f"{pct_sol} % lo puso el sol" if pct_sol
+                else "todo de la red"),
+    }
+
+
 def verdict(
     cycle: dict[str, Any] | None,
     window: dict[str, Any] | None,

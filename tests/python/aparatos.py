@@ -162,6 +162,48 @@ ok(abs(d3["grid_kwh"] - 1.0) < 0.001,
 ok(A.atribuir_por_horas({"8": 0.09}, None) is None, "sin reparto no se inventa")
 ok(A.atribuir_por_horas({}, reparto) is None, "y sin consumo tampoco")
 
+print("\n9b · lo que ya se gastó no se vuelve a valorar")
+# De una pregunta: *«¿qué significan los euros que salen junto al congelador? Me
+# aparece que se alimenta solo de solar pero hay un coste»*. Eran tres errores en
+# uno, y los tres de tratar el pasado como una hipótesis: se tiraba el `eur` que la
+# atribución ya traía, se recalculaba al precio de **ahora** y se cobraba la
+# batería. Medido en la nevera del banco: 0,01 € de coste real, 0,07 € en pantalla.
+#
+# Las cifras de aquí son las de la nevera de verdad, para que el banco hable del
+# caso que se reportó y no de uno cómodo.
+nevera = {"kwh": 0.639, "sun_kwh": 0.279, "battery_kwh": 0.296, "grid_kwh": 0.064,
+          "unplaced_kwh": 0.0, "eur": 0.01}
+et = A.etiqueta_de_lo_gastado(nevera)
+ok(et["value"] == 0.01,
+   f"se enseña el coste atribuido hora a hora ({et['value']} €)")
+# Y lo que hacía antes, para que quede medido de qué se sale: (red+batería)×precio.
+viejo = A.etiqueta_de_origen(nevera, 0.194)
+ok(viejo["value"] > et["value"] * 4,
+   f"y no el de la hipótesis, que daba {viejo['value']} € por los mismos kWh")
+ok("44" in et["sub"], f"con el sol que lo puso ({et['sub']})")
+
+# Un continuo alimentado del sol y de lo guardado: no ha costado nada. La batería no
+# se cobra porque se llenó antes; si fue de la red, ese dinero ya está contado en la
+# hora en que se compró, y cobrarlo otra vez es contarlo dos veces. Es la misma
+# convención que el desglose de la factura, donde red→batería tiene línea propia.
+gratis = A.etiqueta_de_lo_gastado(
+    {"kwh": 0.5, "sun_kwh": 0.2, "battery_kwh": 0.3, "grid_kwh": 0.0, "eur": 0.0})
+ok(gratis["value"] == "Gratis",
+   f"del sol y de la batería no cuesta nada ({gratis['value']})")
+ok("guardado" in gratis["sub"], f"y se dice de dónde salió ({gratis['sub']})")
+solo_sol = A.etiqueta_de_lo_gastado(
+    {"kwh": 0.4, "sun_kwh": 0.4, "battery_kwh": 0.0, "grid_kwh": 0.0, "eur": 0.0})
+ok(solo_sol["value"] == "Gratis" and "el sol" in solo_sol["sub"],
+   f"y del sol a secas, igual ({solo_sol['sub']})")
+ok(A.etiqueta_de_lo_gastado(None)["value"] == "—", "sin datos no se inventa nada")
+
+# Y lo que **no** cambia: para un ciclo que aún no se ha puesto, la batería sí se
+# cobra. Ahí hay que reponerla, y esa es la razón de que existan las dos etiquetas.
+futuro = A.etiqueta_de_origen(
+    {"sun_kwh": 0.2, "battery_kwh": 0.3, "grid_kwh": 0.0, "total_kwh": 0.5}, 0.20)
+ok(futuro["kind"] == "bateria" and futuro["value"] == 0.06,
+   f"en una hipótesis la batería se sigue cobrando ({futuro['value']} €)")
+
 print("\n10 · el orden de las filas")
 tres = APARATOS + [{"id": "nev", "name": "Nevera", "color": "#08f", "icon": "potencia"}]
 aprendido["nev"] = {"kind": "continuo", "today_split": d}
@@ -294,6 +336,31 @@ if BASE:
        f"y los de siempre encendido también, que es lo que se pidió ({continuos})")
     apagados = [n for n, r in una.items() if not r.get("on")]
     ok(bool(apagados), f"y los que no están dando, no ({apagados})")
+
+    # Y el cableado, que es lo que se rompió: que exista la etiqueta correcta no
+    # sirve de nada si el servidor llama a la otra. Esto se comprueba **contra el
+    # payload de verdad** a propósito; el banco de navegador inyecta el plan entero,
+    # veredicto incluido, así que ahí este fallo no se ve. Y es el que se reportó:
+    # una nevera con 0,01 € de coste que enseñaba 0,07 €.
+    for n in continuos + marcha:
+        r = una[n]
+        cuenta = r.get("today") or r.get("so_far")
+        v = r.get("verdict") or {}
+        if not cuenta:
+            continue
+        if (cuenta.get("grid_kwh") or 0) <= 0.05:
+            ok(v.get("value") == "Gratis",
+               f"{n}: sin red no cuesta nada ({v.get('value')})")
+        else:
+            ok(v.get("value") == cuenta.get("eur"),
+               f"{n}: cobra lo atribuido y no lo revalora "
+               f"({v.get('value')} = {cuenta.get('eur')} €)")
+        # Y la batería nunca sube la cifra de algo que ya se gastó: se llenó antes.
+        con_bat = (cuenta.get("battery_kwh") or 0) > 0.05
+        if con_bat and isinstance(v.get("value"), (int, float)):
+            tope = (cuenta.get("eur") or 0) + 0.005
+            ok(v["value"] <= tope,
+               f"{n}: la batería de lo ya gastado no se cobra ({v['value']} ≤ {tope})")
 
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")

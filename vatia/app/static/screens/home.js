@@ -303,8 +303,14 @@ function barraOrigen(o, pct) {
   ];
   const total = partes.reduce((a, [, v]) => a + v, 0);
   if (total <= 0) return "";
+  // El umbral era del 4 %, y con él la barra podía contradecir a la cifra: una
+  // nevera al 97 % de sol y 3 % de red pintaba una barra ámbar entera y a la vez
+  // enseñaba euros, así que parecía cobrar por el sol. Ahora se dibuja **todo lo
+  // que existe**; los tramos diminutos los sostiene un `min-width` de 2 px del CSS,
+  // que como es un mínimo de flex frena el encogido en vez de desbordar: el tramo
+  // grande cede esos dos píxeles y el pequeño no desaparece.
   const trozos = partes
-    .filter(([, v]) => v / total >= 0.04)
+    .filter(([, v]) => v / total >= 0.002)
     .map(([clave, v, texto]) =>
       `<i style="width:${((v / total) * 100).toFixed(1)}%;background:${
         SUM_COLORS[clave]}" title="${esc(`${fmtNum.format(v)} kWh ${texto}`)}"></i>`)

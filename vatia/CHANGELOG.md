@@ -2,6 +2,61 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.59.1
+
+### Los euros de la nevera eran siete veces los de verdad
+
+De una pregunta: *«¿qué significan los euros que salen junto al congelador o al
+frigorífico? Me aparece que se alimentan solo de solar pero hay un coste»*. Medido en
+la nevera del banco: 0,639 kWh en el día —44 % sol, 46 % batería, 10 % red—, coste
+real **0,01 €** y en pantalla **0,07 €**. Y las dos cifras salían del mismo payload.
+
+Eran tres errores, y los tres de tratar el pasado como si fuera una hipótesis:
+
+1. **La cuenta estaba hecha y se tiraba.** La atribución ya devuelve el coste: hora a
+   hora, cada hora a su precio, cobrando solo la red. La etiqueta lo ignoraba y
+   multiplicaba otra vez.
+2. **Al precio de ahora.** Lo que la nevera gastó a las tres de la mañana no cuesta lo
+   que cuesta el kilovatio de este momento. Es exactamente el «kWh × precio medio» que
+   el desglose de la factura de la 0.59.0 existe para no hacer, en la pantalla de al
+   lado.
+3. **Se cobraba la batería.** Y aquí es donde la etiqueta tenía razón *para lo que se
+   escribió*: si pones la lavadora ahora, la batería que se coma la compras esta
+   noche. Pero esto ya pasó. Esa batería se llenó antes —del sol, casi siempre—, y si
+   la llenó la red, ese dinero ya está contado en la hora en que se compró. Cobrarlo
+   otra vez al gastarlo es contarlo dos veces.
+
+Ahora hay **dos etiquetas y no una**, porque hay dos preguntas: lo que costaría poner
+un ciclo (una hipótesis, donde la batería sí se cobra) y lo que ya ha costado lo que
+está gastado (medido y atribuido, donde no). Un continuo que tira del sol y de lo que
+había guardado sale **«Gratis»**, y eso no es un adorno: a esa energía no le
+corresponde ni un céntimo de esta factura. Es además la convención que ya seguía el
+desglose de la factura, así que las dos pantallas dicen por fin lo mismo.
+
+### Y la barra escondía justo lo que costaba dinero
+
+Los tramos por debajo del **4 %** no se dibujaban, así que una nevera al 98,5 % de sol
+y 1,5 % de red pintaba una barra ámbar entera y a la vez enseñaba euros: parecía cobrar
+por el sol. Era la mitad visual de la misma queja.
+
+Ahora se dibuja todo lo que existe, y a los tramos diminutos los sostiene un mínimo de
+2 px. Va como mínimo de flex y no como anchura: así el tramo grande cede esos dos
+píxeles en vez de que la barra desborde el carril, que con `overflow: hidden` habría
+recortado **justo el tramo pequeño** —la red va al final— y no habría arreglado nada.
+
+### Un banco que no habría visto ninguno de los dos
+
+Los dos arreglos se han comprobado reventándolos, y de ahí salieron dos huecos:
+
+- El banco de navegador **inyecta el plan entero, veredicto incluido**, así que con el
+  fallo puesto de vuelta seguía en verde: comprueba que la pantalla pinte lo que se le
+  da, no que el servidor elija bien. El cableado se comprueba ahora contra el payload
+  de verdad, en `aparatos.py`, y con el fallo de vuelta salen dos rojos.
+- El primer caso que escribí para la barra usaba un tramo del 1,5 %, que a esa anchura
+  ya son 2,7 px: **salía verde sin el mínimo**. Las cifras son ahora las de un coche
+  cargando —10 kWh con 0,06 de la red, un 0,6 % que sin el mínimo mide 1,06 px— que es
+  donde el arreglo hace algo y donde el tramo escondido sí cuesta dinero.
+
 ## 0.59.0
 
 ### Quién se ha gastado la factura
