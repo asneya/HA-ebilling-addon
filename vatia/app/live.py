@@ -1252,6 +1252,66 @@ def curva_solar(
     }
 
 
+# Por debajo de esto la hora se da a secas: la previsión llega cada media hora o cada
+# hora, así que anunciar «±3 min» sería precisión inventada por el otro lado.
+_HOLGURA_MINIMA_MIN = 5
+
+
+def _holgura_de(
+    perfil: "HouseProfile", ventana: dict[str, Any], cuando: str, borde: str
+) -> int | None:
+    """Cuánto puede moverse la hora de un corte de la ventana, en minutos.
+
+    Es el paso que le faltaba al error del perfil para servir de algo. El perfil ya
+    medía cuánto se equivoca —`_desviacion_de`, fuera de muestra— y ese número vivía
+    en la letra pequeña de Ajustes, en vatios. Pero la ventana no habla de vatios,
+    habla de **horas**: «tu ventana abre a las 11:40». Un error de 300 W no dice nada
+    sobre las 11:40 hasta que se divide por la pendiente con la que la curva del sol
+    cruza el umbral en ese punto:
+
+        minutos = error del umbral (W) / pendiente del cruce (W/h) × 60
+
+    Y el resultado cambia muchísimo de un día a otro, que es la razón de hacerlo. Una
+    mañana clara cruza subiendo 3.000 W/h y 300 W de error son **seis minutos** —cinco
+    al redondear—: la hora es fina y se puede decir sin más. Un día de nubes en el que
+    la curva apenas roza el umbral cruza a 200 W/h, y los mismos 300 W son **hora y
+    media**. La tarjeta decía las dos con el mismo aplomo.
+
+    ``None`` cuando no se puede saber, y entonces no se dice nada:
+
+    · sin histórico para apartar un día no hay error medido (`perfil.error`);
+    · un extremo que no es un cruce sino el borde de la previsión no tiene pendiente;
+    · y una pendiente de cero daría holgura infinita, que no es una cifra.
+
+    Lo que esta cifra **no** incluye, y conviene tener claro: el error del sol. La
+    previsión solar tiene el suyo —para eso están el sesgo del tejado y el desvío del
+    día— y no se publica como una desviación que se pueda sumar aquí. Así que esto es
+    la parte de la duda que pone **el consumo de la casa**, no toda la duda.
+
+    Y de ahí que solo se calcule para **hoy**, aunque la tarjeta también diga a qué
+    hora abre mañana y los tramos de mañana traigan su pendiente igual. A un día de
+    distancia el que manda es el error del sol, no el del perfil: poner un «±10 min»
+    en la hora de mañana sería enseñar el término pequeño y callar el grande, que es
+    peor que no decir nada.
+    """
+    error = (perfil.error or {}).get("mae_w")
+    if not error or not ventana:
+        return None
+    tramo = next((s for s in ventana.get("spans") or []
+                  if s.get(borde) == cuando), None)
+    if not tramo:
+        return None
+    pendiente = tramo.get(f"{borde}_slope_w_h")
+    if not pendiente or pendiente <= 0:
+        return None
+    minutos = float(error) / float(pendiente) * 60.0
+    if minutos < _HOLGURA_MINIMA_MIN:
+        return None
+    # Redondeado a cinco minutos: la cifra es una estimación de una estimación y
+    # «±23 min» le daría un aire de exactitud que no tiene.
+    return int(round(minutos / 5.0) * 5)
+
+
 async def free_energy(
     curva: dict[str, Any] | None,
     settings: dict[str, Any],
@@ -1304,6 +1364,7 @@ async def free_energy(
     state = "none"
     left_h = 0.0
     reopens: str | None = None
+    holgura: int | None = None
     if today:
         tramos = [
             (datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
@@ -1317,6 +1378,7 @@ async def free_energy(
             left_h = (dentro[1] - now).total_seconds() / 3600.0 + sum(
                 (b - a).total_seconds() / 3600.0 for a, b in tramos if a > now
             )
+            holgura = _holgura_de(perfil, today, dentro[1].isoformat(), "end")
         elif now >= fin:
             state = "post"
         else:
@@ -1326,6 +1388,7 @@ async def free_energy(
             left_h = sum(
                 (b - a).total_seconds() / 3600.0 for a, b in tramos if a >= siguiente
             )
+            holgura = _holgura_de(perfil, today, reopens, "start")
     return {
         # Se conserva `baseline_w` —la cifra plana— porque es lo que se enseña
         # como «consumo típico»; el perfil va aparte, con su procedencia.
@@ -1347,6 +1410,11 @@ async def free_energy(
         "hours_left": round(left_h, 3),
         # Cuándo vuelve a haber excedente, si estamos en un hueco de la ventana.
         "reopens_at": reopens,
+        # Cuánto puede moverse **la hora que la tarjeta va a decir**. Ver
+        # `_holgura_de`: es el error del consumo típico traducido a minutos por la
+        # pendiente del corte. `null` cuando no se puede saber, y entonces la
+        # tarjeta da la hora a secas como hasta ahora.
+        "slack_min": holgura,
         # Con qué se ha contado la batería, para poder decirlo en la tarjeta en
         # vez de restar en silencio. `null` = no se ha descontado nada.
         "battery_room_kwh": None if hueco is None else round(hueco / 1000.0, 2),

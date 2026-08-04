@@ -105,6 +105,11 @@
       baseline_w: 320, today: hoy, tomorrow: manana,
       daylight: { from: iso(7.0), to: iso(21.0) },
       state: estado, hours_left: 6.4, reopens_at: null,
+      // Cuánto puede moverse la hora que la tarjeta dice, en minutos. Sin el
+      // parámetro no viene, que es el caso de un payload sin desviación medida o de
+      // un extremo que no es un cruce. Con `holgura=5`, una mañana clara: el servidor
+      // la manda y la tarjeta tiene que callarse igual.
+      ...(p.get("holgura") === null ? {} : { slack_min: Number(p.get("holgura")) }),
       tomorrow_forecast: p.get("prevmanana") !== "0",
       battery_room_kwh: bateria,
       bias: p.get("sesgo") === "0" ? { horas: 0, dias: 0, peor: null, factores: {} }

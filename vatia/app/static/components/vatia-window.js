@@ -167,6 +167,35 @@
       return ` El mejor rato es sobre las ${hhmm(t.peak_at)}, con ${kw(t.peak_w)}.`;
     }
 
+    /* Cuánto puede moverse la hora que la tarjeta acaba de decir, **y solo cuando
+       eso cambia algo**.
+
+       El servidor la manda desde los cinco minutos —ver `_holgura_de`: el error
+       medido del consumo típico, dividido por la pendiente con la que el sol cruza
+       ese consumo—. Aquí se calla por debajo del cuarto de hora, y no por ahorrar
+       texto: una mañana clara cruza subiendo tres kilovatios por hora y la holgura
+       sale de seis minutos casi todos los días. Decirlo entonces sería una coletilla
+       fija que solo repite «la hora es buena», que es de lo que ya se quejó esta
+       tarjeta una vez —«aburre ver siempre lo mismo»—.
+
+       Cuando sí se dice, es porque la hora **no** es fina: un día de nubes en el que
+       la curva apenas roza el consumo cruza casi de lado, y los mismos vatios de
+       error valen hora y media. Ese día la tarjeta daba la hora con el mismo aplomo
+       que la mañana clara. */
+    _holgura(d) {
+      const min = d.slack_min;
+      if (min == null || min < 15) return "";
+      // Sin negritas: `sub` se pinta con `esc()`, así que una etiqueta aquí saldría
+      // impresa tal cual. La cifra ya destaca por ser la única con «±».
+      if (min <= 45) {
+        return ` Esa hora puede irse ±${nf0.format(min)} min: es lo que la mueve lo
+          que varía tu consumo.`;
+      }
+      return ` Hoy esa hora es poco fiable —puede irse ±${dur(min / 60)}—: el sol
+        cruza tu consumo casi de lado, así que un poco más o menos de gasto la mueve
+        mucho.`;
+    }
+
     _words(d, t, m) {
       const abre = m ? `Mañana abre a las ${hhmm(m.start)}` : null;
       if (d.state === "open") {
@@ -200,7 +229,7 @@
           return {
             pill: "ENERGÍA GRATIS AHORA",
             head: `Te sobran ${kw(cuanto)} durante ${dur(d.hours_left)}.`,
-            sub: cierra + this._cuando(t),
+            sub: cierra + this._cuando(t) + this._holgura(d),
             note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
           };
         }
@@ -214,7 +243,7 @@
             ? `Gastarlos te ahorra ${eur(ahorro)}; si no, se van a la red por ${eur(venta)}.`
             : ahorro != null ? `Gastarlos te ahorra ${eur(ahorro)}.`
             : `Es energía que no tendrías que comprar, y a partir del cierre cada kWh lo pagas.`)
-            + luego + this._cuando(t),
+            + luego + this._cuando(t) + this._holgura(d),
           note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
         };
       }
@@ -234,7 +263,7 @@
             ? `La casa gasta ahora más de lo que da el sol. Después quedan ${
               dur(d.hours_left)} con excedente.`
             : `Faltan ${dur(falta)}. Te sobrarán ${kw(t.spendable_w ?? t.surplus_w)} durante ${
-              dur(t.net_hours ?? t.hours)}.`) + this._cuando(t),
+              dur(t.net_hours ?? t.hours)}.`) + this._cuando(t) + this._holgura(d),
           note: this._bateria(t) + this._note(t, m, d.tomorrow_forecast),
         };
       }

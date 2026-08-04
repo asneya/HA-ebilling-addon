@@ -7,6 +7,9 @@
  *   5. el titular dice lo **gastable**, no el excedente bruto
  *   6. y la nota explica lo que se lleva la batería
  *   7. sin batería, ni nota ni descuento
+ *  7c. la holgura de la hora se dice **solo cuando cambia algo**: callada si la
+ *      hora es fina, con la cifra si puede irse media hora, y diciendo que no
+ *      vale si puede irse hora y media
  *   8. la leyenda dice qué es cada cosa
  *   9. cabe a 320 px sin que nada se salga
  *  10. lo medido va con trazo continuo y lo previsto a rayas
@@ -123,6 +126,33 @@ const abrir = async (b, q, ancho = 414) => {
     .shadowRoot.querySelectorAll(".note")].some((n) => /corregida/.test(n.textContent)))),
     "y sin nada aprendido no se dice nada");
 
+  console.log("\n7c · la holgura de la hora, y solo cuando cambia algo");
+  /* El error del perfil llega ya traducido a minutos (ver `_holgura_de`). Lo que se
+     comprueba aquí es **cuándo se dice**: una mañana clara cruza subiendo tres
+     kilovatios por hora y la holgura sale de cinco minutos casi todos los días, así
+     que decirlo entonces sería una coletilla fija que solo repite «la hora es
+     buena» — de eso ya se quejó esta tarjeta una vez. Cuando de verdad no es fina,
+     hay que decirlo, porque hasta ahora daba las dos con el mismo aplomo. */
+  const sub = (pag) => pag.evaluate(() => document.querySelector("vatia-window")
+    .shadowRoot.querySelector(".sub").textContent.replace(/\s+/g, " ").trim());
+  const fina = await abrir(b, "?bat=4.2&holgura=5");
+  ok(!/puede irse|poco fiable/.test(await sub(fina)),
+    "con la hora fina no se dice nada, que sería una coletilla fija");
+  const media = await abrir(b, "?bat=4.2&holgura=30");
+  const tMedia = await sub(media);
+  ok(/puede irse ±30 min/.test(tMedia), `con media hora se dice: «${tMedia.slice(-72)}»`);
+  ok(/var(ía|ia) tu consumo/.test(tMedia), "y de dónde viene esa duda");
+  const mala = await abrir(b, "?bat=4.2&holgura=90");
+  const tMala = await sub(mala);
+  ok(/poco fiable/.test(tMala) && /±1 h 30 min/.test(tMala),
+    `y con hora y media se dice que la hora no vale: «${tMala.slice(-96)}»`);
+  ok(/de lado/.test(tMala), "explicando por qué: el sol cruza el consumo casi de lado");
+  // Sin la clave —un payload sin desviación medida— la tarjeta dice lo de siempre.
+  ok(!/puede irse|poco fiable/.test(await sub(p)),
+    "y sin holgura en el payload, la tarjeta queda como estaba");
+  // Nada de etiquetas: `sub` se pinta escapado, así que un `<b>` saldría impreso.
+  ok(!/&lt;|<b>/.test(tMala), "sin etiquetas impresas, que ese texto va escapado");
+
   console.log("\n8 · la leyenda");
   const ley = await p.evaluate(() => [...document.querySelector("vatia-window")
     .shadowRoot.querySelectorAll(".leyenda span")].map((s) => s.textContent.trim()));
@@ -143,6 +173,21 @@ const abrir = async (b, q, ancho = 414) => {
   });
   ok(desborde.fuera.length === 0, `nada se sale (${desborde.fuera.join(", ") || "todo dentro"})`);
   ok(desborde.doc <= 0, `y la página no pide scroll horizontal (${desborde.doc} px)`);
+  // Y con la frase larga de la holgura, que es la que más texto añade al subtítulo y
+  // por tanto el caso que puede desbordar. Comprobarlo solo con el payload corto
+  // sería medir la maquetación que no corre riesgo.
+  const largo = await abrir(b, "?bat=4.2&holgura=90", 320);
+  const conFrase = await largo.evaluate(() => {
+    const s = document.querySelector("vatia-window").shadowRoot;
+    const caja = s.host.getBoundingClientRect();
+    const p = s.querySelector(".sub").getBoundingClientRect();
+    return { fuera: p.right > caja.right + 1 || p.left < caja.left - 1,
+             doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+             largo: s.querySelector(".sub").textContent.trim().length };
+  });
+  ok(!conFrase.fuera,
+    `el subtítulo con la holgura cabe a 320 px (${conFrase.largo} caracteres)`);
+  ok(conFrase.doc <= 0, `y sigue sin pedir scroll (${conFrase.doc} px)`);
 
   /* De una pregunta: «¿no debería la forma de hoy representar la realidad hasta el
      momento actual y la previsión desde el momento actual?». Sí — y para que se

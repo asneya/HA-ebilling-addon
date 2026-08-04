@@ -571,6 +571,35 @@ Dos cosas que conviene saber al leerlo:
 El perfil que **se usa** sigue construido con todo el histórico: esto es una medida sobre
 un perfil reducido, no un cambio en el que calcula la ventana.
 
+#### Y eso, en minutos: la holgura de la hora
+
+Ese número está en vatios, y la ventana no habla de vatios: habla de horas. «Tu ventana
+abre a las 11:40» no se juzga con 300 W hasta que se divide por la **pendiente con la que
+la curva del sol cruza tu consumo** en ese punto:
+
+    minutos = error del consumo típico (W) ÷ pendiente del cruce (W/h) × 60
+
+Y el resultado cambia muchísimo de un día a otro, que es la razón de hacer la cuenta. Una
+mañana clara cruza subiendo 3.000 W/h, y 300 W de error son **cinco minutos**: la hora es
+fina. Un día de nubes en el que la curva apenas roza el consumo cruza a 200 W/h, y los
+mismos 300 W son **hora y media**. Hasta la 0.66.0 la tarjeta daba las dos con el mismo
+aplomo.
+
+Cuando la holgura pasa del cuarto de hora, la tarjeta lo dice: *«Esa hora puede irse
+±30 min: es lo que la mueve lo que varía tu consumo.»* Y si pasa de los tres cuartos,
+que la hora no vale para hoy y por qué. Por debajo del cuarto de hora **no se dice
+nada**: la previsión llega cada media hora, así que ahí la hora es tan buena como el
+dato, y una coletilla que sale todos los días para decir «está bien» es ruido.
+
+Dos límites de esta cifra:
+
+- **Es la duda que pone el consumo de la casa, no toda la duda.** La previsión solar
+  tiene su propio error —para eso están el sesgo del tejado y el desvío del día— y no se
+  publica como una desviación que se pueda sumar a esta.
+- **Un extremo que no es un cruce no tiene holgura.** Un día que amanece ya generando por
+  encima del consumo empieza su ventana en el borde de la previsión, y ahí no hay dos
+  rectas que se corten: entonces no se dice nada, que es distinto de decir cero.
+
 ### Lo que había sobre la mesa
 
 En el **resumen del final del día** —la tarjeta que sale sola al anochecer—, debajo de
