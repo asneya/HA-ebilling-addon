@@ -519,6 +519,32 @@ Detalles que conviene saber:
   contadores distintos, con errores propios—, se escalan todos a la baja por igual
   y el recorte se dice al pie.
 
+### Cuánto se equivoca el consumo típico
+
+La ventana de energía gratis se calcula con el **consumo típico** de la casa: la mediana
+de cada hora, separando laborables de fines de semana. En *Ajustes → Sensores → Flujo de
+energía* se dice de dónde sale y cómo es, y también **cuánto se equivoca**:
+
+> Se desvía **67 W** de media (9 % del consumo del día), medido contra el 2026-08-04, que
+> es un día que este cálculo no había visto. Cuanto más alto, menos fina es la hora que
+> propone la ventana.
+
+Es el error absoluto medio, y se mide **fuera de muestra**: se aparta el último día
+completo del histórico, se construye un perfil con lo demás y se compara contra el día
+apartado. Medirlo contra los mismos datos con que se construyó daría un número bonito y
+falso —la mediana pasa por medio de sus propios puntos por definición—; con datos de
+prueba, cinco veces menor.
+
+Dos cosas que conviene saber al leerlo:
+
+- **El porcentaje es del consumo medio de ese día**, no de cada punto. A las cuatro de la
+  mañana la casa gasta 90 W y equivocarse en 45 sería un 50 % que no dice nada.
+- **Con menos de tres días de histórico no se publica.** Con dos, el día apartado es la
+  mitad del histórico y el perfil que queda no se parece al que decide la ventana.
+
+El perfil que **se usa** sigue construido con todo el histórico: esto es una medida sobre
+un perfil reducido, no un cambio en el que calcula la ventana.
+
 ### Lo que había sobre la mesa
 
 En el **resumen del final del día** —la tarjeta que sale sola al anochecer—, debajo de
@@ -536,8 +562,11 @@ No cuesta ninguna consulta extra: todo lo que la cuenta necesita —el reparto h
 hora del día, lo que cada aparato gastó en cada hora y los precios— ya está en el mismo
 payload con el que se dibuja la Home.
 
-Lo que se publica es **una diferencia**: «puestos en su mejor hueco te habrías ahorrado
-0,58 €». Nunca «lo que gastaste». El modelo de esta tarjeta es más simple que el del
+Lo que se publica es **una diferencia**: «entre todos, 0,58 € de más de lo que la misma
+energía habría costado en su hueco». Nunca «lo que gastaste», y tampoco «lo que te has
+ahorrado»: ahorrar es prospectivo y este día ya pasó. Lo que hay es un sobrecoste ya
+pagado, y por eso cada fila lo dice con una flecha hacia arriba —«↑ 0,39 € de más»— y no
+con un signo más, que se leería como dinero que entró. El modelo de esta tarjeta es más simple que el del
 desglose de la factura —no tiene batería— y publicar un coste absoluto pondría dos
 cifras del mismo día en dos pantallas.
 

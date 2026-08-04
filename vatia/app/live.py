@@ -801,11 +801,14 @@ class HouseProfile:
     """
 
     def __init__(self, por_hora: dict[tuple[bool, int], float], plano: float,
-                 origen: str, dias: int):
+                 origen: str, dias: int, error: dict[str, Any] | None = None):
         self._por_hora = por_hora
         self.plano = plano
         self.origen = origen          # «influxdb» o «recorder»
         self.dias = dias
+        # Cuánto se equivoca, medido contra un día que no vio al construirse. Ver
+        # `_desviacion_de`. `None` cuando no hay histórico para dejar un día fuera.
+        self.error = error
         # ¿Hay bastantes casillas para que el perfil aporte algo? Con cuatro
         # horas medidas no se puede hablar de perfil, y es más honesto decir que
         # se está usando una sola cifra.
@@ -842,14 +845,17 @@ class HouseProfile:
             "weekday_w": laborable,
             "min_w": round(min(laborable), 1),
             "max_w": round(max(laborable), 1),
+            # Lo que le falta a todo lo demás de esta ficha: **cuánto se equivoca**.
+            # La previsión solar aprende su sesgo y publica su desvío del día; el
+            # perfil decía de dónde sale y cómo es, y nada de cuánto acierta, así que
+            # no había forma de saber cuánto fiarse de la ventana que sale de él.
+            "error": self.error,
         }
 
 
-def _perfil_de(muestras: list[tuple[datetime, float]], origen: str, dias: int
-               ) -> HouseProfile | None:
-    """Agrupa las muestras horarias en un perfil por (tipo de día, hora)."""
-    if len(muestras) < _MIN_MUESTRAS_TOTAL:
-        return None
+def _cubos_de(muestras: list[tuple[datetime, float]]
+              ) -> tuple[dict[tuple[bool, int], float], float]:
+    """La mediana por (tipo de día, hora) y la mediana de todo, de unas muestras."""
     cubos: dict[tuple[bool, int], list[float]] = {}
     todas: list[float] = []
     for moment, watts in muestras:
@@ -862,7 +868,66 @@ def _perfil_de(muestras: list[tuple[datetime, float]], origen: str, dias: int
         if len(v) >= _MIN_MUESTRAS_HORA
     }
     todas.sort()
-    return HouseProfile(por_hora, todas[len(todas) // 2], origen, dias)
+    return por_hora, (todas[len(todas) // 2] if todas else 0.0)
+
+
+def _desviacion_de(
+    muestras: list[tuple[datetime, float]], origen: str, dias: int
+) -> dict[str, Any] | None:
+    """Cuánto se equivoca el perfil, medido **contra un día que no ha visto**.
+
+    Es la idea que sí valía del forecaster de EMHASS: no el modelo —sus variables de
+    calendario ya las tiene este perfil, y a 24 h un modelo recursivo acumula error
+    donde una mediana no acumula nada— sino **el número que reporta**. Un perfil que
+    dice de dónde sale y cómo es, pero no cuánto acierta, no deja saber cuánto fiarse
+    de la ventana que se calcula con él.
+
+    Y se mide fuera de muestra, que es la única forma de que el número signifique
+    algo: se aparta el último día completo del histórico, se construye el perfil con
+    lo demás y se compara contra el día apartado. Medirlo contra los mismos datos con
+    que se construyó daría un error bonito y falso — la mediana pasa por medio de sus
+    propios puntos por definición.
+
+    Se publica el **error absoluto medio** en vatios y como porcentaje del consumo
+    medio de ese día. No el porcentaje del error de cada punto: a las cuatro de la
+    mañana la casa gasta 90 W y equivocarse en 45 es un 50 % que no significa nada.
+    """
+    if not muestras:
+        return None
+    dias_vistos = sorted({m.date() for m, _w in muestras})
+    if len(dias_vistos) < 3:
+        # Con dos días, el «día apartado» es la mitad del histórico y el perfil que
+        # queda no es el que se usa. Mejor no dar el número.
+        return None
+    fuera = dias_vistos[-1]
+    entrenamiento = [(m, w) for m, w in muestras if m.date() != fuera]
+    prueba = [(m, w) for m, w in muestras if m.date() == fuera]
+    if len(entrenamiento) < _MIN_MUESTRAS_TOTAL or not prueba:
+        return None
+    por_hora, plano = _cubos_de(entrenamiento)
+    reducido = HouseProfile(por_hora, plano, origen, dias)
+    errores = [abs(max(w, 0.0) - reducido.at(m)) for m, w in prueba]
+    real = [max(w, 0.0) for _m, w in prueba]
+    medio = sum(real) / len(real)
+    mae = sum(errores) / len(errores)
+    return {
+        "mae_w": round(mae, 1),
+        # Sobre el consumo medio del día, no punto a punto: ver arriba.
+        "mae_pct": round(mae / medio * 100) if medio > 0 else None,
+        "day": fuera.isoformat(),
+        "hours": len(prueba),
+        "mean_w": round(medio, 1),
+    }
+
+
+def _perfil_de(muestras: list[tuple[datetime, float]], origen: str, dias: int
+               ) -> HouseProfile | None:
+    """Agrupa las muestras horarias en un perfil por (tipo de día, hora)."""
+    if len(muestras) < _MIN_MUESTRAS_TOTAL:
+        return None
+    por_hora, plano = _cubos_de(muestras)
+    return HouseProfile(por_hora, plano, origen, dias,
+                        _desviacion_de(muestras, origen, dias))
 
 
 async def _house_profile(

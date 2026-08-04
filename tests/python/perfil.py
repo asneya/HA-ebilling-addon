@@ -7,6 +7,7 @@
   5. con perfil, la ventana promete lo que hay: menos kWh y con sus huecos
   6. el hueco pone el estado en «pre» con la hora de reapertura
   7. free_window con umbral plano sigue dando exactamente lo de antes
+  8. el perfil dice cuánto se equivoca, medido contra un día que no vio
 """
 import asyncio
 import math
@@ -150,6 +151,46 @@ async def main():
             comprobar(w["kwh"] <= anterior["kwh"] + 1e-9 and w["net_hours"] <= anterior["net_hours"] + 1e-9,
                       f"umbral {umbral:6.0f} W → {w['net_hours']:5.2f} h · {w['kwh']:6.2f} kWh")
         anterior = w
+
+    print("\n8 · cuánto se equivoca el perfil, y medido fuera de muestra")
+    # Lo que sí valía del forecaster de EMHASS: no el modelo —sus variables de
+    # calendario ya las tiene este perfil— sino **el número que reporta**. Un perfil
+    # que dice de dónde sale pero no cuánto acierta no deja saber cuánto fiarse de la
+    # ventana que se calcula con él.
+    #
+    # Cinco días a 500 W y el último a 800: el perfil de la medida se construye con los
+    # cuatro primeros (mediana 500) y se compara contra el quinto. Error esperado:
+    # |800 − 500| = 300 W, y el 38 % de los 800 de ese día. Salen a mano.
+    dia0 = medianoche - timedelta(days=4)
+    muestras = []
+    for d in range(5):
+        for h in range(24):
+            momento = dia0 + timedelta(days=d, hours=h)
+            muestras.append((momento, 800.0 if d == 4 else 500.0))
+    perfil = L._perfil_de(muestras, "recorder", 5)
+    e = perfil.error
+    comprobar(e is not None, "el perfil publica su desviación")
+    comprobar(e and abs(e["mae_w"] - 300.0) < 0.5,
+              f"con el error que sale a mano ({e and e['mae_w']} W de 300)")
+    comprobar(e and e["mae_pct"] == 38,
+              f"y en porcentaje del consumo del día, no punto a punto ({e and e['mae_pct']} %)")
+    # El día apartado es el último, y **solo** ese: si alguien midiera contra todo el
+    # histórico, `hours` serían las 120 muestras y no las 24 de un día.
+    comprobar(e and e["day"] == (dia0 + timedelta(days=4)).date().isoformat(),
+              f"medido contra el último día ({e and e['day']})")
+    comprobar(e and e["hours"] == 24,
+              f"y solo contra ese día, no contra el histórico entero ({e and e['hours']} h)")
+    # Y el perfil que **se usa** sigue construido con todo: la desviación es una
+    # medida sobre un perfil reducido, no un cambio en el que decide la ventana.
+    comprobar(abs(perfil.at(dia0 + timedelta(days=4, hours=3)) - 500.0) < 0.5,
+              f"el perfil que decide sigue hecho con todo ({perfil.at(dia0 + timedelta(days=4, hours=3)):.0f} W)")
+
+    # Con dos días no se da número: el «día apartado» sería la mitad del histórico y el
+    # perfil que queda no se parece al que se usa. Callar es más honesto.
+    cortas = [(dia0 + timedelta(days=d, hours=h), 500.0)
+              for d in range(2) for h in range(24)]
+    comprobar(L._perfil_de(cortas, "recorder", 2).error is None,
+              "con dos días de histórico no se publica desviación")
 
     print("\n" + (f"{len(fallos)} comprobaciones fallidas" if fallos else "todo en verde"))
     return 1 if fallos else 0

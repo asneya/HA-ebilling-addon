@@ -976,8 +976,18 @@ function perfilTexto(p) {
     ? `hora a hora, de ${fmtNum.format(p.min_w)} a ${fmtNum.format(p.max_w)} W`
     : `una sola cifra para todo el día, ${fmtNum.format(p.flat_w)} W (aún no hay
        histórico para separar las horas)`;
+  // Y cuánto se equivoca, que es lo que le faltaba: un perfil que dice de dónde sale
+  // pero no cuánto acierta no deja saber cuánto fiarse de la ventana que sale de él.
+  // Medido **fuera de muestra** —contra el último día, que el perfil de la medida no
+  // vio— porque comparar contra los propios datos daría un error bonito y falso.
+  const e = p.error;
+  const desvio = !e ? "" : `<p class="li-note">Se desvía <b>${
+    fmtNum.format(e.mae_w)} W</b> de media${e.mae_pct == null ? "" :
+    ` (${e.mae_pct} % del consumo del día)`}, medido contra el ${esc(e.day)}, que es un
+    día que este cálculo no había visto. Cuanto más alto, menos fina es la hora que
+    propone la ventana.</p>`;
   return `<p class="li-note">El <b>consumo típico</b> de la ventana sale de
-    ${fuente}: ${forma}.</p>`;
+    ${fuente}: ${forma}.</p>${desvio}`;
 }
 
 /* ---------------- controles ---------------- */

@@ -135,7 +135,7 @@
       // era su mejor hueco» en cinco filas sería ruido, y el titular ya lo resume.
       const hueco = new Map();
       for (const f of (mejor?.rows || [])) {
-        if (!f.already_best && (f.saving_eur == null || f.saving_eur > 0)) {
+        if (!f.already_best && (f.extra_eur == null || f.extra_eur > 0)) {
           hueco.set(f.id, f);
         }
       }
@@ -147,9 +147,16 @@
           : `${nf2.format(a.kwh)} kWh · ${pct} % con sol`;
         const veces = a.runs > 1 ? ` (${a.runs} veces)` : "";
         const h = hueco.get(a.id);
+        // La flecha y el importe **primero**, y la recomendación detrás: lo que la
+        // fila dice es «esto te costó de más», y la hora es el porqué. Y sin signo
+        // más: un «+0,39 €» se lee como dinero que entró, y aquí es dinero que salió.
+        // De una corrección: *«la cifra de ahorro por electrodoméstico no debería ser
+        // negativa?»*. Negativa tampoco —no se resta de ningún saldo—: es un
+        // sobrecoste, y una flecha hacia arriba con «de más» es lo que lo dice.
         const mejorHora = h
-          ? `<span class="ap-mejor">↑ mejor a las ${esc(hhmm(h.best_at))}${
-              h.saving_eur ? ` (+${esc(nf2.format(h.saving_eur))} €)` : ""}</span>`
+          ? `<span class="ap-mejor">${h.extra_eur
+              ? `<b>↑ ${esc(nf2.format(h.extra_eur))} € de más</b> · ` : ""
+            }mejor a las ${esc(hhmm(h.best_at))}</span>`
           : "";
         return `<li>
           <span class="ap-linea">
@@ -178,21 +185,21 @@
        dentro, y un coste absoluto se contradiría con el desglose de la factura. */
     _sobreLaMesa(mejor) {
       if (!mejor || !mejor.rows || !mejor.rows.length) return "";
-      const eur = mejor.saving_eur;
+      const eur = mejor.extra_eur;
       if (eur == null) {
         const movibles = mejor.rows.filter((f) => !f.already_best);
         if (!movibles.length) return "";
         return `<p class="ap-pie">Marca una tarifa como «la mía» y aquí saldrá lo que
-          te habrías ahorrado moviéndolos.</p>`;
+          costó de más ponerlos a esas horas.</p>`;
       }
       if (eur < 0.05) {
         return `<p class="ap-pie">Aprovechaste el sol prácticamente todo lo que se
-          podía: moviendo los ciclos no había ni cinco céntimos que ganar.</p>`;
+          podía: en su mejor hueco no habrían costado ni cinco céntimos menos.</p>`;
       }
-      return `<p class="ap-pie">Puestos en su mejor hueco te habrías ahorrado
-        <b>${esc(nf2.format(eur))} €</b>. Es lo que <b>había</b> sobre la mesa, no lo
-        que se hizo mal: la batería no entra en esta cuenta y las tres de la madrugada
-        cuentan como una hora cualquiera.</p>`;
+      return `<p class="ap-pie">Entre todos, <b>${esc(nf2.format(eur))} € de más</b> de
+        lo que la misma energía habría costado en su hueco. Es lo que <b>había</b> sobre
+        la mesa, no lo que se hizo mal: la batería no entra en esta cuenta y las tres de
+        la madrugada cuentan como una hora cualquiera.</p>`;
     }
 
     _render() {
