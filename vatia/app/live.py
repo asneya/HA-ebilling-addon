@@ -1902,6 +1902,11 @@ async def build(
         plan = planner.plan(
             aparatos, aprendido, fuentes, precio_at, now,
             (window or {}).get("tomorrow"),
+            # Y **si de mañana se sabe algo**, que no es lo mismo que si sobra. Sin
+            # esto, una integración solar que solo publica el día en curso hacía que
+            # el plan leyera «mañana no habrá sol» y recomendara comprar de la red
+            # energía que al día siguiente iba a llegar gratis.
+            bool((window or {}).get("tomorrow_forecast")),
         )
         # Y la etiqueta de cada fila —«Gratis», «De la batería», los euros— se pone
         # aquí, a partir del reparto que trae la propia fila. No es una segunda

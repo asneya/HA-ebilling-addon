@@ -332,6 +332,7 @@ def cargar_de_red(
     fuentes: dict[str, Any],
     precio_at: Callable[[datetime], float | None],
     manana: dict[str, Any] | None,
+    manana_sabido: bool = True,
 ) -> dict[str, Any] | None:
     """¿Compensa llenar la batería de la red en las horas baratas?
 
@@ -341,12 +342,30 @@ def cargar_de_red(
     barata que queda y lo que costaría esa misma energía en las horas caras, que
     es cuando se gastaría.
 
-    ``None`` si no se puede contestar —sin capacidad, sin carga, sin precios— o
-    si la respuesta es que no merece la pena.
+    ``manana_sabido`` es lo que separa **«mañana no sobra»** de **«de mañana no se
+    sabe nada»**, y no es un matiz: sin él, un ``manana`` vacío se leía como un día
+    sin sol y la recomendación salía. De un aviso: *«recomienda cargar la batería de
+    noche cuando todos los días estoy cargando la batería al 100 % sin problemas, y el
+    pronóstico de sol de mañana es muy bueno»*. Eso es exactamente lo que pasa con una
+    integración solar que solo publica el día en curso —bastantes lo hacen—: a partir
+    de la puesta de sol no hay curva de mañana, `free_window` devuelve ``None``, y esta
+    función lo tomaba por cero sol.
+
+    Y el error costaba dinero: aconsejaba **comprar** energía que al día siguiente iba
+    a llegar gratis. La tarjeta de la ventana ya había aprendido esta lección en la
+    0.53 —publica `tomorrow_forecast` justo para esto— y el planificador nunca se
+    enteró.
+
+    ``None`` si no se puede contestar —sin capacidad, sin carga, sin precios, sin saber
+    qué trae mañana— o si la respuesta es que no merece la pena.
     """
     capacidad = float(fuentes.get("capacity_kwh") or 0.0)
     soc = fuentes.get("soc")
     if capacidad <= 0 or soc is None:
+        return None
+    # Sin saber qué trae mañana no se aconseja comprar: la premisa de todo esto es
+    # «el sol no va a llenarla», y eso es justo lo que no se sabe.
+    if not manana_sabido and not manana:
         return None
     hueco = capacidad * max(0.0, 100.0 - float(soc)) / 100.0
     if hueco < 0.5:
@@ -399,6 +418,7 @@ def plan(
     precio_at: Callable[[datetime], float | None] | None,
     now: datetime,
     manana: dict[str, Any] | None = None,
+    manana_sabido: bool = True,
 ) -> dict[str, Any] | None:
     """El plan del día: a qué hora cada aparato, y la batería.
 
@@ -587,7 +607,7 @@ def plan(
     orden = {"movible": 1, "fijo": 2, "continuo": 3}
     filas.sort(key=lambda f: (0 if f.get("running") else orden.get(f["kind"], 9),
                               -(f.get("saving_eur") or 0.0), f["name"]))
-    bateria = cargar_de_red(now, fuentes, precio, manana)
+    bateria = cargar_de_red(now, fuentes, precio, manana, manana_sabido)
     if not filas and not bateria:
         return None
     return {

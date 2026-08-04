@@ -176,6 +176,31 @@ ok(abs(con_reparto["grid_kwh"] - 1.5) < 0.02,
 ok(abs(con_reparto["in_window_kwh"] - 3.0) < 0.02,
    "el solape con la ventana sigue publicándose, que es otra cosa")
 
+print("\n7c · una nevera no se usa «dos veces»: está puesta")
+# De un aviso: *«dice que el frigorífico se ha usado en dos ciclos, cuando es un
+# elemento que siempre está funcionando y así se ha configurado en el addon»*. Los
+# arranques del compresor los detecta el mismo detector que aprende una lavadora, y la
+# fila los contaba como usos. De un continuo lo que se cuenta son kWh, no veces.
+nevera = [{"id": "n", "name": "Nevera", "color": "#0", "icon": "nevera",
+           "kind": "continuo"}]
+arranques = {"n": {"today": [
+    {"start": "2026-07-20T11:40:00+02:00", "end": "2026-07-20T12:10:00+02:00", "kwh": 0.1},
+    {"start": "2026-07-20T14:00:00+02:00", "end": "2026-07-20T14:30:00+02:00", "kwh": 0.1},
+]}}
+f = A.del_cierre(nevera, arranques, ventana)[0]
+ok(f["runs"] is None, f"un continuo no trae recuento de veces ({f['runs']})")
+ok(abs(f["kwh"] - 0.2) < 0.001, f"pero sus kWh sí, que es lo que se cuenta ({f['kwh']})")
+# Y el mismo histórico con la ficha de un movible sí cuenta los dos ciclos: lo que
+# cambia es la forma de uso, no el detector.
+movible = [{**nevera[0], "kind": "movible"}]
+ok(A.del_cierre(movible, arranques, ventana)[0]["runs"] == 2,
+   "y un movible con el mismo histórico sí cuenta sus dos ciclos")
+# Sin `kind` en la ficha manda lo detectado, que es la misma decisión que toma el
+# resto de la aplicación (`forma()`), no una segunda opinión escrita en el cierre.
+detectado = {"n": {**arranques["n"], "detected_kind": "continuo"}}
+ok(A.del_cierre([{**nevera[0], "kind": ""}], detectado, ventana)[0]["runs"] is None,
+   "y sin ficha manda lo detectado")
+
 
 print("\n8 · de dónde saldría la energía de un ciclo puesto ahora")
 AHORA = datetime.fromisoformat("2026-07-20T12:00:00+02:00")

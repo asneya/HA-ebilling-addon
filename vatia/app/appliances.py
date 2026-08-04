@@ -1022,6 +1022,14 @@ def del_cierre(
     atribución es la de siempre —`atribuir_por_horas`, la misma que el desglose de la
     factura—, así que las dos pantallas no pueden discrepar del mismo aparato.
 
+    Y **un continuo no se cuenta por veces.** Una nevera no «se usa dos veces»: está
+    puesta. Sus arranques de compresor los detecta el mismo detector de ciclos que
+    aprende una lavadora, y la fila decía «2 ciclos» de un aparato configurado como
+    siempre encendido — de un aviso: *«dice que el frigorífico se ha usado en dos
+    ciclos, cuando es un elemento que siempre está funcionando y así se ha configurado
+    en el addon»*. En un continuo `runs` va a ``None`` y la tarjeta no dice nada: lo
+    que hay que contar de él son kWh, no veces.
+
     Sin reparto se cae al solape con la ventana, que es lo que había.
     """
     hoy = (window or {}).get("today") or {}
@@ -1055,9 +1063,13 @@ def del_cierre(
             con_sol = round(origen["sun_kwh"] / origen["kwh"] * 100)
         elif total > 0 and inicio and fin:
             con_sol = round(dentro / total * 100)      # sin reparto, lo que había
+        # Un continuo no tiene «veces»: está puesto. Su forma sale de la ficha o de lo
+        # detectado, con `forma()`, que es la misma decisión que toma el resto de la
+        # aplicación — no una segunda opinión escrita aquí.
+        continuo = forma(a, aprendido.get(a["id"])) == "continuo"
         filas.append({
             "id": a["id"], "name": a["name"], "color": a["color"], "icon": a["icon"],
-            "runs": len(ciclos),
+            "runs": None if continuo else len(ciclos),
             "kwh": round(total, 2),
             "in_window_kwh": round(dentro, 2) if (inicio and fin) else None,
             "pct": con_sol,

@@ -252,6 +252,32 @@ ok(P.cargar_de_red(AHORA, {**FUENTES, "soc": None}, precio, None) is None,
 ok(P.cargar_de_red(AHORA, FUENTES, lambda _t: 0.20, {"kwh": 0.0}) is None,
    "con el precio plano no hay valle que aprovechar")
 
+print("\n10b · «de mañana no se sabe» no es «mañana no sobra»")
+# De un aviso: *«recomienda cargar la batería de noche cuando todos los días estoy
+# cargando la batería al 100 % sin problemas, y el pronóstico de sol de mañana es muy
+# bueno»*. Con una integración solar que solo publica el día en curso —bastantes lo
+# hacen— a partir del anochecer no hay curva de mañana, `free_window` devuelve `None`,
+# y esto lo tomaba por un día sin sol: aconsejaba **comprar** energía que al día
+# siguiente iba a llegar gratis.
+#
+# Sin `manana` y sin saber si la hay, no se aconseja: la premisa de toda esta cuenta
+# es «el sol no va a llenarla», y eso es justo lo que no se sabe.
+ok(P.cargar_de_red(AHORA, FUENTES, precio, None, False) is None,
+   "sin previsión de mañana no se recomienda comprar")
+# Y **sí** cuando se sabe que mañana no sobra: es el caso de arriba, que no se pierde.
+ok(P.cargar_de_red(AHORA, FUENTES, precio, None, True) is not None,
+   "pero sabiendo que mañana no sobra, se sigue recomendando")
+ok(P.cargar_de_red(AHORA, FUENTES, precio, {"kwh": 0.0}, False) is not None,
+   "y con dato de mañana el flag no estorba")
+# Lo mismo por la puerta de `plan`, que es la que usa la aplicación: si el flag no se
+# propagara, el banco de arriba pasaría y el usuario seguiría viendo el consejo.
+sin_saber = P.plan([LAVADORA], APRENDIDO, FUENTES, precio, AHORA, None, False)
+ok((sin_saber or {}).get("battery") is None,
+   "y el plan tampoco lo trae cuando de mañana no se sabe nada")
+sabiendo = P.plan([LAVADORA], APRENDIDO, FUENTES, precio, AHORA, None, True)
+ok((sabiendo or {}).get("battery") is not None,
+   "mientras que sabiéndolo sigue estando")
+
 print("\n11 · sin con qué planificar")
 ok(P.plan([LAVADORA], APRENDIDO, None, precio, AHORA) is None, "sin fuentes, no hay plan")
 ok(P.plan([LAVADORA], {}, FUENTES, precio, AHORA)["rows"] == [],

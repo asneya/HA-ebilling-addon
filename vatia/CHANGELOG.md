@@ -2,6 +2,59 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.68.0
+
+### Cuatro cosas que la aplicación decía y no eran
+
+De un aviso con cuatro observaciones. Las cuatro tenían razón, y ninguna era la misma
+causa.
+
+### 1. «Mañana no habrá excedentes» y «carga la batería de noche»
+
+*«Recomienda cargar la batería de noche cuando todos los días estoy cargando la batería
+al 100 % sin problemas, y el pronóstico de sol de mañana es muy bueno.»* Y es el mismo
+fallo dos veces: **«de mañana no se sabe nada» se estaba leyendo como «mañana no sobra
+nada»**.
+
+Bastantes integraciones solares publican solo el día en curso. A partir del anochecer no
+hay curva de mañana, la ventana de mañana sale vacía, y:
+
+- el planificador la tomaba por un día sin sol y aconsejaba **comprar de la red** energía
+  que al día siguiente iba a llegar gratis — un consejo que cuesta dinero;
+- y la tarjeta, en el estado «ventana cerrada», afirmaba «mañana no se espera excedente».
+
+La distinción existía en el payload desde la 0.53 (`tomorrow_forecast`), y era esa rama de
+la tarjeta la única que no la miraba — mientras el planificador no la recibía siquiera.
+Ahora, sin saber qué trae mañana, no se aconseja comprar y la tarjeta dice que no hay
+previsión.
+
+### 2. El frigorífico «se ha usado en dos ciclos»
+
+Una nevera no se usa dos veces: está puesta. Sus arranques de compresor los detecta el
+mismo detector que aprende una lavadora, y la fila del cierre los contaba como usos sin
+mirar la forma de uso configurada. En un continuo ya no se cuentan veces — lo que se
+cuenta de él son kWh.
+
+### 3. «El día más caro fue el 3 de agosto (0,00 €)»
+
+*«Esto no tiene sentido. Si siempre fue cero, no hay un día más caro.»* Exacto: era el
+máximo de una lista plana a cero, que siempre devuelve algo. Un aparato que va entero con
+sol es justo el caso. Ahora, si ningún día costó nada, no se nombra ninguno.
+
+### 4. El término de energía y el desglose de la misma pantalla
+
+Aquí había dos módulos calculando lo mismo por caminos distintos —`billing` sobre la serie
+horaria de lo importado, `desglose` sobre el reparto hora a hora— y **nada comprobaba que
+llegaran al mismo número**. Ahora sí: `tests/python/desglose.py` §10 los enfrenta sobre el
+mismo periodo y la misma tarifa. Coinciden (1,06 € por los dos caminos), así que la cuenta
+no es el problema.
+
+Lo que sí estaba mal es la tarjeta: con la **proyección** puesta, el titular era la factura
+proyectada y las líneas de debajo —término de energía incluido— el acumulado, sin decirlo.
+Cuatro cifras que no suman a la quinta en la misma tarjeta, y la explicación más probable
+de que el término de energía no cuadrara con un desglose que siempre es del periodo
+transcurrido. Ahora los subtotales son los de lo que se está enseñando.
+
 ## 0.67.0
 
 ### «100 % con sol» y «0,02 € de más» ya no pueden salir juntos
