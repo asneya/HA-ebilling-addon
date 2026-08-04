@@ -17,10 +17,12 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
+import appliances as appliances_mod
 import billing
 import datasources
 import desglose
 import live
+import optimo
 import panel
 import pvpc
 import sensors
@@ -1155,6 +1157,97 @@ async def breakdown(
     return await _run_breakdown(
         cycles_back=cycles_back, start=start, end=end, tariff_id=tariff
     )
+
+
+@app.get("/api/bestday")
+async def bestday(day: str | None = Query(None)):
+    """Cuánto había que ganar moviendo los aparatos de un día **ya cerrado**.
+
+    Por defecto, ayer: el último día completo. Un día a medias daría un «mejor
+    hueco» en horas que aún no han pasado, que ya no sería una medición.
+
+    El sol de cada hora sale del **mismo reparto** que lo demás y no de otra
+    consulta: `split_flows` publica en qué se partió la generación —a la casa, a la
+    batería y a la red— y esas tres piezas *son* lo que generó el tejado. Pedirlo
+    aparte sería tener dos cifras del mismo tejado.
+    """
+    config = storage.load()
+    settings = config["settings"]
+    tz = _tz(settings)
+    now = datetime.now(tz)
+    if day:
+        try:
+            base = datetime.fromisoformat(day).replace(tzinfo=tz)
+        except ValueError as err:
+            raise HTTPException(400, f"Fecha no válida: {err}") from err
+    else:
+        base = now - timedelta(days=1)
+    inicio = base.replace(hour=0, minute=0, second=0, microsecond=0)
+    fin = inicio + timedelta(days=1)
+    if inicio >= now.replace(hour=0, minute=0, second=0, microsecond=0):
+        raise HTTPException(400, "Ese día no ha terminado todavía.")
+
+    lista = config["appliances"]
+    quiero = settings.get("my_tariff_id") or ""
+    tarifa = next((t for t in config["tariffs"] if t["id"] == quiero), None)
+    holidays = set(settings.get("holidays") or [])
+    pvpc_prices = None
+    if tarifa is not None and tarifa["energy"]["type"] == "pvpc":
+        try:
+            pvpc_prices = await pvpc.get_prices(inicio, fin, tz)
+        except Exception:  # noqa: BLE001 - sin precios se publican los kWh
+            _LOGGER.warning("Sin precios PVPC para el día pedido", exc_info=True)
+
+    def precio_de(iso: str) -> float | None:
+        if tarifa is None:
+            return None
+        try:
+            momento = datetime.fromisoformat(iso)
+        except ValueError:
+            return None
+        return billing.price_now(tarifa, momento, holidays, pvpc_prices)[0]
+
+    try:
+        states = await live.fetch_states(settings)
+        reparto, _importada = await desglose.reparto_del_periodo(
+            settings, states, tz, inicio, fin
+        )
+        por_aparato = await desglose.por_horas_de_aparatos(
+            settings, states, lista, tz, inicio, fin
+        )
+        # La forma de uso, para pasarle a `optimo` **solo los movibles**: a una nevera
+        # no hay hora que proponerle, y a un fijo tampoco —el aire lo quieres cuando
+        # hace calor—. `learn` va cacheado y lo comparte con /api/live.
+        aprendido = await appliances_mod.learn(settings, states, lista, tz, now)
+    except datasources.SourceError as err:
+        raise HTTPException(502, str(err)) from err
+    except Exception as err:  # pragma: no cover - errores de red
+        _LOGGER.warning("Error construyendo el óptimo del día", exc_info=True)
+        raise HTTPException(502, f"No se pudo construir el óptimo: {err}") from err
+
+    movibles = [
+        a for a in lista
+        if appliances_mod.forma(a, aprendido.get(a["id"])) == "movible"
+    ]
+
+    solar = {
+        iso: (s.get("to_home") or 0.0) + (s.get("to_battery") or 0.0)
+             + (s.get("to_grid") or 0.0)
+        for iso, s in (reparto or {}).items()
+    }
+    return {
+        "day": inicio.date().isoformat(),
+        "tariff": None if tarifa is None else {
+            "id": tarifa["id"], "name": tarifa.get("name"),
+        },
+        "appliances": len(lista),
+        # Cuántos de ellos se pueden mover, para que la tarjeta pueda decir «de tus
+        # cinco aparatos, dos tienen hora que elegir» en vez de callar los otros tres.
+        "movable": len(movibles),
+        "best": optimo.del_dia(movibles, inicio, por_aparato, reparto or {},
+                               solar, precio_de),
+        "generated_at": now.isoformat(),
+    }
 
 
 @app.get("/api/health")

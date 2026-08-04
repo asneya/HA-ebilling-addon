@@ -519,6 +519,34 @@ Detalles que conviene saber:
   contadores distintos, con errores propios—, se escalan todos a la baja por igual
   y el recorte se dice al pie.
 
+### Lo que había sobre la mesa ayer
+
+En **Facturación**, debajo del desglose, hay una tarjeta que repasa el día de ayer:
+para cada ciclo que se puso, a qué hora fue y a qué hora habría salido más barato,
+con el sol, el consumo y los precios **que de verdad hubo**.
+
+Y por eso se puede decir sin condicionales: aquí no entra ninguna previsión. Un plan
+del día que viene depende de una que falla; un repaso de ayer no depende de ninguna.
+Es también lo que cierra el bucle que la aplicación tenía abierto — prometía «gratis
+a las 13:00» y no volvía a mirar si salió gratis.
+
+Lo que se publica es **una diferencia**: «moviendo los ciclos de ayer a su mejor hueco
+te habrías ahorrado 0,58 €». Nunca «lo que gastaste». El modelo de esta tarjeta es más
+simple que el del desglose de la factura —no tiene batería— y publicar un coste
+absoluto pondría dos cifras del mismo día en dos pantallas.
+
+Solo entran los aparatos **movibles**: a una nevera no hay hora que proponerle, y a un
+fijo tampoco. El resto de la casa —incluida la nevera— es el suelo contra el que se
+busca hueco, igual que en el desglose.
+
+Lo que el modelo no tiene, y conviene saber:
+
+| | |
+|---|---|
+| **La batería** | Mueve energía de una hora a otra, y meterla pediría simular su carga en las dos hipótesis. Las dos cifras se calculan igual, así que su diferencia sigue valiendo; lo que no valdría es leer una de ellas como una factura. |
+| **La forma del programa** | Un ciclo se coloca como un rectángulo, su energía repartida por igual entre sus horas. En una lavadora el calentamiento va al principio, así que un hueco de sol le vale algo más de lo que aquí sale. |
+| **Las razones humanas** | Que el lavavajillas se pudiera poner a las tres de la madrugada no significa que se pudiera. La tarjeta dice lo que **había** sobre la mesa, no lo que se hizo mal. |
+
 ## Pantalla «Energía»
 
 Se abre pulsando el **resumen de energía** de la Home.

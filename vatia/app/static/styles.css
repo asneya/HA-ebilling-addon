@@ -1784,3 +1784,31 @@ body.scrolled .scroll-top { opacity: .95; }
   font-variant-numeric: tabular-nums; }
 #split-note { font-size: 11.5px; color: var(--ink-3); margin: 12px 0 0;
   text-wrap: pretty; line-height: 1.5; }
+
+/* ── «Lo que había sobre la mesa ayer» ───────────────────────────────────────
+   Filas más simples que las del desglose: aquí no hay origen que dibujar, solo
+   dos horas y una diferencia. Las que se podían mover se marcan; las que ya
+   estaban bien se quedan en tinta suave, porque son la buena noticia y no
+   necesitan tirar de la vista. */
+#best-panel .sub { font-size: 13px; color: var(--ink-2); margin: 0 0 12px;
+  text-wrap: pretty; }
+.bd-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+.bd-row + .bd-row { border-top: 1px solid var(--hair); }
+.bd-row:not(.bd-movido) .ad-chip {
+  background: color-mix(in srgb, var(--ink-3) 14%, transparent); color: var(--ink-3); }
+.bd-mid { flex: 1; min-width: 0; }
+.bd-name { font-size: 14px; font-weight: 600; color: var(--ink); }
+.bd-row:not(.bd-movido) .bd-name { font-weight: 500; color: var(--ink-2); }
+.bd-when { font-size: 12px; color: var(--ink-3); margin-top: 2px;
+  font-variant-numeric: tabular-nums; text-wrap: pretty; }
+.bd-when b { color: var(--ink-2); font-weight: 600; }
+.bd-num { text-align: right; flex: none; }
+/* El ahorro en verde: es dinero que estaba ahí. Un guion cuando no había nada que
+   ganar, que se lee mejor que «0,00 €» repetido en media tabla. */
+.bd-num b { display: block; font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--s-batt); }
+.bd-row:not(.bd-movido) .bd-num b { color: var(--ink-3); font-weight: 600; }
+.bd-num span { display: block; font-size: 11.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; }
+#best-note { font-size: 11.5px; color: var(--ink-3); margin: 12px 0 0;
+  text-wrap: pretty; line-height: 1.5; }
