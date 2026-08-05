@@ -412,10 +412,24 @@ def compute_bill(
         "wallet_credit": _round2(wallet_credit),
         "surplus_lost": _round2(surplus_lost),
         "lines": lines,
+        # Los subtotales de la tarjeta de la tarifa. **Son disjuntos y suman el
+        # total**, que es lo que se espera de unos subtotales y lo que no cumplían:
+        #
+        #  · `energy` era el término de energía **ya con los excedentes descontados**,
+        #    y la tarjeta enseñaba además una línea de «Compensación de excedentes».
+        #    De un aviso: *«al término de energía le has descontado ya los excedentes
+        #    (…) no debería tenerlos descontados»*. Ahora es el bruto y la
+        #    compensación va aparte, como en el detalle de la factura, que sí los
+        #    tenía separados.
+        #  · y el **impuesto eléctrico estaba en dos**, en `charges` y en `taxes`.
+        #
+        # Los dos errores tiraban en direcciones contrarias y se tapaban a medias, que
+        # es justo por lo que ninguno se veía. El banco comprueba ahora la suma.
         "subtotals": {
             "power": _round2(power_total),
-            "energy": _round2(energy_after_surplus),
-            "charges": _round2(fixed_total + elec_tax),
+            "energy": _round2(energy_total),
+            "surplus": _round2(surplus_credit),
+            "charges": _round2(fixed_total),
             "services": _round2(meter_rental + services_total),
             "taxes": _round2(elec_tax + vat_energy + vat_services),
         },

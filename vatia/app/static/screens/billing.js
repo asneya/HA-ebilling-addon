@@ -302,10 +302,19 @@ function renderBills(sim) {
       ? `${fmtEUR.format(projected ? bill.total : bill.projected_total)} ${projected ? "acumulado" : "proyectado"}`
       : `+${fmtEUR.format(extra)} vs. la mejor`;
 
+    // Las cinco líneas son **disjuntas y suman el total**. Antes no: el término de
+    // energía venía ya con los excedentes descontados y debajo se restaban otra vez,
+    // y el impuesto eléctrico estaba a la vez en «Cargos» y en «Impuestos». Los dos
+    // errores tiraban en direcciones contrarias, así que la suma quedaba plausible y
+    // ninguno se veía — hasta que alguien comparó esta tarjeta con el detalle, donde
+    // los conceptos sí estaban separados.
+    //
+    // Y el excedente sale de `s`, no de `bill`: con la proyección puesta tiene que ser
+    // el proyectado, como las demás líneas.
     const rows = [
       ["Término de energía", s.energy], ["Término de potencia", s.power],
       ["Cargos y servicios", s.charges + s.services],
-      bill.surplus_credit > 0 ? ["Compensación de excedentes", -bill.surplus_credit] : null,
+      s.surplus > 0 ? ["Compensación de excedentes", -s.surplus] : null,
       ["Impuestos", s.taxes],
     ].filter(Boolean).map(([label, v]) =>
       `<div class="tf-row"><span>${label}</span><b class="${v < 0 ? "neg" : ""}">${
