@@ -99,6 +99,7 @@ PYTHON = [
     ("unificar.py", ["unificar.py"], {}),
     ("ciclos.py", ["ciclos.py"], {}),
     ("desglose.py", ["desglose.py"], {}),
+    ("factura.py", ["factura.py"], {}),
     ("optimo.py", ["optimo.py"], {}),
     ("reserva.py", ["reserva.py"], {}),
     ("aparatos.py", ["aparatos.py"], {"VATIA_BASE": "http://127.0.0.1:8402"}),

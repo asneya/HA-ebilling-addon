@@ -2,6 +2,47 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.69.0
+
+### El término de energía llevaba los excedentes descontados dos veces
+
+De un diagnóstico exacto: *«cuando pulso en la tarjeta de la tarifa, por un lado veo el
+término de energía y por otro la compensación de excedentes. Esto es visualmente correcto
+si no fuera porque al término de energía le has descontado ya los excedentes»*. Así era.
+`subtotals.energy` era el término de energía **ya neto**, y debajo se restaba otra vez la
+compensación.
+
+Y al ir a arreglarlo apareció un segundo error en las mismas cinco líneas: **el impuesto
+eléctrico estaba en dos partidas a la vez**, dentro de «Cargos y servicios» y dentro de
+«Impuestos».
+
+Los dos tiraban en direcciones contrarias —uno restaba de más, el otro sumaba de más— así
+que el total de las cinco líneas quedaba plausible y ninguno saltaba a la vista. Sobre las
+cifras del banco: las líneas sumaban 22,65 € en una factura de 25,54 €, y la diferencia
+era exactamente la compensación menos el impuesto eléctrico.
+
+Ahora las cinco partidas son **disjuntas y suman el total**:
+
+| | |
+|---|---|
+| Término de energía | el **bruto**, como en el detalle de la factura |
+| Término de potencia | igual |
+| Cargos y servicios | sin el impuesto eléctrico |
+| Compensación de excedentes | su propia partida, a restar |
+| Impuestos | el impuesto eléctrico y el IVA |
+
+Y la compensación sale ahora del mismo sitio que las demás líneas, así que con la
+proyección puesta es la proyectada y no la acumulada.
+
+### Y el banco que faltaba
+
+`compute_bill` es el núcleo de la pantalla de Facturación y **no tenía banco ninguno**.
+Por eso dos errores en un bloque de cinco líneas sobrevivieron a todas las versiones.
+`tests/python/factura.py` comprueba ahora lo que nadie comprobaba: que los subtotales sean
+disjuntos y sumen el total, que las líneas del detalle sumen ese mismo total —es la otra
+vista de la misma factura—, y que la compensación no se pase del término de energía, que
+lo dice la ley.
+
 ## 0.68.0
 
 ### Cuatro cosas que la aplicación decía y no eran
