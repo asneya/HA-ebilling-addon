@@ -28,10 +28,8 @@ que sea otro. Es el mismo criterio que con el coche, que se pidió como «Enyaq�
 La regla de este set es que los glifos se distingan **por la forma**: el nombre solo
 aparece en el rótulo al pasar por encima, así que dos cajas parecidas son dos iconos que
 no se pueden usar a la vez. Se dibujaron, se pintaron a 44 px y al tamaño real de la fila
-—21 px—, y **tres de los seis no valían**:
+—21 px— y se miraron. **Dos de los seis no valían**:
 
-- el robot de cocina se leía como **un sombrero de copa sobre un rodillo**; con la
-  cintura estrecha entre el vaso y la base ya se lee de un golpe;
 - la tostadora, con las ranuras dentro del cuerpo, se leía como **un enchufe**; con el
   pan asomando por arriba no se puede leer como otra cosa;
 - y la aspiradora de trineo —cápsula, dos ruedas y manguera— se leía como **unas gafas
@@ -39,6 +37,12 @@ no se pueden usar a la vez. Se dibujaron, se pintaron a 44 px y al tamaño real 
 
 También se probaron y descartaron un vaso con asa (era una taza de café), una tostadora
 con banda de ranuras (una radio) y un bidón con ruedas (un carrito de la compra).
+
+Del **robot de cocina** se dibujaron dos: el del pedestal —tapa, vaso y base con su
+rueda de mandos— y una batidora de cintura estrecha. A mí la segunda me parecía más
+legible a 21 px; se eligió la primera, y va la primera. Queda anotado en el código
+porque es una **preferencia y no un defecto**: quien la vea escrita no debería
+«arreglarla».
 
 ### Y una cifra del encabezado que ya no puede mentir
 

@@ -172,11 +172,13 @@ A_MANO = {
     # aparece al pasar por encima, así que dos cajas parecidas son dos glifos que no
     # se pueden usar a la vez. Al lado de cada uno, de qué se distingue.
     #
-    # Robot de cocina: **la cintura estrecha** entre el vaso y la base es lo que lo
-    # hace legible de un golpe, y lo que lo separa del `freidora` (cesto con asa) y de
-    # una taza. Se probaron tres: un vaso sobre pedestal se leía como un sombrero de
-    # copa sobre un rodillo, y un vaso con asa, como una taza de café.
-    "robot-cocina": '<path d="M7.8 5.4h8.4l-1 9.6H8.8z"/><path d="M12 5.4V3.6"/><path d="M8.8 15h6.4l.8 5.4H8z"/><path d="M11 18.2h2"/>',
+    # Robot de cocina: tapa, vaso cónico y **la base con su rueda de mandos**, que es
+    # lo que dice «aparato» y no «recipiente». Se dibujó también en versión batidora
+    # —cintura estrecha entre vaso y base— y **se eligió esta**: va aquí escrito porque
+    # a mí la otra me parecía más legible a 21 px y no es asunto mío, es de quien la
+    # mira todos los días. Si alguien la «arregla» a la batidora, la está cambiando por
+    # una preferencia, no arreglando nada.
+    "robot-cocina": '<rect x="7" y="4.6" width="10" height="2.6" rx="1.1"/><path d="M8.6 7.2h6.8l-.7 8.4H9.3z"/><rect x="4.8" y="15.6" width="14.4" height="4.8" rx="1.8"/><circle cx="16.2" cy="18" r="1.1"/>',
     # Tostadora: **el pan asomando por arriba**. Se probó con las ranuras dibujadas
     # dentro del cuerpo y se leía como un enchufe; con una banda y dos ranuras, como
     # una radio. Dos rebanadas saliendo de una caja no se pueden leer como otra cosa.
