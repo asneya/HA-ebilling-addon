@@ -162,6 +162,45 @@ A_MANO = {
         '1.8H9.2A2.2 2.2 0 0 1 7 18.6z"/><path d="M12 12.4h.1"/>',
     "ventilador": '<circle cx="12" cy="10" r="6.4"/>'
         '<path d="M12 3.6v12.8M5.6 10h12.8"/><path d="M12 16.4v3M9 21h6"/>',
+    # --- los seis de la segunda ampliación -----------------------------------
+    # Pedidos por nombre: «thermomix, tostadora, Alexa, plancha, aspiradora y
+    # caldera/calentador». Los identificadores son **genéricos** y la marca va en el
+    # rótulo del botón: un glifo que se llama `thermomix` deja de valer el día que
+    # alguien tenga otro robot de cocina, y el mismo criterio se siguió con el coche.
+    #
+    # La regla de siempre: tienen que distinguirse **por la forma**. El nombre solo
+    # aparece al pasar por encima, así que dos cajas parecidas son dos glifos que no
+    # se pueden usar a la vez. Al lado de cada uno, de qué se distingue.
+    #
+    # Robot de cocina: **la cintura estrecha** entre el vaso y la base es lo que lo
+    # hace legible de un golpe, y lo que lo separa del `freidora` (cesto con asa) y de
+    # una taza. Se probaron tres: un vaso sobre pedestal se leía como un sombrero de
+    # copa sobre un rodillo, y un vaso con asa, como una taza de café.
+    "robot-cocina": '<path d="M7.8 5.4h8.4l-1 9.6H8.8z"/><path d="M12 5.4V3.6"/><path d="M8.8 15h6.4l.8 5.4H8z"/><path d="M11 18.2h2"/>',
+    # Tostadora: **el pan asomando por arriba**. Se probó con las ranuras dibujadas
+    # dentro del cuerpo y se leía como un enchufe; con una banda y dos ranuras, como
+    # una radio. Dos rebanadas saliendo de una caja no se pueden leer como otra cosa.
+    "tostadora": '<rect x="3.4" y="10.6" width="17.2" height="9" rx="2.2"/><rect x="7" y="5.4" width="3.2" height="5.2" rx="1.4"/><rect x="13.8" y="5.4" width="3.2" height="5.2" rx="1.4"/><path d="M17.8 13.6v2.8"/>',
+    # Altavoz inteligente: un **cilindro**, y no hay otro en el set. Del `movil` se
+    # distingue en eso: aquel es una caja plana con la rejilla arriba, y este tiene
+    # tapa elíptica y costados que se cierran abajo. El arco de dentro es el aro de
+    # luz, que es lo que lo hace «inteligente» y no un altavoz cualquiera.
+    "altavoz": '<path d="M7.4 7.2c0-1.4 2-2.4 4.6-2.4s4.6 1 4.6 2.4v9.6c0 1.4-2 2.4-4.6 2.4s-4.6-1-4.6-2.4z"/><path d="M7.4 7.2c0 1.3 2 2.3 4.6 2.3s4.6-1 4.6-2.3"/>',
+    # Plancha: la suela con la punta a la izquierda y el asa arqueada encima. Es un
+    # perfil, no una caja, así que no se puede confundir con nada del set.
+    "plancha": '<path d="M3 18.4h17.6v-3a3 3 0 0 0-3-3H8.4z"/><path d="M9.2 12.4V10a2.6 2.6 0 0 1 2.6-2.6h2.2A2.6 2.6 0 0 1 16.6 10v2.4"/>',
+    # Aspiradora: vertical, con la boquilla plana en el suelo y el tubo subiendo hasta
+    # el asa. La de trineo —cápsula con dos ruedas y manguera— se leía como unas gafas
+    # con rabo, y con una sola rueda, como un patinete. Aquí la boquilla ancha pegada
+    # al suelo es la que dice para qué sirve.
+    "aspiradora": '<path d="M3 20.4h8.4a1 1 0 0 0 1-1v-1.6H4a1 1 0 0 0-1 1z"/><path d="M7 17.8v-5.4a3 3 0 0 1 3-3h1.8"/><path d="M11.8 9.4h2.6a3 3 0 0 1 3 3v2.2"/>',
+    # Caldera o calentador: cuerpo colgado de la pared, **la llama** dentro y las dos
+    # tuberías por debajo. La llama es lo que dice «calienta agua» y lo que lo separa
+    # del `horno`, que lleva panel de mandos y ventana.
+    "caldera": '<rect x="5" y="3.6" width="14" height="13.2" rx="2"/>'
+        '<path d="M12 7.4c1.6 1.3 2.4 2.5 2.4 3.7a2.4 2.4 0 0 1-4.8 0'
+        'c0-1.2.8-2.4 2.4-3.7z"/>'
+        '<path d="M8.6 16.8v3.6M15.4 16.8v3.6"/>',
 }
 for ident, cuerpo in A_MANO.items():
     if ident in vistos:
@@ -175,7 +214,10 @@ cabecera = (
     "  redondo y caja de 24. Los primeros 45 vienen extraídos del diseño: los 42\n"
     "  del documento de sistema y 3 de los 4 de electrodoméstico de las filas del\n"
     "  prototipo —el horno de ahí era la misma casa que el glifo `casa`, así que se\n"
-    "  descarta y se redibuja—. Los 12 últimos no están en ningún handoff: se\n"
+    # La cifra sale de `len(A_MANO)` y no escrita a mano: se ha quedado vieja las
+    # tres veces que se han añadido glifos, y un encabezado que miente sobre su
+    # propio fichero es peor que no tenerlo.
+    f"  descarta y se redibuja—. Los {len(A_MANO)} últimos no están en ningún handoff: se\n"
     "  dibujaron a mano para ampliar el catálogo de electrodomésticos, con el mismo\n"
     "  trazo y la misma caja. `tools/generar-sprite.py` los añade después de la\n"
     "  extracción, así que sobreviven a una regeneración.\n\n"
