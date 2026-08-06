@@ -248,8 +248,13 @@ DEFAULT_APPLIANCES: list[dict[str, Any]] = []
 APPLIANCE_ICONS = (
     "lavadora", "lavavajillas", "horno", "coche", "coche-electrico",
     "aire-acondicionado", "ordenador", "movil", "nevera", "congelador",
-    "iluminacion", "cortacesped", "microondas", "television", "freidora",
-    "ventilador", "potencia",
+    "iluminacion", "cortacesped", "microondas", "tostadora", "robot-cocina",
+    "television", "freidora", "altavoz", "plancha", "aspiradora", "caldera",
+    "ventilador",
+    # **El último es el comodín**: un icono que no esté en esta lista cae aquí en vez
+    # de romper el guardado. Por eso `potencia` va al final y por eso añadir uno nuevo
+    # es meterlo **antes**, nunca detrás.
+    "potencia",
 )
 APPLIANCE_COLOR = "#0f7d8a"
 # Las tres formas de uso que se pueden elegir a mano. Vacío = detectarlo, y

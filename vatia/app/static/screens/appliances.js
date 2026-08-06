@@ -19,7 +19,14 @@ import { config, reloadConfig } from "../core/config.js";
 import { asegurar, opciones } from "../core/entidades.js";
 import { guardando } from "../core/guardando.js";
 
-/* Los mismos glifos que acepta el servidor, con su nombre para el botón. */
+/* Los mismos glifos que acepta el servidor, con su nombre para el botón. Las dos
+   listas y el sprite tienen que ir a la par —`tests/python/glifos.py` lo comprueba—
+   porque un icono que el selector ofrece y el servidor no acepta se guarda como
+   «Otro» sin decir nada.
+
+   El identificador es **genérico y el rótulo puede llevar la marca**: quien busca su
+   Thermomix la reconoce por el nombre, y el glifo sigue valiendo para cualquier robot
+   de cocina. Es el mismo criterio que con el coche, que se pidió como «Enyaq». */
 const ICONOS = [
   ["lavadora", "Lavadora"], ["lavavajillas", "Lavavajillas"],
   ["horno", "Horno"], ["coche", "Carga del coche"],
@@ -27,8 +34,12 @@ const ICONOS = [
   ["aire-acondicionado", "Aire acondicionado"], ["ordenador", "Ordenador"],
   ["movil", "Móvil"], ["nevera", "Nevera"], ["congelador", "Congelador"],
   ["iluminacion", "Iluminación"], ["cortacesped", "Cortacésped"],
-  ["microondas", "Microondas"], ["television", "Televisión"],
-  ["freidora", "Freidora de aire"], ["ventilador", "Ventilador"],
+  ["microondas", "Microondas"], ["tostadora", "Tostadora"],
+  ["robot-cocina", "Robot de cocina (Thermomix)"],
+  ["television", "Televisión"], ["freidora", "Freidora de aire"],
+  ["altavoz", "Altavoz inteligente (Alexa)"], ["plancha", "Plancha"],
+  ["aspiradora", "Aspiradora"], ["caldera", "Caldera o calentador"],
+  ["ventilador", "Ventilador"],
   ["potencia", "Otro"],
 ];
 /* Seis tonos que **no** son los de las series. En el diagrama detallado los

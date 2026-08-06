@@ -2,6 +2,50 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.71.0
+
+### Seis glifos más de electrodoméstico
+
+Pedidos por nombre: thermomix, tostadora, Alexa, plancha, aspiradora y
+caldera/calentador. **Microondas ya estaba**, así que son seis y no siete. El catálogo
+pasa de 58 a 64 glifos y el selector, de 17 a 23 iconos.
+
+| Se ofrece como | El identificador es |
+|---|---|
+| Robot de cocina (Thermomix) | `robot-cocina` |
+| Tostadora | `tostadora` |
+| Altavoz inteligente (Alexa) | `altavoz` |
+| Plancha | `plancha` |
+| Aspiradora | `aspiradora` |
+| Caldera o calentador | `caldera` |
+
+El identificador es **genérico y la marca va en el rótulo**: quien busca su Thermomix la
+reconoce por el nombre, y el glifo sigue valiendo para cualquier robot de cocina el día
+que sea otro. Es el mismo criterio que con el coche, que se pidió como «Enyaq».
+
+### Dibujar es mirar, no acertar a la primera
+
+La regla de este set es que los glifos se distingan **por la forma**: el nombre solo
+aparece en el rótulo al pasar por encima, así que dos cajas parecidas son dos iconos que
+no se pueden usar a la vez. Se dibujaron, se pintaron a 44 px y al tamaño real de la fila
+—21 px—, y **tres de los seis no valían**:
+
+- el robot de cocina se leía como **un sombrero de copa sobre un rodillo**; con la
+  cintura estrecha entre el vaso y la base ya se lee de un golpe;
+- la tostadora, con las ranuras dentro del cuerpo, se leía como **un enchufe**; con el
+  pan asomando por arriba no se puede leer como otra cosa;
+- y la aspiradora de trineo —cápsula, dos ruedas y manguera— se leía como **unas gafas
+  con rabo**. Es vertical, con la boquilla plana pegada al suelo.
+
+También se probaron y descartaron un vaso con asa (era una taza de café), una tostadora
+con banda de ranuras (una radio) y un bidón con ruedas (un carrito de la compra).
+
+### Y una cifra del encabezado que ya no puede mentir
+
+El comentario del sprite decía cuántos glifos van dibujados a mano, y se había quedado
+viejo **las tres veces** que se han añadido. Ahora sale de `len(A_MANO)`: un encabezado
+que miente sobre su propio fichero es peor que no tenerlo.
+
 ## 0.70.0
 
 ### La lista de electrodomésticos, por nombre y con el aro de la Home
