@@ -2,6 +2,44 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.70.0
+
+### La lista de electrodomésticos, por nombre y con el aro de la Home
+
+Dos peticiones, y una tercera cosa que apareció al comprobarlas.
+
+**Ordenados por nombre.** Iban en el orden en que se dieron de alta. Con dos o tres da
+igual; con ocho, buscar «Lavadora» en una lista ordenada por antigüedad es leerla entera.
+Se ordena en la pantalla y no en la configuración, que el orden de alta es un dato que no
+hay por qué perder — y la Home ordena por otra cosa: allí manda lo que está en marcha y lo
+que se puede mover, que es una decisión y no un índice.
+
+**Y el aro verde de los encendidos**, el mismo que la Home. Literalmente el mismo: la
+regla de CSS es una y sirve a las dos pantallas, y el dato (`on`) lo calcula el servidor
+una vez y las dos lo leen. Decidirlo en la pantalla a partir de los vatios habría sido una
+segunda definición de «encendido», y con eso vuelven las dos respuestas para el mismo
+aparato en dos sitios.
+
+### Y la nevera que decía «en reposo» con el aro puesto
+
+Se vio en la primera captura después de poner el aro: la fila del frigorífico salía
+rodeada de verde y a la vez diciendo «en reposo · aprendiendo su ciclo». Dos cosas
+contradiciéndose a un centímetro, y las dos por lo mismo — el texto miraba `running`, que
+es «tiene un ciclo abierto», y en una nevera eso es falso entre arranques del compresor.
+
+Ahora la fila de un continuo dice **«encendida · 90 W · 0,54 kWh hoy»**: el estado sale del
+mismo dato que el aro, y de un continuo no se habla de ciclos. Es lo que ya hacía su fila
+en la Home y lo que la 0.68.0 arregló en el cierre del día. «Aprendiendo su ciclo» en una
+nevera es una promesa que no se va a cumplir nunca.
+
+### El banco que no había
+
+`tests/navegador/ajustesap.js`. Esa pantalla —por la que se pasa a dar de alta un aparato
+y a comprobar que el sensor es el correcto— no tenía ninguno. Comprueba el orden, que el
+aro esté exactamente en los que el servidor dice encendidos, y que **ninguna fila se
+contradiga**: nada rodeado de verde puede decir «en reposo». Compara contra `/api/live` y
+no contra una lista escrita en el banco, que se quedaría vieja al cambiar la fixture.
+
 ## 0.69.0
 
 ### El término de energía llevaba los excedentes descontados dos veces

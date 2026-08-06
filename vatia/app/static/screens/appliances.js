@@ -43,7 +43,17 @@ let editando = null;
 /* Lo último que contó /api/live de cada aparato: lo que hace ahora. */
 let vivo = {};
 
-const lista = () => config()?.appliances || [];
+/* Los aparatos **por nombre**, no en el orden en que se dieron de alta.
+   Con dos o tres da igual; con ocho, buscar «Lavadora» en una lista ordenada por
+   antigüedad es leerla entera. Se ordena en la pantalla y no en la configuración
+   porque el orden de alta es un dato que no hay por qué perder — y porque la Home
+   ordena por otra cosa: allí manda lo que está en marcha y lo que se puede mover,
+   que es una decisión, no un índice.
+
+   `localeCompare` con «es» y no un `<` de cadenas: así la Ñ va detrás de la N y no
+   al final del alfabeto, y los acentos no separan «Ámbar» de «Amasadora». */
+const lista = () => [...(config()?.appliances || [])]
+  .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "es"));
 
 function render() {
   const aparatos = lista();
@@ -62,17 +72,36 @@ function render() {
   $("#ap-list").innerHTML = aparatos.map((a) => {
     const v = vivo[a.id] || {};
     const c = v.cycle;
+    const continuo = v.kind === "continuo";
     // Primera línea de estado: lo que hace ahora, que es lo que se comprueba al
     // entrar («¿he asignado el sensor correcto?»).
+    //
+    // **Con `on`, el mismo dato que dibuja el aro.** Iba con `running` —tener un
+    // ciclo abierto—, y en una nevera eso es falso entre arranques del compresor: la
+    // fila salía rodeada de verde y diciendo «en reposo» a la vez. Dos cosas
+    // contradiciéndose a un centímetro.
     const ahora = v.watts == null ? "sin lectura"
-      : v.running ? `en marcha · ${fmtNum.format(v.watts)} W`
+      : v.on ? `${continuo ? "encendida" : "en marcha"} · ${fmtNum.format(v.watts)} W`
       : "en reposo";
-    const aprendido = c
+    // Y de un continuo no se habla de ciclos: no tiene hora que elegir, tiene
+    // consumo. Es lo mismo que hace su fila en la Home, y lo que la 0.68.0 arregló en
+    // el cierre del día — «aprendiendo su ciclo» en una nevera es una promesa que no
+    // se va a cumplir nunca.
+    const aprendido = continuo
+      ? (v.today_kwh == null ? "siempre encendida"
+         : `${fmtNum.format(v.today_kwh)} kWh hoy`)
+      : c
       ? `${dur(c.hours)} · ${fmtNum.format(c.kwh)} kWh · ${c.cycles} ciclo${
           c.cycles === 1 ? "" : "s"} en ${c.days} días`
       : "aprendiendo su ciclo";
+    // El mismo aro verde que la Home, y con la misma cifra: `on` la calcula el
+    // servidor una vez (`live`) y las dos pantallas la leen. Decidirlo aquí a partir
+    // de los vatios sería una segunda definición de «encendido» y acabarían
+    // discrepando — un continuo, por ejemplo, va rodeado siempre aunque su compresor
+    // esté parado, y eso solo lo sabe quien conoce la forma de uso.
     return `
-      <div class="ap-row" data-id="${esc(a.id)}" role="button" tabindex="0">
+      <div class="ap-row" data-id="${esc(a.id)}" role="button" tabindex="0"${
+        v.on ? ' data-on="1"' : ""}>
         <span class="ap-chip" style="--ap:${esc(a.color)}">
           <svg class="i"><use href="#i-${esc(a.icon)}"/></svg>
         </span>

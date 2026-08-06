@@ -1935,6 +1935,11 @@ async def build(
             fila["cycle"] = datos.get("cycle")
             fila["today_kwh"] = datos.get("today_kwh")
             fila["kind"] = datos.get("kind")
+            # Y si está dando ahora mismo, que es lo que la Home rodea de verde. Va
+            # aquí y no se recalcula en la pantalla de Ajustes: es **el mismo** aro
+            # diciendo lo mismo, y una segunda definición de «encendido» acabaría
+            # dando dos respuestas para el mismo aparato en dos pantallas.
+            fila["on"] = bool(datos.get("encendido"))
 
     return {
         "configured": configured,

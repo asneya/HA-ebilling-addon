@@ -1580,7 +1580,12 @@ body.scrolled .scroll-top { opacity: .95; }
 
    El aro va en `box-shadow` y no en `border` a propósito: un borde de verdad
    empujaría el contenido del chip 2 px y el glifo bailaría al arrancar el aparato. */
-.ap-fila[data-on="1"] .ad-chip {
+/* Y la lista de Ajustes → Electrodomésticos lleva el mismo aro: es el mismo aparato
+   diciendo lo mismo, y quien lo ha visto en la Home espera reconocerlo. Va en la
+   misma regla y no en una copia con los mismos valores — dos aros que se parecen
+   acaban separándose en cuanto uno de los dos se retoca. */
+.ap-fila[data-on="1"] .ad-chip,
+.ap-row[data-on="1"] .ap-chip {
   box-shadow: 0 0 0 2px var(--s-batt),
               0 0 10px -1px color-mix(in srgb, var(--s-batt) 60%, transparent);
 }
