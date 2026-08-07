@@ -35,6 +35,36 @@ function applyTheme(pref) {
   emit("tema", { dark });
 }
 
+/* El tamaño del texto.
+ *
+ * Existe porque el ajuste del sistema **no llega** al CSS en iOS: la aplicación
+ * de Home Assistant enseña Vatia en un WKWebView y el tamaño dinámico no se
+ * propaga salvo que la aplicación anfitriona lo pida, cosa que no hace. En un
+ * navegador el ajuste propio del navegador ya funciona —desde que los 185
+ * tamaños de la hoja de estilos van en `rem`—; en la app, esto es la única
+ * manera.
+ *
+ * Se aplica multiplicando la raíz, así que **todo** escala a la vez: los `rem`
+ * de los tamaños, el interletraje en `em`, y las interlíneas, que son números
+ * sin unidad. Es un solo número y no una hoja de estilos alternativa.
+ *
+ * Se refleja en localStorage por lo mismo que el tema: para poder ponerlo antes
+ * del primer pintado y que la página no dé un salto al llegar la configuración.
+ */
+const ESCALAS = ["1", "1.15", "1.3", "1.6"];
+
+function applyTextScale(valor) {
+  // Fuera de la lista se vuelve al tamaño de siempre: un valor que no se
+  // entiende no dice si se quería grande o pequeño. El CSS lo acota otra vez.
+  const n = ESCALAS.includes(String(valor)) ? String(valor) : "1";
+  document.documentElement.style.setProperty("--texto", n);
+  try { localStorage.setItem("vatia-texto", n); } catch (e) { /* modo privado */ }
+  $$("#text-seg .seg").forEach((b) => b.classList.toggle("active", b.dataset.textOpt === n));
+  // Los lienzos miden su texto al dibujarlo, así que hay que rehacerlos: si no,
+  // el gráfico se queda con los rótulos del tamaño anterior hasta que se toca.
+  $$("vatia-bars, vatia-chart").forEach((el) => el.repaint && el.repaint());
+}
+
 /* El fondo dinámico se apaga poniendo `data-bg="flat"` en <body>: el CSS se
    encarga, así que no hay que desmontar nada ni tocar el DOM del cielo. */
 function applyBackground(on_) {
@@ -70,6 +100,7 @@ function watchScroll() {
 // que se visite Ajustes.
 on("config", (cfg) => {
   applyTheme(cfg?.settings?.theme);
+  applyTextScale(cfg?.settings?.text_scale);
   applyBackground(cfg?.settings?.dynamic_background !== false);
 });
 
@@ -83,6 +114,21 @@ $$("#theme-seg .seg").forEach((button) =>
       await api("settings", { method: "PUT", body: JSON.stringify({ theme: pref }) });
     } catch (err) {
       $("#settings-status").textContent = `No se pudo guardar el tema: ${err.message}`;
+    }
+  }));
+
+$$("#text-seg .seg").forEach((button) =>
+  button.addEventListener("click", async () => {
+    const valor = button.dataset.textOpt;
+    applyTextScale(valor);                  // inmediato, sin esperar al servidor
+    const s = settings();
+    if (s) s.text_scale = Number(valor);
+    try {
+      await api("settings", { method: "PUT",
+                              body: JSON.stringify({ text_scale: Number(valor) }) });
+    } catch (err) {
+      $("#settings-status").textContent =
+        `No se pudo guardar el tamaño del texto: ${err.message}`;
     }
   }));
 

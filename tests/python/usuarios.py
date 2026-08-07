@@ -176,6 +176,26 @@ req.add_header("X-Remote-User-Display-Name", "Ana")
 with urllib.request.urlopen(req, timeout=20) as r:
     ok(json.load(r)["user"]["name"] == "Ana", "un nombre sin tildes sale igual")
 
+print("\n12 · el tamaño del texto se acota antes de guardarlo")
+# Es una preferencia **de persona**, así que si se guarda un disparate el texto
+# crece tanto que no se llega al control con el que deshacerlo, y nadie más se
+# lo puede quitar. Por eso se acota en el servidor y no solo en el navegador:
+# aquí se guarda por la API, que es por donde entraría el disparate.
+for pedido, esperado, porque in [
+    (1.3, 1.3, "un valor de la lista pasa tal cual"),
+    (1.6, 1.6, "el máximo también"),
+    (9.0, 1.0, "uno disparatado se cae al tamaño de siempre"),
+    (-2, 1.0, "y uno negativo, igual"),
+    ("grande", 1.0, "y algo que ni es un número"),
+]:
+    guardar({"text_scale": pedido}, ANA)
+    tiene = ajustes(ANA).get("text_scale")
+    ok(tiene == esperado, f"{porque}: {pedido!r} → {tiene}")
+# Y no se le ha pegado a nadie más: es del cajón de Ana, no de la casa.
+guardar({"text_scale": 1.3}, ANA)
+ok(ajustes(LUIS).get("text_scale") == 1.0,
+   f"y es de cada uno, no de la casa (Luis: {ajustes(LUIS).get('text_scale')})")
+
 print()
 print("todo en verde" if not fallos else f"{len(fallos)} fallos")
 sys.exit(1 if fallos else 0)

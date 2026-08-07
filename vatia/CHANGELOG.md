@@ -2,6 +2,79 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.74.0
+
+### El tamaño del texto
+
+Los 185 tamaños de la hoja de estilos iban en píxeles. Eso quiere decir que subir el
+tamaño de letra en los ajustes del navegador no movía **nada**: los píxeles son píxeles
+pase lo que pase. Ahora van en `rem`, y la raíz vale `100%` en vez de `16px` —el 100 % es
+justo el tamaño base que tenga puesto el navegador, que es donde vive la preferencia—.
+
+Conviene ser claro con lo que esto arregla y lo que no:
+
+| | Antes | Ahora |
+|---|---|---|
+| Zoom de página | Funcionaba | Funciona |
+| Ajuste de tamaño de letra del navegador | No hacía nada | Se nota |
+| «Tamaño del texto» del sistema, en iOS | No llega | Sigue sin llegar |
+
+Lo último no es un descuido: la aplicación de Home Assistant enseña Vatia dentro de un
+WKWebView, y el tamaño dinámico de iOS no se propaga al CSS salvo que la aplicación
+anfitriona lo pida, cosa que no hace. **Por eso hay un control propio** en Ajustes →
+Apariencia, con cuatro tamaños hasta el 160 %. En iOS es la única manera.
+
+El control no lleva los nombres escritos, lleva una «A» del tamaño que va a poner. Dos
+razones: con los cuatro nombres puestos el propio control se salía de la pantalla justo en
+su ajuste más grande —el que fija el tamaño rompiéndose en su máximo—, y una «A» enseña lo
+que va a pasar en vez de nombrarlo. El nombre sigue estando para el lector de pantalla.
+
+Escala **todo** a la vez y con un solo número, porque el terreno ya estaba preparado: los
+tamaños en `rem`, el interletraje en `em` desde la 0.72 y las interlíneas sin unidad. Y se
+aplica antes del primer pintado, como el tema, para que la página no se pinte pequeña y dé
+un salto.
+
+### Lo que se rompía al crecer, medido y no supuesto
+
+En vez de convertir noventa y dos alturas fijas a ojo, se subió el texto al 200 % y se
+recorrió la aplicación buscando lo que se sale o lo que ya no cabe. Salieron dos sitios, y
+solo dos:
+
+- **la barra de pestañas.** El rótulo pasa de 11 a 22 px y el icono sigue midiendo 22:
+  58 px de contenido dentro de una caja de 46, con el rótulo pisando el borde. La caja pasa
+  a ser un mínimo, y el radio de 29 px —que era la mitad de 58— pasa a `999px`, porque un
+  radio fijo en una barra que crece deja de ser una píldora;
+- **la pastilla del tiempo**, por lo mismo, con la temperatura.
+
+Nada más. El resto de la maqueta ya era fluida y aguanta el 200 % sin una sola barra de
+scroll horizontal en ninguna de las cuatro pantallas.
+
+### Un valor imposible no puede dejarte fuera
+
+El tamaño es preferencia **de persona**, así que un valor disparatado —un dedo de más, una
+petición a mano contra la API— dejaría el texto tan grande que no se llega al control con
+el que deshacerlo, y nadie más te lo puede quitar. Se acota en dos sitios: el servidor
+rechaza lo que no esté entre 1 y 1,6 y lo deja en 1, y el CSS lo vuelve a acotar con un
+`clamp` por si el valor llegara de otra parte. Fuera de rango se cae al tamaño de siempre y
+no al extremo más cercano: un valor que no se entiende no dice si se quería grande o
+pequeño.
+
+### Bancos
+
+- `tests/navegador/texto.js`: que la raíz siga a la preferencia y con ella el interletraje
+  y la interlínea; que al 130 % y al 160 % no se salga nada ni se quede nada sin sitio, en
+  las cuatro pantallas; que los botones sigan midiendo 44 px; que el control marque lo
+  elegido y se aplique desde el primer pintado; y que `--texto: 40` no pase del 160 %.
+- `tests/python/usuarios.py` §12: que el servidor acote antes de guardar, y que el tamaño
+  sea de cada uno y no de la casa.
+
+### Fuera de alcance
+
+El texto dentro de los diagramas SVG —el de caudales, la cruz, la órbita— se queda en
+píxeles. Su maqueta la calcula el JavaScript contra esos mismos números, así que escalar
+solo las letras descuadraría el dibujo, y hay bancos que comprueban que nada se sale de su
+lienzo. Es un trabajo aparte.
+
 ## 0.73.0
 
 Tres huecos que salieron de repasar la aplicación entera contra la guía de diseño, los

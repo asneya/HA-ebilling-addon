@@ -73,7 +73,7 @@ NESTED_SETTINGS = ("influx", "flow_sensors", "energy_sensors", "contracted_power
 # alcance el puerto directamente. Los roles valen dentro de Ingress; el puerto
 # sigue sin poder exponerse.
 PREFS_USUARIO = ("home_order", "home_hidden", "flow_style",
-                 "theme", "dynamic_background")
+                 "theme", "dynamic_background", "text_scale")
 
 # Lo que se sabe de cada persona que ha entrado. No son gustos: es el registro
 # de quién es quién, y por eso lo edita un administrador y no el propio
@@ -202,6 +202,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Apariencia: «auto» sigue al sistema (el modo oscuro del móvil o del
     # navegador), «light» y «dark» lo fuerzan.
     "theme": "auto",
+    # Tamaño del texto, como multiplicador de la raíz. Existe porque el ajuste de
+    # tamaño de letra del sistema **no llega** al CSS en iOS: la aplicación de
+    # Home Assistant enseña esto en un WKWebView y el tamaño dinámico no se
+    # propaga salvo que la aplicación anfitriona lo pida, cosa que no hace. En un
+    # navegador de escritorio el ajuste propio del navegador ya funciona; aquí es
+    # la única manera. Es preferencia de persona, no de casa: en el mismo hogar
+    # uno lo quiere grande y otro no.
+    "text_scale": 1.0,
     # Fondo de la Home según la hora y el tiempo. Quien prefiera una superficie
     # lisa —o tenga un móvil justo— lo puede apagar sin perder nada del dato.
     "dynamic_background": True,
@@ -721,6 +729,29 @@ def olvidar_usuario(usuario: str) -> bool:
         return True
 
 
+def _escala_texto(valor: Any) -> float:
+    """El multiplicador del tamaño de texto, acotado.
+
+    Se acota **aquí** y no solo en el navegador porque esto se guarda: un valor
+    disparatado —un dedo de más al escribirlo, una petición a mano contra la
+    API— dejaría el texto tan grande que no se llega al control con el que
+    deshacerlo, y es una preferencia de persona, así que nadie más se lo puede
+    quitar. El CSS lo vuelve a acotar por si acaso; esto evita que el disparate
+    llegue siquiera al fichero.
+
+    Fuera de rango se cae al 1, que es el tamaño de siempre, en vez de recortar
+    al extremo más cercano: un valor que no se entiende no dice si se quería
+    grande o pequeño.
+    """
+    try:
+        n = float(valor)
+    except (TypeError, ValueError):
+        return 1.0
+    if not 1.0 <= n <= 1.6:
+        return 1.0
+    return round(n, 2)
+
+
 def update_settings(patch: dict[str, Any], usuario: str | None = "") -> dict[str, Any]:
     """Guarda el parche y devuelve los ajustes como los ve `usuario`.
 
@@ -740,6 +771,8 @@ def update_settings(patch: dict[str, Any], usuario: str | None = "") -> dict[str
         else config.setdefault("users", {}).setdefault(usuario, {})
     )
     for key, value in patch.items():
+        if key == "text_scale":
+            value = _escala_texto(value)
         if usuario is not None and key in PREFS_USUARIO:
             prefs[key] = value
         elif key in NESTED_SETTINGS and isinstance(value, dict):
