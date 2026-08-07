@@ -488,7 +488,15 @@ body[data-view="energy"] .bg-scrim::after { opacity: 1; }
 .sum-col { min-width: 0; }
 .sum-title { font-size: 15.5px; color: var(--ink-2); font-weight: 500; }
 .sum-total { display: flex; align-items: baseline; gap: 5px; margin: 2px 0 14px; }
-.sum-total b { font-size: 30px; font-weight: 700; letter-spacing: -.027em; }
+/* Interlínea propia en las cifras grandes.
+   Heredaban el 1,5 del cuerpo, que es interlínea de párrafo: en un número de
+   30 px eso son 45 px de caja para una línea de texto, o sea quince píxeles de
+   aire que nadie pidió justo donde el diseño quiere apretar. La regla es que la
+   interlínea va al revés que el tamaño —suelta en el cuerpo, apretada en los
+   titulares—, y estas son todas cifras de una línea dentro de filas alineadas
+   por la base. 1,1 es lo que ya usaban las que sí la tenían. */
+.sum-total b { font-size: 30px; font-weight: 700; letter-spacing: -.027em;
+  line-height: 1.1; }
 .sum-total span { font-size: 14px; color: var(--ink-2); }
 .sum-bar { display: flex; gap: 3px; height: 26px; margin-bottom: 18px; }
 /* Esta sí anima la anchura, y a propósito. La de los aparatos se pasó a `scaleX`
@@ -511,7 +519,8 @@ body[data-view="energy"] .bg-scrim::after { opacity: 1; }
 .sum-label { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--ink-2); }
 .sum-label i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .sum-line { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
-.sum-line b { font-size: 22px; font-weight: 700; letter-spacing: -.023em; }
+.sum-line b { font-size: 22px; font-weight: 700; letter-spacing: -.023em;
+  line-height: 1.1; }
 .sum-line span.u { font-size: 13px; color: var(--ink-2); }
 .sum-line .leader { flex: 1 1 auto; border-bottom: 1.5px dashed var(--sep); margin: 0 4px 5px; min-width: 12px; }
 .sum-line .pct { font-size: 15.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
@@ -529,9 +538,50 @@ body[data-view="energy"] .bg-scrim::after { opacity: 1; }
   .summary { grid-template-columns: 1fr; gap: 22px; }
 }
 
+/* ---------------- el acuse de recibo al apretar ----------------
+   Dieciséis cosas de la aplicación tenían `cursor: pointer` y al tocarlas no
+   pasaba **nada** hasta que respondía la pantalla. En una casa con el histórico
+   lejos eso son cientos de milisegundos de duda, y es el mismo agujero que se
+   tapó en las pestañas: decir «te he oído» no depende de nadie y no tiene por
+   qué esperar a nada.
+
+   Van agrupadas por lo que se está apretando, que es lo que decide la respuesta:
+
+     · lo que tiene forma de objeto —fichas, cuadros de color, botones pequeños,
+       tarjetas— se **encoge**, como si cediera bajo el dedo;
+     · lo que es un renglón de una lista de ancho completo se **tiñe**: encogerlo
+       lo despega de sus vecinos y se lee como si se hubiera movido de sitio;
+     · lo que es texto suelto haciendo de botón —las acciones de la cabecera de
+       una hoja— **se apaga**, que es lo único que se puede hacer con un texto sin
+       deformar la letra.
+
+   No entran tres, y por qué: las pestañas y los segmentados ya mueven la marca
+   en `pointerdown`, y ese movimiento **es** el acuse —añadirle un encogido sería
+   contarlo dos veces—; el interruptor ya responde con su propia perilla
+   (`.ios-switch:active::after`); y el campo de fecha del selector de periodo es
+   un campo de escribir, no un botón. */
+.tappable, .tf-btn, .srow-assign, .ap-ico, .ap-color, .gal-tile,
+.card-move button, .e-zoom-val, .e-serie {
+  cursor: pointer; transition: transform .18s ease;
+}
+.tappable:active, .tf-btn:active:not(:disabled), .srow-assign:active,
+.ap-ico:active, .ap-color:active, .gal-tile:active,
+.card-move button:active:not(:disabled), .e-zoom-val:active, .e-serie:active {
+  transform: scale(.985);
+}
+/* Los renglones de ancho completo: tinte, no encogido. */
+.srow, .pick-list button, .pick-sugg button, .step > summary {
+  transition: background .14s ease;
+}
+.srow:active, .pick-list button:active, .pick-sugg button:active,
+.step > summary:active {
+  background: var(--glass-2);
+}
+/* Y el texto suelto que hace de botón. */
+.sheet-act { transition: opacity .14s ease; }
+.sheet-act:active:not(:disabled) { opacity: .45; }
+
 /* ---------------- pantalla Energía ---------------- */
-.tappable { cursor: pointer; transition: transform .18s ease; }
-.tappable:active { transform: scale(.985); }
 .disclosure { color: var(--ink-3); font-size: 20px; font-weight: 300; margin-left: 2px; }
 
 .nav-head {
@@ -1063,7 +1113,8 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .badge.extra { background: rgba(255, 69, 58, .16); color: #d13b32; }
 :root[data-theme="dark"] .badge.best { color: var(--good); }
 :root[data-theme="dark"] .badge.extra { color: #ff7a70; }
-.bill-total { font-size: 27px; font-weight: 700; letter-spacing: -.026em; margin: 9px 0 1px; }
+.bill-total { font-size: 27px; font-weight: 700; letter-spacing: -.026em;
+  line-height: 1.1; margin: 9px 0 1px; }
 .bill-total small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .bill-sub { font-size: 12.5px; color: var(--ink-3); }
 .bars { display: flex; height: 7px; border-radius: 6px; overflow: hidden; margin: 11px 0 9px; background: var(--sep); }
@@ -1129,7 +1180,33 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
   width: min(680px, 100%); max-height: 92vh; display: flex; flex-direction: column;
   border-radius: 26px 26px 0 0; animation: up .3s cubic-bezier(.2,.9,.3,1);
 }
-@keyframes up { from { transform: translateY(28px); } to { transform: none; } }
+@keyframes up { from { transform: translateY(28px); opacity: 0; } to { transform: none; } }
+
+/* La salida, espejo de la entrada.
+   Cerrar era `display: none` y la hoja se esfumaba: entraba subiendo y salía por
+   ningún sitio. Lo que desaparece por donde no entró se lee como un fallo.
+   · la curva es la inversa exacta de la de entrada. `cubic-bezier(x1,y1,x2,y2)`
+     se invierte con `(1−x2, 1−y2, 1−x1, 1−y1)`, y de `(.2,.9,.3,1)` sale
+     `(0,0,.8,.1)`: el camino de vuelta es el de ida del revés, no otro parecido;
+   · el velo tarda dos décimas de las tres, con una de retraso, porque al entrar
+     aparece él primero y la hoja llega después. Al revés, se va la última;
+   · y la hoja se desvanece además de bajar. Sin eso el último fotograma es la
+     hoja a plena opacidad sobre un velo que ya no está, o sea un corte. Por
+     simetría, la entrada gana el mismo desvanecido. */
+@keyframes down { to { transform: translateY(28px); opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+.modal.saliendo { animation: fade-out .2s ease .1s forwards; pointer-events: none; }
+.modal.saliendo .sheet { animation: down .3s cubic-bezier(0,0,.8,.1) forwards; }
+/* Sin movimiento: se cruza la opacidad y ya. Sigue habiendo animación —y por
+   tanto `animationend`, que es quien esconde la hoja— pero no hay traslación. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes up { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes down { to { opacity: 0; } }
+  /* Las dos capas acaban a la vez, que si no la que termina antes esconde a la
+     otra a medio camino: quien esconde la hoja es el `animationend`. */
+  .modal.saliendo { animation-delay: 0s; }
+  .modal.saliendo .sheet { animation-duration: .2s; }
+}
 @media (min-width: 700px) { .modal { place-items: center; } .sheet { border-radius: var(--r-lg); } }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--sep); }
 .sheet-head h3 { margin: 0; font-size: 17px; font-weight: 700; }
@@ -1378,7 +1455,7 @@ body.scrolled .scroll-top { opacity: .95; }
 }
 .e-soc-now { display: flex; align-items: baseline; gap: 4px; }
 .e-soc-now b {
-  font-size: 30px; font-weight: 700; letter-spacing: -.027em;
+  font-size: 30px; font-weight: 700; letter-spacing: -.027em; line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 .e-soc-now span { font-size: 14px; color: var(--ink-2); }
@@ -1496,7 +1573,7 @@ body.scrolled .scroll-top { opacity: .95; }
   color: color-mix(in srgb, var(--s-solar) 55%, var(--ink-2)); }
 .f-small { padding: 16px 17px; border-radius: 20px; }
 .f-mid { font-size: 23px; font-weight: 600; letter-spacing: -.03em; margin-top: 8px;
-  font-variant-numeric: tabular-nums; color: var(--ink); }
+  line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--ink); }
 .f-mid-batt { color: var(--s-batt); }
 .f-mid[data-estado="exp"] { color: var(--s-exp); }
 .f-mid[data-estado="imp"] { color: var(--bad); }

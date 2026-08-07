@@ -2,7 +2,7 @@
  * Ajustes: el índice, la fuente de datos, los catorce sensores del balance, la
  * copia de seguridad y el diagnóstico.
  */
-import { $, $$, esc } from "../core/dom.js";
+import { $, $$, esc, abrirHoja, cerrarHoja } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fmtNum } from "../core/format.js";
@@ -227,7 +227,7 @@ async function openSensorPicker(slot) {
       $("#pick-kind-note").textContent = `No se ha podido guardar: ${err.message}`;
     }
   }));
-  $("#pick-modal").classList.remove("hidden");
+  abrirHoja($("#pick-modal"));
   $("#pick-q").focus();
 }
 
@@ -237,7 +237,7 @@ async function assignSensor(slot, entity) {
   const grupo = fila.group === "flow" ? "flow_sensors" : "energy_sensors";
   await api("settings", { method: "PUT",
     body: JSON.stringify({ [grupo]: { [slot]: entity } }) });
-  $("#pick-modal").classList.add("hidden");
+  cerrarHoja($("#pick-modal"));
   // La hoja se cierra al instante; la fila que se está guardando se recarga
   // justo debajo, así que el estado «Guardando» no aporta nada aquí.
   await reloadConfig();
@@ -1116,7 +1116,7 @@ $("#s-energy-counters").addEventListener("change", async (ev) => {
   } finally { listo(); }
 });
 $("#save-settings-btn").addEventListener("click", () => saveSettings(false));
-$("#close-pick-modal").addEventListener("click", () => $("#pick-modal").classList.add("hidden"));
+$("#close-pick-modal").addEventListener("click", () => cerrarHoja($("#pick-modal")));
 
 /* ---------------- lo que Ajustes escucha ---------------- */
 
