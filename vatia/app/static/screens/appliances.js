@@ -11,7 +11,7 @@
  * «2 h 10 min · 0,9 kWh de mediana, 7 ciclos en 14 días». Mientras no haya dos
  * ciclos dice que está aprendiendo, y eso también es información.
  */
-import { $, $$, esc } from "../core/dom.js";
+import { $, $$, esc, abrirHoja, cerrarHoja } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on } from "../core/bus.js";
 import { fmtNum, dur } from "../core/format.js";
@@ -179,7 +179,7 @@ async function editar(id) {
   await asegurar();
   pintarSelects();
 
-  $("#appliance-modal").classList.remove("hidden");
+  abrirHoja($("#appliance-modal"));
   $("#ap-name").focus();
 }
 
@@ -190,7 +190,7 @@ function pintarSelects() {
 
 function cerrar() {
   editando = null;
-  $("#appliance-modal").classList.add("hidden");
+  cerrarHoja($("#appliance-modal"));
 }
 
 async function guardar() {

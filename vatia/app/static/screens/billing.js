@@ -2,7 +2,7 @@
  * Facturación · Simulación: qué te costaría el ciclo con cada tarifa, la
  * factura desglosada y el periodo de trabajo.
  */
-import { $, esc } from "../core/dom.js";
+import { $, esc, abrirHoja, cerrarHoja } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fallo } from "../core/banner.js";
@@ -400,7 +400,7 @@ function openBillDetail(tariffId) {
       <tr><td>Excedente no compensado<div class="detail">valor vertido por encima del tope legal que se pierde</div></td><td>${fmtEUR.format(shown.surplus_lost)}</td></tr>`;
   }
   $("#bill-modal-body").innerHTML = `<table class="table">${rows}${extra}</table>`;
-  $("#bill-modal").classList.remove("hidden");
+  abrirHoja($("#bill-modal"));
 }
 
 function renderDailyChart(daily) {
@@ -464,7 +464,7 @@ $("#projection-toggle").addEventListener("change", (e) => {
   if (simulation) renderBills(simulation);
 });
 $("#goto-settings").addEventListener("click", (e) => { e.preventDefault(); showView("settings"); });
-$("#close-bill-modal").addEventListener("click", () => $("#bill-modal").classList.add("hidden"));
+$("#close-bill-modal").addEventListener("click", () => cerrarHoja($("#bill-modal")));
 
 $("#cp-toggle").addEventListener("click", () => {
   const p = $("#custom-period");

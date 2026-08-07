@@ -2,6 +2,78 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.73.0
+
+Tres huecos que salieron de repasar la aplicación entera contra la guía de diseño, los
+tres del mismo tipo: cosas que el diseño da por hechas y que no estaban.
+
+### Las hojas salen por donde entraron
+
+Cerrar una hoja era `display: none`. Entraba subiendo en tres décimas y **desaparecía de
+golpe**, sin salida ninguna, las seis. Lo que se esfuma por donde no entró se lee como un
+fallo, no como una decisión, y deja al ojo sin saber adónde ha ido lo que estaba mirando.
+
+Ahora la salida es el camino de ida del revés, y con ese detalle:
+
+- la curva es la **inversa exacta** de la de entrada. `cubic-bezier(x1,y1,x2,y2)` se
+  invierte con `(1−x2, 1−y2, 1−x1, 1−y1)`, así que de `(.2,.9,.3,1)` sale `(0,0,.8,.1)`;
+- el velo tarda dos décimas de las tres, con una de retraso: al entrar aparece él primero
+  y la hoja llega después, así que al salir se va el último;
+- y la hoja se desvanece además de bajar, porque si no el último fotograma es la hoja a
+  plena opacidad sobre un velo que ya no está, o sea un corte. Por simetría, la entrada
+  gana el mismo desvanecido;
+- sin movimiento (`prefers-reduced-motion`) se cruza solo la opacidad.
+
+Esto no puede ser solo CSS: hay que esperar a que la animación termine antes de poner
+`display: none`. Van dos funciones, `abrirHoja` y `cerrarHoja`, en el módulo común, y las
+dieciséis llamadas sueltas que había repartidas por cuatro pantallas pasan por ellas. Si
+reabres a media salida, manda la apertura y la hoja se queda.
+
+### Dieciséis pulsables que no acusaban recibo
+
+Tenían `cursor: pointer` y al tocarlos no pasaba **nada** hasta que respondía la pantalla:
+`.tf-btn`, `.srow`, `.gal-tile`, `.ap-ico`, `.ap-color`, `.sheet-act`, los pasos del editor
+de tarifa, los renglones de las listas de elegir… Es el mismo agujero que se tapó en las
+pestañas en la 0.72: decir «te he oído» no depende de nadie y no tiene por qué esperar.
+
+Agrupados por lo que se aprieta, que es lo que decide la respuesta:
+
+| Qué es | Qué hace al apretar |
+|---|---|
+| Fichas, cuadros de color, botones pequeños, tarjetas | Se encoge, como si cediera bajo el dedo |
+| Renglones de ancho completo | Se tiñe; encogerlos los despega de sus vecinos |
+| Texto suelto haciendo de botón | Se apaga; es lo único que se puede hacer sin deformar la letra |
+
+No entran tres, y por qué: las pestañas y los segmentados ya mueven la marca en
+`pointerdown` y ese movimiento **es** el acuse —añadirle un encogido sería contarlo dos
+veces—; el interruptor ya responde con su propia perilla; y el campo de fecha del selector
+de periodo es un campo de escribir, no un botón.
+
+### Interlínea propia en las cifras grandes
+
+Cinco reglas —el total del resumen, el de la factura, el kWh de cada origen, el euro por
+hora del flujo— heredaban el `1,5` del cuerpo, que es interlínea de párrafo. En un número
+de 30 px eso son 45 px de caja para una línea, o sea quince píxeles de aire justo donde el
+diseño quiere apretar. La interlínea va al revés que el tamaño; 1,1 es lo que ya usaban
+las que sí la tenían.
+
+### Lo que no se ha hecho, y por qué
+
+- **Arrastrar la hoja para cerrarla.** El asa que dibujan tres hojas sigue sin ser
+  agarrable. Queda pendiente; es el trabajo que traería muelles, traspaso de velocidad y
+  proyección de inercia a la aplicación.
+- **Rebote del gráfico en los bordes.** Al llegar al final del periodo se queda clavado en
+  vez de resistir. Pendiente.
+- **Háptica y sonido.** La Vibration API no existe en el WebKit de iOS, que es como se usa
+  esto de verdad; sería código muerto en medio parque.
+
+Banco nuevo, `tests/navegador/acuse.js`: que la hoja siga en pantalla a mitad de la salida,
+que baje —no que encoja ni se vaya de lado—, que la curva sea la espejo, que acabe
+escondida de verdad sin bloquear la pantalla, que reabrir a media salida gane, que los
+trece pulsables respondan cada uno como le toca, y que las cifras grandes midan por debajo
+de 1,3 de interlínea. Con el cierre instantáneo de antes, tres de esas comprobaciones
+salen en rojo.
+
 ## 0.72.0
 
 Cuatro arreglos salidos de auditar la aplicación contra la guía de diseño de Apple. Dos

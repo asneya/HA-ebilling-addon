@@ -2,7 +2,7 @@
  * Tarifas: la lista (que sale en Facturación y en Ajustes), el editor en cinco
  * pasos con su rejilla de horarios, y la importación desde CSV.
  */
-import { $, $$, esc } from "../core/dom.js";
+import { $, $$, esc, abrirHoja, cerrarHoja } from "../core/dom.js";
 import { api } from "../core/api.js";
 import { on, emit } from "../core/bus.js";
 import { fmtNum, nf4, num6 } from "../core/format.js";
@@ -145,7 +145,7 @@ function openTariffModal(tariffId = null) {
   editorState.dirty = false;
   updateEditorVisibility();
   openFirstIncompleteStep();
-  $("#tariff-modal").classList.remove("hidden");
+  abrirHoja($("#tariff-modal"));
 }
 
 /* Se abre siempre el primer paso incompleto: en una tarifa nueva es el 1, y al
@@ -268,7 +268,7 @@ function openGridSheet() {
   const periods = editorPeriods();
   if (!periods.length) return;
   $("#grid-editor").periods = periods;
-  $("#grid-modal").classList.remove("hidden");
+  abrirHoja($("#grid-modal"));
 }
 
 /* «Hecho» se queda con los horarios que haya pintado la rejilla. */
@@ -277,7 +277,7 @@ function closeGridSheet(guardar) {
     editorState.schedules = $("#grid-editor").periods.map((p) => p.schedule);
     refreshStepSummaries();
   }
-  $("#grid-modal").classList.add("hidden");
+  cerrarHoja($("#grid-modal"));
 }
 
 function tariffFromForm() {
@@ -336,7 +336,7 @@ async function saveTariff() {
   try {
     if (editingTariffId) await api(`tariffs/${editingTariffId}`, { method: "PUT", body: JSON.stringify(tariff) });
     else await api("tariffs", { method: "POST", body: JSON.stringify(tariff) });
-    $("#tariff-modal").classList.add("hidden");
+    cerrarHoja($("#tariff-modal"));
     await tarifaCambiada();
   } catch (err) { $("#tariff-error").textContent = err.message; } finally { listo(); }
 }
@@ -363,7 +363,7 @@ async function deleteTariff(id) {
 function openImportModal() {
   $("#import-textarea").value = "";
   $("#import-error").textContent = "";
-  $("#import-modal").classList.remove("hidden");
+  abrirHoja($("#import-modal"));
   setTimeout(() => $("#import-textarea").focus(), 60);
 }
 
@@ -386,7 +386,7 @@ async function doImport() {
       throw new Error(detail);
     }
     const tariff = await resp.json();
-    $("#import-modal").classList.add("hidden");
+    cerrarHoja($("#import-modal"));
     $("#import-status").textContent = `✓ Tarifa «${tariff.name}» importada.`;
     await tarifaCambiada();
   } catch (e) { err.textContent = `✗ ${e.message}`; } finally { listo(); btn.disabled = false; }
@@ -420,7 +420,7 @@ $("#cancel-tariff-btn").addEventListener("click", () => {
   // Cancelar pregunta solo si hay algo que perder.
   if (editorState.dirty &&
       !confirm("Se descartarán los cambios de esta tarifa. ¿Salir?")) return;
-  $("#tariff-modal").classList.add("hidden");
+  cerrarHoja($("#tariff-modal"));
 });
 $("#t-etype").addEventListener("change", updateEditorVisibility);
 $("#t-surplus-type").addEventListener("change", updateEditorVisibility);
@@ -429,8 +429,8 @@ $("#t-add-surplus-period").addEventListener("click", () => periodRow($("#t-surpl
 
 $("#import-csv-btn").addEventListener("click", openImportModal);
 $("#import-csv-btn-2").addEventListener("click", openImportModal);
-$("#close-import-modal").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
-$("#cancel-import-btn").addEventListener("click", () => $("#import-modal").classList.add("hidden"));
+$("#close-import-modal").addEventListener("click", () => cerrarHoja($("#import-modal")));
+$("#cancel-import-btn").addEventListener("click", () => cerrarHoja($("#import-modal")));
 $("#do-import-btn").addEventListener("click", doImport);
 $("#import-clear").addEventListener("click", () => { $("#import-textarea").value = ""; $("#import-error").textContent = ""; });
 $("#import-load-file").addEventListener("click", () => $("#import-csv-input").click());
