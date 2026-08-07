@@ -131,6 +131,7 @@ NAVEGADOR = [
     ("ajustesap.js", ["ajustesap.js", "http://127.0.0.1:8402/"], {}),
     ("gesto.js", ["gesto.js", "http://127.0.0.1:8402/"], {}),
     ("acuse.js", ["acuse.js", "http://127.0.0.1:8402/"], {}),
+    ("texto.js", ["texto.js", "http://127.0.0.1:8402/"], {}),
     ("rolesui.js", ["rolesui.js", "http://127.0.0.1:8412/"], {}),
     ("gal.js", ["gal.js", "http://127.0.0.1:8300/"], {}),
     ("cruz.js", ["cruz.js", "http://127.0.0.1:8306/"], {}),

@@ -18,6 +18,11 @@
       var dark = pref === "dark" || (pref !== "light" &&
         window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
+      // Y el tamaño del texto, por lo mismo: aplicarlo cuando llegue
+      // /api/config haría que la página se pintara pequeña y diera un salto.
+      var t = 1;
+      try { t = parseFloat(localStorage.getItem("vatia-texto")) || 1; } catch (e) {}
+      if (t > 1 && t <= 1.6) document.documentElement.style.setProperty("--texto", t);
     })();
   </script>
 </head>
@@ -610,6 +615,30 @@
                 <button class="seg" data-theme-opt="light">Claro</button>
                 <button class="seg" data-theme-opt="dark">Oscuro</button>
               </div>
+            </div>
+            <div class="li col">
+              <span class="li-label">Tamaño del texto</span>
+              <!-- Cada opción es una «A» del tamaño que va a poner, y no su
+                   nombre escrito. Dos razones: con los cuatro nombres puestos
+                   («Normal», «Grande», «Mayor», «Máximo») el propio control se
+                   salía de la pantalla justo en su ajuste más grande —el que
+                   fija el tamaño rompiéndose en su máximo—, y además una «A»
+                   enseña lo que va a pasar en vez de nombrarlo. El nombre sigue
+                   estando para quien navega con lector de pantalla. -->
+              <div class="segmented glass-soft" id="text-seg" role="group"
+                   aria-label="Tamaño del texto">
+                <button class="seg" data-text-opt="1" aria-label="Normal" title="Normal"
+                  ><span class="a-muestra" style="font-size:13px">A</span></button>
+                <button class="seg" data-text-opt="1.15" aria-label="Grande" title="Grande"
+                  ><span class="a-muestra" style="font-size:15px">A</span></button>
+                <button class="seg" data-text-opt="1.3" aria-label="Mayor" title="Mayor"
+                  ><span class="a-muestra" style="font-size:17px">A</span></button>
+                <button class="seg" data-text-opt="1.6" aria-label="Máximo" title="Máximo"
+                  ><span class="a-muestra" style="font-size:20px">A</span></button>
+              </div>
+              <small class="li-nota">El ajuste de tamaño de letra del teléfono no
+                llega hasta aquí: la app de Home Assistant enseña Vatia dentro de
+                un navegador incrustado y ese ajuste se queda fuera.</small>
             </div>
             <label class="li">
               <span class="li-txt"><b>Fondo según la hora</b>
