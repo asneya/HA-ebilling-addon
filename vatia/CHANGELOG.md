@@ -2,6 +2,102 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.72.0
+
+Cuatro arreglos salidos de auditar la aplicación contra la guía de diseño de Apple. Dos
+de ellos destaparon animaciones que estaban **escritas y no corrían**, que es la clase de
+fallo que sobrevive años porque nadie lo ve fallar: no hay error, simplemente no pasa
+nada donde tenía que pasar algo.
+
+### El acuse de recibo, al apretar y no al soltar
+
+Marcar la pestaña elegida iba en `click`, que se dispara al **levantar** el dedo. Todo ese
+módulo existe para que la marca no espere al servidor, y estaba esperando al final del
+propio toque: en un toque tranquilo son 80-150 ms de nada, justo el hueco que hace dudar
+de si ha entrado. Ahora va en `pointerdown`, más `keydown` con Enter o Espacio para quien
+navega con teclado, que con `click` lo tenía gratis y con `pointerdown` se habría quedado
+sin acuse.
+
+### La barra de progreso, sin rehacer la maqueta en cada fotograma
+
+La barra del ciclo de un electrodoméstico se rellenaba animando su **anchura**, y eso
+obliga al navegador a recalcular la maqueta del documento en cada fotograma. Medido en la
+propia aplicación, diez transiciones: por anchura, 300 pasadas de maqueta y 59 ms; con
+`transform: scaleX`, **1 pasada y 0,2 ms**.
+
+El escalado tenía una pega real, y por eso hacía falta medir antes de escribir: dentro del
+relleno van los tramos de origen —sol, batería, red—, y un tramo diminuto lo sostenía un
+mínimo de 2 px. Escalados al 20 %, esos 2 px son 0,4 px, o sea nada. El mínimo pasa a ser
+`calc(2px / var(--p))`: se piden 10 px antes de escalar para que queden 2 después. Hay
+banco nuevo que lo comprueba con un tramo del 0,6 % dentro de un ciclo al 10 %, y sin la
+división mide 0,2 px.
+
+La otra barra —la del resumen de energía— **se queda con la anchura, a propósito**. Sus
+tramos son hermanos de flex, así que la posición de cada uno depende de la anchura del
+anterior y escalar uno no mueve al siguiente; y son píldoras de 26 px con 7 px de radio,
+que `scaleX(0,3)` convierte en rectángulos. Lo que se compraría son 0,2 ms de maqueta por
+fotograma en un dibujo que se rehace cada 20 segundos. No compensa deformarlas.
+
+### El interletraje, en proporción y no en píxeles
+
+Trece declaraciones de `letter-spacing` iban en píxeles. Un titular de 30 px quiere
+apretarse y una etiqueta de 11 px en versales quiere soltarse: eso es una proporción del
+tamaño, no una distancia fija. En píxeles deja de serlo en cuanto el tamaño cambia —zoom
+del navegador, preferencia de texto del teléfono—, y un titular al 200 % se queda con el
+apretado de uno al 100 %. Convertidas dividiendo cada una por su propio tamaño, así que a
+tamaño normal no se mueve nada: la mayor diferencia es de una centésima de píxel. Los
+componentes ya lo hacían así.
+
+### El fondo: una animación que no corría y otra que corría de más
+
+Dos hallazgos, los dos comprobados en el navegador y no razonados:
+
+**El cielo no se fundía.** Tenía escrito un `transition: background 1.2s`, y un degradado
+solo se interpola con otro del mismo número de paradas: los cuatro momentos del día tienen
+tres, cuatro, cuatro y tres. A los 300 ms de una transición de 1.200 el valor calculado ya
+era el de destino y `getAnimations()` devolvía cero. El amanecer llevaba desde siempre
+pegando un corte de plano. Ahora son cuatro capas que se cruzan por opacidad, igual que ya
+hacían el sol y las estrellas de al lado.
+
+**El velo sí se animaba, y era lo caro.** Al cambiar de pestaña, su desenfoque crecía de 0
+a 34 px: desenfocar la pantalla entera otra vez en cada fotograma, con un radio distinto
+cada vez, en el gesto más repetido de la aplicación. Ahora son dos velos superpuestos que
+se cruzan por opacidad; el desenfoque se calcula a un único radio y lo que se mueve es la
+composición. Las fotos de antes y después son idénticas píxel a píxel en los dos extremos.
+
+De paso, el velo desenfocado tenía la propiedad sin prefijar: en el WebKit de la
+aplicación de Home Assistant anterior a iOS 18 no se desenfocaba nada. Y ahora respeta
+«reducir transparencia» —se queda el oscurecido, que es lo que hace legible el texto, y se
+va el desenfoque, que es el efecto— y «reducir movimiento» en el cielo.
+
+### Los gestos de los gráficos
+
+La inercia que la guía pide para un arrastre **no se ha puesto, y a propósito**: el gesto
+de un dedo sobre estos gráficos no desplaza el lienzo, mueve la selección al punto que hay
+bajo el dedo. La inercia es de un desplazamiento: se suelta el dedo y el contenido sigue
+por donde iba. Aquí eso sería soltar el dedo y ver cómo la selección se va del punto que
+se acababa de elegir.
+
+Lo que sí había eran dos defectos de verdad en ese mismo sitio:
+
+- **La holgura era de 6 px y estaba escrita dos veces**, con la cifra copiada a mano en
+  cada gráfico. A 6 px la dirección se decide con tan poco recorrido que manda el temblor
+  de la mano: un dedo que va a bajar por la pantalla empieza casi siempre con dos o tres
+  píxeles de lado, y si caen en horizontal, el gráfico se queda el gesto y la página no
+  baja. Pasa a 10 px —la holgura con la que Apple separa un toque de un arrastre— y a
+  vivir en un solo sitio, `components/gesto.js`.
+- **El arrastre del eje corría a distinta velocidad en cada aparato.** Al llegar al borde
+  con zoom, el eje avanzaba un 4 % **por evento**, y `pointermove` se dispara a la
+  frecuencia de la pantalla: con el dedo exactamente igual de quieto, un iPad de 120 Hz
+  movía el eje al doble de rápido que un móvil de 60. Ahora se mide con el reloj —un 240 %
+  de la ventana por segundo, los mismos 4 % a 60 Hz— y se recorta a 100 ms por paso, para
+  que volver de segundo plano no pegue un salto de todo el eje.
+
+Banco nuevo (`tests/navegador/gesto.js`) que sujeta las dos cosas: la regla del anillo con
+sus cuatro casos, que ninguno de los dos gráficos conserve su copia, y el eje recorrido
+con el mismo tiempo y cuatro veces más eventos. Con el código de antes esa última da una
+razón de 4,12; con el de ahora, 1,05.
+
 ## 0.71.0
 
 ### Seis glifos más de electrodoméstico

@@ -323,20 +323,37 @@
       };
 
       /* Al llegar al borde con zoom, el eje sigue al dedo: un solo dedo alcanza
-         todo el periodo sin soltar. */
+         todo el periodo sin soltar.
+
+         El avance va **por tiempo** y no por evento. Iba a un 4 % de la ventana
+         en cada `pointermove`, y ese evento se dispara a la frecuencia de la
+         pantalla: en un iPad de 120 Hz el eje corría el doble de rápido que en un
+         móvil de 60 con el dedo exactamente igual de quieto. Con eventos
+         agrupados podía ser peor todavía. Ahora es un 240 % de la ventana por
+         segundo —los mismos 4 % a 60 Hz—, medido con el reloj, así que el gesto
+         se comporta igual en cualquier aparato. */
+      const POR_SEGUNDO = 2.4;
+      let ultimoEmpuje = 0;
       const empujarBorde = (clientX) => {
-        if (!ampliado()) return;
+        if (!ampliado()) { ultimoEmpuje = 0; return; }
         const r = over.getBoundingClientRect();
         const frac = (clientX - r.left) / over.clientWidth;
         const margen = 0.12;
         let dir = 0;
         if (frac < margen) dir = -1;
         else if (frac > 1 - margen) dir = 1;
-        if (!dir) return;
+        if (!dir) { ultimoEmpuje = 0; return; }
+        const ahora = performance.now();
+        // El primer fotograma dentro del margen no mueve nada: no hay intervalo
+        // que medir todavía. Y se recorta a 100 ms para que volver de segundo
+        // plano no pegue un salto de todo el eje.
+        const dt = ultimoEmpuje ? Math.min(ahora - ultimoEmpuje, 100) : 0;
+        ultimoEmpuje = ahora;
+        if (!dt) return;
         const s = this._plot.scales.x;
         const ancho = s.max - s.min;
         const [lo, hi] = limites();
-        let min = s.min + dir * ancho * 0.04;
+        let min = s.min + dir * ancho * POR_SEGUNDO * (dt / 1000);
         min = Math.max(lo, Math.min(hi - ancho, min));
         this._plot.setScale("x", { min, max: min + ancho });
       };
@@ -382,9 +399,13 @@
         if (dedos.size !== 1 || !arrastre) return;
         const dx = ev.clientX - arrastre.x;
         const dy = ev.clientY - arrastre.y;
+        // ¿Recorrer el gráfico o dejar bajar la página? La regla —y su holgura—
+        // vive en `gesto.js`, compartida con <vatia-bars>: estaba escrita dos
+        // veces con la misma cifra copiada a mano.
         if (!arrastre.movido) {
-          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-          if (Math.abs(dy) > Math.abs(dx)) { arrastre = null; return; }
+          const q = window.VatiaGesto.direccion(dx, dy);
+          if (q === "esperar") return;
+          if (q === "soltar") { arrastre = null; return; }
           arrastre.movido = true;
         }
         empujarBorde(ev.clientX);

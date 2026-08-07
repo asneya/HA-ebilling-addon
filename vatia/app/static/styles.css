@@ -192,6 +192,16 @@ html.busy .progress { opacity: 1; }
   .progress::after { animation-duration: 2.4s; }
 }
 
+/* El interletraje va siempre en `em` y nunca en px.
+
+   Un titular de 30 px quiere apretarse y una etiqueta de 11 px en versales quiere
+   soltarse: es una proporción del tamaño, no una distancia fija. Escrito en px
+   deja de ser esa proporción en cuanto el tamaño cambia —zoom del navegador,
+   preferencia de texto del teléfono, o el día que estas medidas pasen a `rem`—, y
+   un titular al 200 % se queda con el apretado de uno al 100 %, o sea sin apretar.
+   Había trece declaraciones en px; se convirtieron dividiendo por su propio
+   tamaño, así que a tamaño normal no se mueve nada: la mayor diferencia era de
+   una centésima de píxel. Los componentes ya lo hacían así. */
 body {
   margin: 0;
   font-family: "Geist", ui-sans-serif, system-ui, -apple-system,
@@ -214,12 +224,26 @@ body {
 .bg > * { position: absolute; inset: 0; }
 
 /* El velo que garantiza la legibilidad apaga el color, así que se compensa
-   saturando el cielo: queda oscuro pero con el color de la hora. */
-.bg-sky { transition: background 1.2s ease; filter: saturate(1.35); }
-.bg[data-phase="day"]    .bg-sky { background: linear-gradient(180deg, #2f8fe8 0%, #74bdf3 45%, #cfe8fb 100%); }
-.bg[data-phase="dawn"]   .bg-sky { background: linear-gradient(180deg, #2b2350 0%, #8a5a86 40%, #f2916b 75%, #ffd2a1 100%); }
-.bg[data-phase="sunset"] .bg-sky { background: linear-gradient(180deg, #1d1b3f 0%, #6b3b6e 35%, #e9694a 75%, #f9b070 100%); }
-.bg[data-phase="night"]  .bg-sky { background: linear-gradient(180deg, #050a1c 0%, #0d1738 50%, #182a55 100%); }
+   saturando el cielo: queda oscuro pero con el color de la hora.
+
+   Las cuatro horas son cuatro capas que se funden por opacidad, como ya hacían
+   el sol y las estrellas de aquí abajo, y no un `background` que cambia con una
+   transición de 1,2 s. Esa transición estaba escrita y **no corría**: un degradado
+   solo se interpola con otro del mismo número de paradas, y estos tienen tres,
+   cuatro, cuatro y tres, así que el navegador lo trataba como un salto. Medido en
+   el propio navegador: a los 300 ms de una transición de 1.200 el valor calculado
+   ya era el de destino y `getAnimations()` devolvía cero. El amanecer llevaba
+   desde siempre pegando un corte de plano. */
+.bg-sky { filter: saturate(1.35); }
+.bg-sky > i { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; }
+.bg-sky > i[data-p="day"]    { background: linear-gradient(180deg, #2f8fe8 0%, #74bdf3 45%, #cfe8fb 100%); }
+.bg-sky > i[data-p="dawn"]   { background: linear-gradient(180deg, #2b2350 0%, #8a5a86 40%, #f2916b 75%, #ffd2a1 100%); }
+.bg-sky > i[data-p="sunset"] { background: linear-gradient(180deg, #1d1b3f 0%, #6b3b6e 35%, #e9694a 75%, #f9b070 100%); }
+.bg-sky > i[data-p="night"]  { background: linear-gradient(180deg, #050a1c 0%, #0d1738 50%, #182a55 100%); }
+.bg[data-phase="day"]    .bg-sky > i[data-p="day"],
+.bg[data-phase="dawn"]   .bg-sky > i[data-p="dawn"],
+.bg[data-phase="sunset"] .bg-sky > i[data-p="sunset"],
+.bg[data-phase="night"]  .bg-sky > i[data-p="night"] { opacity: 1; }
 
 /* sol / luna */
 .bg-sun {
@@ -292,21 +316,51 @@ body {
 /* velo: legibilidad del texto sobre el cielo y atenuación fuera de Home */
 /* El cielo claro del mediodía deja el texto blanco en 1,3:1, así que el velo
    es permanente: con ~0,5 de opacidad el blanco supera 4,5:1 sobre cualquiera
-   de los fondos y el momento del día se sigue reconociendo. */
-.bg-scrim {
+   de los fondos y el momento del día se sigue reconociendo.
+
+   Son dos velos superpuestos que se cruzan por opacidad, y no un solo velo cuyo
+   desenfoque crece de 0 a 34 px.
+
+   Animar `backdrop-filter` obliga a desenfocar el fondo entero otra vez en cada
+   fotograma, y con un radio distinto cada vez no vale ni la textura anterior. Es
+   la pantalla completa y pasa **en cada cambio de pestaña**, que es lo más
+   repetido que hay en la aplicación. Comprobado que esta sí corría, al contrario
+   que la del cielo: a mitad de camino el valor calculado era `blur(12,6px)
+   saturate(1,07)`.
+
+   Cruzados, el desenfoque se calcula a un único radio —una textura, reutilizable
+   entre fotogramas— y lo que se mueve es la opacidad, que es trabajo de
+   composición. El resultado en reposo es idéntico a los dos extremos de antes
+   porque el velo de la Home se apaga del todo: fuera de la Home queda cielo →
+   desenfoque → 52 % de oscuro, exactamente lo que había. */
+.bg-scrim::before, .bg-scrim::after {
+  content: ""; position: absolute; inset: 0; transition: opacity .5s ease;
+}
+.bg-scrim::before {
   background:
     linear-gradient(180deg, rgba(6,16,40,.22) 0%, rgba(6,16,40,0) 34%,
                             rgba(6,16,40,0) 58%, rgba(6,16,40,.30) 100%),
     rgba(6, 16, 40, .38);
-  transition: backdrop-filter .5s ease, background .5s ease;
 }
-body[data-view="billing"] .bg-scrim,
-body[data-view="settings"] .bg-scrim,
-body[data-view="energy"] .bg-scrim {
+.bg-scrim::after {
   background: rgba(6, 12, 26, .52);
   backdrop-filter: blur(34px) saturate(120%);
+  /* Con prefijo como en `.glass-nav`: sin él este velo no se desenfocaba en el
+     WebKit de la aplicación de Home Assistant anterior a iOS 18. */
+  -webkit-backdrop-filter: blur(34px) saturate(120%);
+  opacity: 0;
 }
-@media (prefers-reduced-motion: reduce) { .bg-rain { animation: none; } }
+body[data-view="billing"] .bg-scrim::before,
+body[data-view="settings"] .bg-scrim::before,
+body[data-view="energy"] .bg-scrim::before { opacity: 0; }
+body[data-view="billing"] .bg-scrim::after,
+body[data-view="settings"] .bg-scrim::after,
+body[data-view="energy"] .bg-scrim::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .bg-rain { animation: none; }
+  /* El cielo cambia de hora sin fundido: sigue cambiando, pero sin movimiento. */
+  .bg-sky > i { transition: none; }
+}
 
 /* ---------------- superficies glass ---------------- */
 .glass {
@@ -329,6 +383,10 @@ body[data-view="energy"] .bg-scrim {
 }
 @media (prefers-reduced-transparency: reduce) {
   .glass-nav { background: var(--solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  /* Y el velo del fondo, que era el otro sitio con material traslúcido. Se queda
+     el oscurecido, que es lo que hace legible al texto; lo que se retira es el
+     desenfoque, que es el efecto. */
+  .bg-scrim::after { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* ---------------- layout ---------------- */
@@ -377,7 +435,7 @@ body[data-view="energy"] .bg-scrim {
 /* ---------------- paneles ---------------- */
 .panel { padding: 16px 16px 14px; margin-bottom: 14px; }
 .panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.panel-head h2 { margin: 0; font-size: 16.5px; font-weight: 650; letter-spacing: -.2px; }
+.panel-head h2 { margin: 0; font-size: 16.5px; font-weight: 650; letter-spacing: -.012em; }
 .chip {
   margin-left: auto; font-size: 11.5px; font-weight: 600; color: var(--ink-2);
   background: var(--glass-2); border: 1px solid var(--sep); padding: 3px 10px; border-radius: 999px;
@@ -430,9 +488,16 @@ body[data-view="energy"] .bg-scrim {
 .sum-col { min-width: 0; }
 .sum-title { font-size: 15.5px; color: var(--ink-2); font-weight: 500; }
 .sum-total { display: flex; align-items: baseline; gap: 5px; margin: 2px 0 14px; }
-.sum-total b { font-size: 30px; font-weight: 700; letter-spacing: -.8px; }
+.sum-total b { font-size: 30px; font-weight: 700; letter-spacing: -.027em; }
 .sum-total span { font-size: 14px; color: var(--ink-2); }
 .sum-bar { display: flex; gap: 3px; height: 26px; margin-bottom: 18px; }
+/* Esta sí anima la anchura, y a propósito. La de los aparatos se pasó a `scaleX`
+   porque es un relleno único, pero aquí los tramos son hermanos de flex: la
+   posición de cada uno la fija la anchura del anterior, así que escalar uno no
+   mueve al siguiente. Y son píldoras de 26 px con 7 px de radio; `scaleX(0,3)`
+   deja ese radio en 2 px de ancho por 7 de alto y la píldora se vuelve un
+   rectángulo. Lo que se compra a cambio, medido: 0,2 ms de maqueta por fotograma
+   en un dibujo que se rehace cada 20 segundos. No compensa deformarlas. */
 .sum-bar i { display: block; border-radius: 7px; min-width: 4px; transition: width .5s ease; }
 .sum-row + .sum-row { margin-top: 16px; }
 
@@ -446,7 +511,7 @@ body[data-view="energy"] .bg-scrim {
 .sum-label { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--ink-2); }
 .sum-label i { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .sum-line { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
-.sum-line b { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+.sum-line b { font-size: 22px; font-weight: 700; letter-spacing: -.023em; }
 .sum-line span.u { font-size: 13px; color: var(--ink-2); }
 .sum-line .leader { flex: 1 1 auto; border-bottom: 1.5px dashed var(--sep); margin: 0 4px 5px; min-width: 12px; }
 .sum-line .pct { font-size: 15.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
@@ -522,7 +587,7 @@ body[data-view="energy"] .bg-scrim {
   color: #fff; font-size: 13px; font-weight: 700; transition: background .2s ease, opacity .2s ease;
 }
 .e-serie .check.on-light { color: rgba(0, 0, 0, .72); }
-.e-serie .num { font-size: 18px; font-weight: 700; letter-spacing: -.4px; white-space: nowrap; }
+.e-serie .num { font-size: 18px; font-weight: 700; letter-spacing: -.022em; white-space: nowrap; }
 .e-serie.off { opacity: .45; }
 .e-serie.off .check { background: var(--ink-3) !important; }
 
@@ -622,7 +687,7 @@ body[data-view="energy"] .bg-scrim {
 @media (prefers-reduced-motion: reduce) { .settings-page.active { animation: none; } }
 
 .group-label {
-  font-size: 12.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+  font-size: 12.5px; font-weight: 700; letter-spacing: .048em; text-transform: uppercase;
   color: var(--on-bg-2); text-shadow: var(--on-bg-shadow); margin: 20px 4px 8px;
 }
 .nav-list { padding: 0; overflow: hidden; }
@@ -862,7 +927,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 /* ---------------- listas iOS ---------------- */
 .group { padding: 0; overflow: hidden; }
 .group-head {
-  padding: 14px 16px 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .4px;
+  padding: 14px 16px 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .032em;
   text-transform: uppercase; color: var(--ink-2);
 }
 .list { display: flex; flex-direction: column; }
@@ -965,7 +1030,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
       gap: 10px; margin-top: 2px; }
 .tf-id { min-width: 0; margin-right: auto; }
 .tf-bar { width: 8px; height: 34px; border-radius: 4px; background: var(--tfc); flex: none; }
-.tf-name { font-size: 16px; font-weight: 600; letter-spacing: -.2px; }
+.tf-name { font-size: 16px; font-weight: 600; letter-spacing: -.013em; }
 .tf-co { font-size: 12px; color: var(--ink-3); }
 .tf-tot { text-align: right; flex: none; }
 .tf-eur { font-size: 22px; font-weight: 600; letter-spacing: -.03em; line-height: 1;
@@ -990,7 +1055,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .bill .stripe { position: absolute; inset: 0 auto 0 0; width: 4px; }
 .bill-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
 .bill-co { font-size: 12.5px; color: var(--ink-3); }
-.bill-name { font-weight: 700; font-size: 15.5px; letter-spacing: -.2px; }
+.bill-name { font-weight: 700; font-size: 15.5px; letter-spacing: -.013em; }
 .badges { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--glass-2); color: var(--ink-2); white-space: nowrap; }
 .badge.best { background: rgba(48, 209, 88, .18); color: #0f9b45; }
@@ -998,7 +1063,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .badge.extra { background: rgba(255, 69, 58, .16); color: #d13b32; }
 :root[data-theme="dark"] .badge.best { color: var(--good); }
 :root[data-theme="dark"] .badge.extra { color: #ff7a70; }
-.bill-total { font-size: 27px; font-weight: 700; letter-spacing: -.7px; margin: 9px 0 1px; }
+.bill-total { font-size: 27px; font-weight: 700; letter-spacing: -.026em; margin: 9px 0 1px; }
 .bill-total small { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: 0; }
 .bill-sub { font-size: 12.5px; color: var(--ink-3); }
 .bars { display: flex; height: 7px; border-radius: 6px; overflow: hidden; margin: 11px 0 9px; background: var(--sep); }
@@ -1069,7 +1134,7 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 .sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--sep); }
 .sheet-head h3 { margin: 0; font-size: 17px; font-weight: 700; }
 .sheet-body { padding: 16px 18px calc(18px + env(safe-area-inset-bottom)); overflow-y: auto; }
-.sheet-body h4 { margin: 20px 0 10px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-3); }
+.sheet-body h4 { margin: 20px 0 10px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .035em; color: var(--ink-3); }
 .sheet-body h4:first-child { margin-top: 0; }
 .sheet-foot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; padding: 13px 18px calc(13px + env(safe-area-inset-bottom)); border-top: 1px solid var(--sep); }
 
@@ -1162,7 +1227,11 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
    normal, que sobre un fondo claro el blanco no se lee. */
 body[data-bg="flat"] .bg > *:not(.bg-scrim) { display: none; }
 body[data-bg="flat"] .bg { background: var(--page); }
-body[data-bg="flat"] .bg-scrim { background: none; backdrop-filter: none; }
+/* Sin cielo no hay nada que velar: se retiran las dos capas del velo. Antes esto
+   era `background: none` sobre el propio `.bg-scrim`; desde que el velo son dos
+   pseudoelementos que se cruzan, hay que quitarlos a ellos. */
+body[data-bg="flat"] .bg-scrim::before,
+body[data-bg="flat"] .bg-scrim::after { content: none; }
 body[data-bg="flat"] .hero-title,
 body[data-bg="flat"] .hero-sub,
 body[data-bg="flat"] .nav-title,
@@ -1309,7 +1378,7 @@ body.scrolled .scroll-top { opacity: .95; }
 }
 .e-soc-now { display: flex; align-items: baseline; gap: 4px; }
 .e-soc-now b {
-  font-size: 30px; font-weight: 700; letter-spacing: -.8px;
+  font-size: 30px; font-weight: 700; letter-spacing: -.027em;
   font-variant-numeric: tabular-nums;
 }
 .e-soc-now span { font-size: 14px; color: var(--ink-2); }
@@ -1545,13 +1614,27 @@ body.scrolled .scroll-top { opacity: .95; }
 /* Un tramo que existe se ve. El mínimo es de flex, así que frena el encogido y el
    tramo grande cede los dos píxeles en vez de que la barra desborde el carril: sin
    esto, con `overflow: hidden`, lo que se recortaba era justo el tramo pequeño que
-   se quiere enseñar, porque la red va al final. */
-.ap-barra i { display: block; height: 100%; min-width: 2px; }
+   se quiere enseñar, porque la red va al final.
+
+   Dividido por `--p` porque en una barra de progreso el relleno se dibuja
+   escalado: 2 px dentro de un relleno al 20 % son 0,4 px en pantalla, o sea nada.
+   Se piden 10 px antes de escalar para que queden 2 px después. Sin barra de
+   progreso `--p` no existe y el respaldo lo deja en los 2 px de siempre. */
+.ap-barra i { display: block; height: 100%; min-width: calc(2px / var(--p, 1)); }
 /* Y en marcha, el carril se ve: sin esto un ciclo al 20 % parece una barra corta,
    no una barra que va por el 20 %. La transición es para que al refrescar el
-   payload avance en vez de saltar. */
+   payload avance en vez de saltar.
+
+   Con `scaleX` y no con la anchura: la anchura obliga a rehacer la maqueta en cada
+   fotograma y aquí no hace falta, porque los tramos de dentro se comprimen con el
+   relleno, que es justo lo que hace el escalado. Medido en esta misma página, diez
+   transiciones: por anchura, 300 pasadas de maqueta y 59 ms; por transformación,
+   1 pasada y 0,2 ms. */
 .ap-barra.ap-progreso { background: color-mix(in srgb, var(--ink-3) 22%, transparent); }
-.ap-barra.ap-progreso > span { transition: width .5s ease; }
+.ap-barra.ap-progreso > span {
+  transform: scaleX(var(--p, 1)); transform-origin: left;
+  transition: transform .5s ease;
+}
 /* Las filas de los aparatos son algo más altas que las del consejo de antes: la
    barra necesita su renglón y apretarla contra el nombre no se lee. */
 .ap-fila { min-height: 66px; }
@@ -1673,7 +1756,7 @@ body.scrolled .scroll-top { opacity: .95; }
 .gal-art { display: block; width: 100%; height: auto; margin-bottom: 10px;
   border-radius: var(--r-sm); background: var(--node); }
 .gal-name { display: flex; align-items: center; gap: 6px;
-  font-size: 14.5px; font-weight: 650; letter-spacing: -.2px; }
+  font-size: 14.5px; font-weight: 650; letter-spacing: -.014em; }
 .gal-name .i { width: 16px; height: 16px; flex: none; color: var(--accent); }
 .gal-claim { margin: 3px 0 0; font-size: 12px; line-height: 1.35; color: var(--ink-3); }
 .gal-mas { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--ink-2); }
@@ -1722,7 +1805,7 @@ body.scrolled .scroll-top { opacity: .95; }
   display: grid; place-items: center; background: var(--ico, #8e8e93); color: #fff; }
 .card-ico .i { width: 17px; height: 17px; }
 .card-txt { min-width: 0; flex: 1; }
-.card-txt b { display: block; font-size: 14.5px; font-weight: 600; letter-spacing: -.2px; }
+.card-txt b { display: block; font-size: 14.5px; font-weight: 600; letter-spacing: -.014em; }
 .card-txt small { display: block; margin-top: 1px; font-size: 12px; color: var(--ink-3);
   line-height: 1.35; }
 /* Las dos flechas, pegadas: son un par y se leen como un control, no como dos

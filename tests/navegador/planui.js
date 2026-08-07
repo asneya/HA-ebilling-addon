@@ -80,13 +80,22 @@ async function abrir(plan) {
         titulo: x.getAttribute("title"),
       })),
       // El carril y la suma de los tramos, para saber si el mínimo desborda.
+      // `getBoundingClientRect` va después de la transformación, así que en una
+      // barra de progreso esto es lo que de verdad se ve, no lo que se maquetó.
       carril: (() => {
         const c = f.querySelector(".ap-barra > span");
         return c ? +c.getBoundingClientRect().width.toFixed(2) : null;
       })(),
+      anchoBarra: (() => {
+        const c = f.querySelector(".ap-barra");
+        return c ? +c.getBoundingClientRect().width.toFixed(2) : null;
+      })(),
       // Y hasta dónde llega el relleno, que en un aparato en marcha es el
       // progreso del ciclo: la barra del origen y la del progreso son la misma.
-      relleno: f.querySelector(".ap-barra.ap-progreso > span")?.style.width || null,
+      // Va en `--p` y no en la anchura porque se dibuja con `scaleX`: animar la
+      // anchura rehace la maqueta en cada fotograma.
+      relleno: f.querySelector(".ap-barra.ap-progreso > span")
+        ?.style.getPropertyValue("--p").trim() || null,
       // La insignia de la forma de uso y el punto de «en marcha», que sustituyen
       // a dos renglones de texto.
       insignia: f.querySelector(".ap-insignia use")?.getAttribute("href") || null,
@@ -340,10 +349,14 @@ let navegador;
 
   console.log("\n11 · la barra del progreso");
   v = await abrir({ battery: null, rows: [enMarcha({})] });
-  ok(v.filas[0].relleno === "44%",
+  ok(v.filas[0].relleno === "0.440",
     `se rellena hasta donde va el ciclo (${v.filas[0].relleno})`);
   ok(v.filas[0].barra.length === 3,
     "y dentro sigue estando el origen de lo que lleva gastado");
+  // El relleno se dibuja escalado, así que hay que mirar lo **pintado**: el carril
+  // interior mide la barra entera y es `scaleX` quien lo recorta al 44 %.
+  ok(v.filas[0].carril > 0 && Math.abs(v.filas[0].carril / v.filas[0].anchoBarra - 0.44) < 0.02,
+    `y en pantalla ocupa ese 44 % (${v.filas[0].carril} px de ${v.filas[0].anchoBarra})`);
   // Pasarse de lo habitual: la barra llega al borde y **se dice**, que es lo que
   // una barra clavada en el 100 % no puede distinguir.
   v = await abrir({ battery: null, rows: [enMarcha({
@@ -352,7 +365,7 @@ let navegador;
                remaining_h: null, range_h: null },
     tail: null,
   })] });
-  ok(v.filas[0].relleno === "100%",
+  ok(v.filas[0].relleno === "1.000",
     `un programa más largo llena la barra (${v.filas[0].relleno})`);
   ok(/más de lo habitual \(1 h 30 min\)/.test(v.filas[0].porque),
     `y lo dice con palabras («${v.filas[0].porque}»)`);
@@ -367,6 +380,29 @@ let navegador;
     "sin ciclo aprendido no se dibuja un progreso inventado");
   ok(/aprendiendo su ciclo/.test(v.filas[0].porque),
     `y se dice que aún se está aprendiendo («${v.filas[0].porque}»)`);
+
+  // El caso que se le escapaba al §8: un tramo diminuto **dentro** de un relleno
+  // corto. El mínimo del CSS son 2 px, pero el relleno se dibuja con `scaleX`, así
+  // que 2 px maquetados dentro de un relleno al 10 % son 0,2 px en pantalla. Por
+  // eso el mínimo va dividido por `--p`. Sin esa división esta comprobación falla:
+  // el tramo existe en el DOM, tiene su color y su título, y no se ve.
+  v = await abrir({ battery: null, rows: [enMarcha({
+    running: { start: "2026-08-03T11:11:00+02:00", elapsed_h: 0.15, kwh: 0.1,
+               typical_h: 1.5, pct: 10, over: false, ends_at: null,
+               remaining_h: null, range_h: null },
+    so_far: { kwh: 10, sun_kwh: 9.94, battery_kwh: 0, grid_kwh: 0.06, eur: 0.01 },
+    tail: null,
+  })] });
+  ok(v.filas[0].relleno === "0.100", `un ciclo recién empezado (${v.filas[0].relleno})`);
+  const chico = v.filas[0].barra;
+  ok(chico.length === 2, `los dos tramos siguen dibujándose (${chico.length})`);
+  ok(chico[1] && chico[1].pintado >= 2,
+    `y el del 0,6 % se ve pese al escalado (${chico[1] && chico[1].pintado} px)`);
+  // Y sin desbordar el relleno, que es lo que rompería el otro extremo: pedir
+  // 20 px de mínimo dentro de un carril de 30 no puede empujar al vecino fuera.
+  const sumaChica = chico.reduce((a, x) => a + x.pintado, 0);
+  ok(Math.abs(sumaChica - v.filas[0].carril) < 0.6,
+    `los tramos suman el relleno (${sumaChica.toFixed(2)} de ${v.filas[0].carril})`);
 
   console.log("\n12 · la forma de uso, en un glifo");
   // De una queja: *«tiene mucha información larga y pequeña. Quedaría mejor
