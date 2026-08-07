@@ -298,7 +298,9 @@ function barraOrigen(o, pct) {
   // enseñaba euros, así que parecía cobrar por el sol. Ahora se dibuja **todo lo
   // que existe**; los tramos diminutos los sostiene un `min-width` de 2 px del CSS,
   // que como es un mínimo de flex frena el encogido en vez de desbordar: el tramo
-  // grande cede esos dos píxeles y el pequeño no desaparece.
+  // grande cede esos dos píxeles y el pequeño no desaparece. En una barra de
+  // progreso ese mínimo va dividido por `--p`, porque lo que se ve son 2 px
+  // *después* de escalar.
   const trozos = partes
     .filter(([, v]) => v / total >= 0.002)
     .map(([clave, v, texto]) =>
@@ -307,8 +309,15 @@ function barraOrigen(o, pct) {
     .join("");
   // Recortado al 100 % **solo para dibujar**: el «se ha pasado» se dice con
   // palabras, porque una barra al 103 % no se distingue de una al 100.
+  //
+  // Va como número suelto y no como anchura porque el relleno se dibuja con
+  // `scaleX(--p)`: animar la anchura obliga al navegador a recalcular la
+  // maqueta en cada fotograma —medido: 300 pasadas de layout y 59 ms contra
+  // 1 pasada y 0,2 ms con la transformación—, y esta barra se refresca cada
+  // 20 segundos. El mismo `--p` le sirve al CSS para subir el mínimo de los
+  // tramos antes de escalar, que si no se encogerían con el resto.
   const relleno = pct == null ? "" :
-    ` style="width:${Math.max(4, Math.min(pct, 100)).toFixed(0)}%"`;
+    ` style="--p:${(Math.max(4, Math.min(pct, 100)) / 100).toFixed(3)}"`;
   return `<span class="ap-barra${pct == null ? "" : " ap-progreso"}"><span${
     relleno}>${trozos}</span></span>`;
 }

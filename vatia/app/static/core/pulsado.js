@@ -72,12 +72,45 @@ export function recolocar() {
   $$(".segmented").forEach(pildora);
 }
 
-// En captura: este oyente corre antes que el de la pantalla, que es lo único
-// que garantiza que la marca se mueva antes de que empiece la carga.
-document.addEventListener("click", (ev) => {
+/* En captura: este oyente corre antes que el de la pantalla, que es lo único que
+   garantiza que la marca se mueva antes de que empiece la carga.
+
+   Y **al apretar, no al soltar**. Iba en `click`, que se dispara al levantar el
+   dedo: todo este módulo existe para que la marca no espere al servidor, y estaba
+   esperando al final del propio toque. En un toque tranquilo eso son 80-150 ms de
+   nada, justo el hueco que hace dudar de si el toque ha entrado.
+
+   Hacen falta los dos eventos y no uno:
+
+   · `pointerdown` cubre dedo, ratón y lápiz. Solo el botón principal: con el
+     secundario no se elige nada.
+   · `keydown` con Enter o Espacio, porque quien navega con teclado no genera
+     ningún `pointerdown` y se quedaría sin acuse. Con `click` lo tenía gratis.
+
+   Lo que se pierde es poder arrepentirse arrastrando fuera del botón antes de
+   soltar: con `click` eso cancelaba, y ahora la marca ya se ha movido. No se
+   compensa, y a propósito. Esto no ejecuta la acción —eso lo sigue haciendo el
+   `click` de la pantalla—, solo mueve la marca, y si el toque se cancela la
+   pantalla repinta su estado y la devuelve a su sitio, que es el mismo mecanismo
+   que ya la corrige cuando la carga acaba eligiendo otra cosa. Vigilar el
+   `pointerup` para deshacerla sería código nuevo para un caso que se arregla
+   solo. */
+const elegible = (ev) => {
   const boton = ev.target.closest?.(".tab, .vt, .seg");
   // Un botón apagado no se elige, y uno que ya está elegido no mueve nada.
-  if (boton && !boton.disabled) marcar(boton);
+  return boton && !boton.disabled ? boton : null;
+};
+
+document.addEventListener("pointerdown", (ev) => {
+  if (ev.button !== 0) return;
+  const boton = elegible(ev);
+  if (boton) marcar(boton);
+}, true);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const boton = elegible(ev);
+  if (boton) marcar(boton);
 }, true);
 
 // Y al arrancar, con el estado que venga del servidor.

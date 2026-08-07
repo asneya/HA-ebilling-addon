@@ -50,7 +50,9 @@
 
   <!-- Fondo dinámico según el momento del día y el tiempo -->
   <div class="bg" id="bg" data-phase="day">
-    <div class="bg-sky"></div>
+    <!-- Una capa por hora del día: se funden por opacidad, que un degradado no
+         se interpola con otro que tiene otro número de paradas. -->
+    <div class="bg-sky"><i data-p="day"></i><i data-p="dawn"></i><i data-p="sunset"></i><i data-p="night"></i></div>
     <div class="bg-sun"></div>
     <div class="bg-stars"></div>
     <div class="bg-clouds"></div>
@@ -1523,6 +1525,8 @@
   <script src="static/components/vatia-window.js"></script>
   <script src="static/components/vatia-close.js"></script>
   <script src="static/vendor/uplot.js"></script>
+  <!-- La holgura del arrastre, compartida por los dos gráficos: antes que ellos. -->
+  <script src="static/components/gesto.js"></script>
   <script src="static/components/vatia-schedule.js"></script>
   <script src="static/components/vatia-chart.js"></script>
   <script src="static/components/vatia-bars.js"></script>

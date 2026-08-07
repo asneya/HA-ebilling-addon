@@ -1,6 +1,7 @@
 /* El acuse de recibo al pulsar, medido en milisegundos de verdad.
  *
- *   1. la marca se mueve **antes** de que llegue la respuesta del servidor
+ *   1. la marca se mueve al apretar, antes de levantar el dedo y antes de que
+ *      llegue la respuesta del servidor
  *   2. y con la respuesta lenta a propósito, sigue siendo inmediata
  *   3. la píldora del segmentado se coloca bajo el elegido
  *   4. y se desplaza, en vez de apagarse aquí y encenderse allí
@@ -40,14 +41,33 @@ const abrir = async (b) => {
 };
 
 /* Cuánto tarda la marca en moverse, sin contar con que la carga haya acabado.
-   Se mide con el reloj de la página entre el clic y el primer repintado en el
-   que el botón ya está activo. */
+   Se mide con el reloj de la página desde que se **aprieta** —que es cuando el
+   usuario espera respuesta— hasta el primer repintado con el botón activo.
+
+   El toque se reproduce entero: apretar, soltar y el clic. Antes esto llamaba a
+   `boton.click()` a secas, que dispara solo el `click` y ningún evento de
+   puntero; desde que el acuse va en `pointerdown`, eso ya no es lo que hace un
+   dedo, y el banco daba rojo por simular mal, no porque nada estuviera roto.
+
+   Se devuelve además `alApretar`, que es la promesa nueva del módulo: la marca
+   está puesta **antes de levantar el dedo**, no al soltarlo. */
 const retardo = (p, sel) => p.evaluate(async (s) => {
   const boton = document.querySelector(s);
+  const c = boton.getBoundingClientRect();
+  const puntero = (tipo) => new PointerEvent(tipo, {
+    pointerId: 1, pointerType: "touch", isPrimary: true, button: 0,
+    buttons: tipo === "pointerdown" ? 1 : 0,
+    clientX: c.left + c.width / 2, clientY: c.top + c.height / 2,
+    bubbles: true, cancelable: true, composed: true,
+  });
   const t0 = performance.now();
+  boton.dispatchEvent(puntero("pointerdown"));
+  const alApretar = boton.classList.contains("active");
+  boton.dispatchEvent(puntero("pointerup"));
   boton.click();
   await new Promise((r) => requestAnimationFrame(r));
-  return { ms: performance.now() - t0, activo: boton.classList.contains("active") };
+  return { ms: performance.now() - t0, alApretar,
+           activo: boton.classList.contains("active") };
 }, sel);
 
 (async () => {
@@ -64,7 +84,8 @@ const retardo = (p, sel) => p.evaluate(async (s) => {
     await ruta.continue();
   });
   const r1 = await retardo(p, '.seg[data-range="week"]');
-  ok(r1.activo, "al soltar el dedo el botón ya está marcado");
+  ok(r1.alApretar, "nada más apretar, y sin levantar el dedo, el botón ya está marcado");
+  ok(r1.activo, "y sigue marcado al soltar");
   ok(r1.ms < TOPE_MS,
     `y sin esperar a los datos (${r1.ms.toFixed(1)} ms de ${RED_MS} de red)`);
   // Y cuando la carga termina, la marca sigue donde se puso.
@@ -114,9 +135,11 @@ const retardo = (p, sel) => p.evaluate(async (s) => {
 
   console.log("\n5 · las otras barras");
   const r2 = await retardo(p, '.vt[data-eview="solar"]');
-  ok(r2.activo && r2.ms < TOPE_MS, `la vista de análisis (${r2.ms.toFixed(1)} ms)`);
+  ok(r2.alApretar && r2.activo && r2.ms < TOPE_MS,
+    `la vista de análisis (${r2.ms.toFixed(1)} ms)`);
   const r3 = await retardo(p, '.tab[data-view="billing"]');
-  ok(r3.activo && r3.ms < TOPE_MS, `la barra de abajo (${r3.ms.toFixed(1)} ms)`);
+  ok(r3.alApretar && r3.activo && r3.ms < TOPE_MS,
+    `la barra de abajo (${r3.ms.toFixed(1)} ms)`);
   await p.waitForTimeout(1500);
 
   console.log("\n6 · manda la pantalla");

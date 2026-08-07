@@ -231,9 +231,11 @@
       over.addEventListener("pointermove", (ev) => {
         if (!desde || !this._plot) return;
         const dx = ev.clientX - desde.x, dy = ev.clientY - desde.y;
+        // Misma regla que en <vatia-chart>, y en el mismo sitio: `gesto.js`.
         if (!desde.movido) {
-          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-          if (Math.abs(dy) > Math.abs(dx)) { desde = null; return; }
+          const q = window.VatiaGesto.direccion(dx, dy);
+          if (q === "esperar") return;
+          if (q === "soltar") { desde = null; return; }
           desde.movido = true;
         }
         const r = over.getBoundingClientRect();
