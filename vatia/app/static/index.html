@@ -976,13 +976,23 @@
         </header>
 
       <div class="panel glass group">
-        <div class="group-head">Sensor de previsión</div>
+        <div class="group-head">Sensores de previsión</div>
+        <!-- Son varios y no uno. Solcast publica hoy y mañana en **sensores
+             distintos**, y sin poder poner los dos la app se quedaba sin saber
+             nada de mañana: la Home decía «de mañana todavía no hay previsión»
+             todos los días. El servidor ya sabía leer una lista; lo que faltaba
+             era poder escribirla, porque esto era un desplegable de uno. -->
+        <div class="list" id="s-forecast-list"></div>
         <div class="list">
-          <label class="li"><span class="li-label">Sensor de previsión</span><select id="s-forecast"></select></label>
+          <label class="li">
+            <span class="li-label">Añadir sensor</span>
+            <select id="s-forecast-add"></select>
+          </label>
           <p class="li-note">
-            Compatible con Solcast y Forecast.Solar. La previsión se dibuja
-            como línea punteada en la vista solar cuando el intervalo incluye
-            horas futuras.
+            Compatible con Solcast y Forecast.Solar. Si tu integración publica
+            cada día en un sensor —hoy en uno y mañana en otro—, añade los dos:
+            se juntan en una sola curva. La previsión se dibuja como línea
+            punteada en la vista solar cuando el intervalo incluye horas futuras.
           </p>
         </div>
       </div>
