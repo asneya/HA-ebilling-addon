@@ -392,8 +392,9 @@
       if (!m) {
         if (sabido === false) {
           return `<p class="note">De <b>mañana todavía no hay previsión</b>. Si tu
-            integración publica el día siguiente en otro sensor, puedes poner los dos
-            separados por comas en <b>Ajustes → Previsión solar</b>.</p>`;
+            integración publica el día siguiente en otro sensor —Solcast lo hace—,
+            añádelo en <b>Ajustes → Previsión solar</b>: admite varios y los junta
+            en una sola curva.</p>`;
         }
         return `<p class="note">Mañana <b>no se espera excedente</b>: lo que
           quieras dejar para el sol, mejor hoy.</p>`;

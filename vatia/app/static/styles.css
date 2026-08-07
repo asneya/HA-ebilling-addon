@@ -1330,6 +1330,12 @@ input[type="checkbox"]:not(.ios-switch) { accent-color: var(--accent); width: 18
 /* La fila sin asignar se tiñe, para que no pase por configurada. */
 .srow.empty:not(.optional) { background: var(--warn-chip); }
 
+/* Las filas de los sensores de previsión: nombre, identificador y un botón de
+   quitar. Reaprovechan `.srow-txt` de las filas de sensores, que ya recorta el
+   identificador largo con puntos suspensivos en vez de desbordar. */
+.fc-fila { display: flex; align-items: center; gap: 11px; }
+.fc-vacio { margin: 0; padding: 12px 15px 0; }
+
 .srow-txt { min-width: 0; margin-right: auto; }
 .srow-txt b { display: block; font-size: .9375rem; font-weight: 600; }
 .srow-txt small { display: block; font-size: .75rem; color: var(--ink-3);

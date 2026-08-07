@@ -292,6 +292,13 @@ function renderSettingsIndex(s) {
 function fillSettings() {
   const s = settings();
   if (!s) return;
+  // La lista de previsión se rehace desde lo guardado **antes** que los
+  // desplegables: si no hay entidades cargadas todavía se pintan los
+  // identificadores tal cual, que es mejor que una lista vacía que parece que
+  // no hay nada puesto.
+  previsiones = String(s.solar_forecast_sensor || "")
+    .split(",").map((x) => x.trim()).filter(Boolean);
+  pintarPrevision();
   $("#s-ha-url").value = s.ha_url || "";
   $("#s-ha-token").value = s.ha_token || "";
   $("#s-p1").value = s.contracted_power?.p1 ?? 4.6;
@@ -355,15 +362,55 @@ async function ensureGroupedEntities() {
   fillEntitySelects();
 }
 
-/* Los selectores que siguen siendo un desplegable: previsión solar y los dos de
-   meteorología. Son de uno en uno y opcionales, así que no piden la pantalla de
-   filas con valor en vivo que sí necesitan los catorce del balance. */
+/* Los sensores de previsión: una lista, no un desplegable.
+ *
+ * De un aviso que salía en la Home todos los días: «de mañana todavía no hay
+ * previsión, si tu integración publica el día siguiente en otro sensor puedes
+ * poner los dos separados por comas en Ajustes → Previsión solar». Lo primero
+ * era cierto —Solcast publica hoy y mañana en sensores distintos— y lo segundo
+ * era **mentira**: el servidor sí sabía leer una lista separada por comas, pero
+ * aquí había un `<select>` de una sola opción, así que no había manera de
+ * escribirla. El aviso mandaba a un sitio donde no se podía hacer lo que decía.
+ *
+ * Se guardan como siempre —una cadena con comas—, así que las casas que ya
+ * tenían uno puesto no notan nada y no hace falta migrar el fichero.
+ */
+let previsiones = [];
+
+function pintarPrevision() {
+  const caja = $("#s-forecast-list");
+  if (!caja) return;
+  const nombre = (id) => {
+    const e = porTipo("any").find((x) => x.entity_id === id);
+    return e ? e.name : id;
+  };
+  caja.innerHTML = previsiones.length
+    ? previsiones.map((id, i) => `
+        <div class="li fc-fila">
+          <span class="srow-txt"><b>${esc(nombre(id))}</b><small>${esc(id)}</small></span>
+          <button type="button" class="chip-clear" data-quitar="${i}"
+                  aria-label="Quitar ${esc(nombre(id))}">Quitar</button>
+        </div>`).join("")
+    : `<p class="li-note fc-vacio">Sin sensor de previsión. Sin él, la app no
+        puede decir nada de mañana y la Home lo dice en vez de suponerlo.</p>`;
+  // El desplegable de añadir no ofrece lo que ya está puesto: elegir dos veces
+  // el mismo sensor no suma nada y confunde al mirar la lista.
+  const libres = porTipo("any").filter((e) => !previsiones.includes(e.entity_id));
+  $("#s-forecast-add").innerHTML =
+    `<option value="">— elegir un sensor —</option>` +
+    libres.map((e) => `<option value="${esc(e.entity_id)}">${esc(e.name)}${
+      e.unit ? ` (${esc(e.unit)})` : ""}</option>`).join("");
+}
+
+/* Los selectores que siguen siendo un desplegable: los dos de meteorología. Son
+   de uno en uno y opcionales, así que no piden la pantalla de filas con valor en
+   vivo que sí necesitan los catorce del balance. */
 function fillEntitySelects() {
   const s = settings();
   if (!s) return;
   $("#s-condition").innerHTML = opciones("any", s.condition_sensor || "");
   $("#s-temp").innerHTML = opciones("temperature", s.temperature_sensor || "");
-  $("#s-forecast").innerHTML = opciones("any", s.solar_forecast_sensor || "");
+  pintarPrevision();
   // Solo entidades `weather.*`: son las únicas con previsión horaria.
   $("#s-weather").innerHTML = opciones(
     "weather", s.weather_entity || "", "— sin tarjeta del tiempo —");
@@ -393,7 +440,7 @@ function settingsFromForm() {
     battery_kwh: Number($("#s-battery-kwh").value) || 0,
     condition_sensor: $("#s-condition").value,
     temperature_sensor: $("#s-temp").value,
-    solar_forecast_sensor: $("#s-forecast").value,
+    solar_forecast_sensor: previsiones.join(","),
     weather_entity: $("#s-weather").value,
     influx: {
       version: parseInt($("#s-ifx-version").value, 10) || 2,
@@ -1009,6 +1056,25 @@ $$("#source-seg .seg").forEach((button) =>
       $("#source-note").textContent = `No se ha podido guardar: ${err.message}`;
     }
   }));
+/* Añadir y quitar sensores de previsión. No guardan solos: se quedan en la
+   lista y salen con «Guardar ajustes», como el resto de este formulario. Elegir
+   en el desplegable lo añade y lo devuelve a vacío, que si no el desplegable se
+   queda enseñando algo que ya está en la lista de arriba. */
+$("#s-forecast-add").addEventListener("change", (ev) => {
+  const id = ev.target.value;
+  ev.target.value = "";
+  if (!id || previsiones.includes(id)) return;
+  previsiones.push(id);
+  pintarPrevision();
+});
+
+$("#s-forecast-list").addEventListener("click", (ev) => {
+  const boton = ev.target.closest("[data-quitar]");
+  if (!boton) return;
+  previsiones.splice(Number(boton.dataset.quitar), 1);
+  pintarPrevision();
+});
+
 $("#s-ifx-version").addEventListener("change", updateSourceVisibility);
 $("#diag-fact-btn").addEventListener("click", diagnosticoFacturacion);
 
