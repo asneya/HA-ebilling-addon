@@ -147,16 +147,17 @@ def casa(h, dia=0):
     return w
 
 
-def detallado():
-    """`detailedForecast` de hoy y mañana, cada media hora."""
+def detallado(dias=(0, 1)):
+    """`detailedForecast` cada media hora, de los días que se pidan."""
     hoy = datetime.now(TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+    picos = {0: PICO_HOY, 1: PICO_MANANA}
     filas = []
-    for dia, pico in ((0, PICO_HOY), (1, PICO_MANANA)):
+    for dia in dias:
         h = 0.0
         while h < 24:
             filas.append({
                 "period_start": (hoy + timedelta(days=dia, hours=h)).isoformat(),
-                "pv_estimate": round(pv(h, pico) / 1000.0, 4),   # Solcast: kW
+                "pv_estimate": round(pv(h, picos[dia]) / 1000.0, 4),   # Solcast: kW
             })
             h += 0.5
     return filas
@@ -229,9 +230,24 @@ async def states(req):
                  elevation=elev, rising=h < CENTRO,
                  next_setting=(t.replace(hour=21, minute=14, second=0, microsecond=0)).isoformat(),
                  next_rising=(t.replace(hour=7, minute=6, second=0, microsecond=0)).isoformat()))
+    # Tres sensores, porque hay dos montajes de Solcast y la app tiene que
+    # aguantar los dos:
+    #
+    #  · el que publica **los dos días en el mismo sensor**, en un solo atributo;
+    #  · y el de verdad de la integración de Solcast, que publica **un sensor por
+    #    día**. Ése es el que la app no podía usar entero: se elegía uno en un
+    #    desplegable y del otro no se sabía nada, así que la Home decía «de mañana
+    #    todavía no hay previsión» todos los días.
     out.append(S("sensor.solcast_pv_forecast", round(sum(
         f["pv_estimate"] for f in detallado()[:48]) / 2, 2), "kWh", "energy",
         "Solcast previsión", detailedForecast=detallado()))
+    hoy_solo, manana_solo = detallado((0,)), detallado((1,))
+    out.append(S("sensor.solcast_pv_forecast_today",
+                 round(sum(f["pv_estimate"] for f in hoy_solo) / 2, 2), "kWh", "energy",
+                 "Solcast previsión hoy", detailedForecast=hoy_solo))
+    out.append(S("sensor.solcast_pv_forecast_tomorrow",
+                 round(sum(f["pv_estimate"] for f in manana_solo) / 2, 2), "kWh", "energy",
+                 "Solcast previsión mañana", detailedForecast=manana_solo))
     # La entidad del tiempo. **Sin atributo `forecast`**, como las de Home
     # Assistant desde 2024.4: la previsión horaria solo se consigue llamando al
     # servicio `weather.get_forecasts`, y este fake lo exige para que el banco no
