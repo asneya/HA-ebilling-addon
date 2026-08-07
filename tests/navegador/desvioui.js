@@ -112,7 +112,14 @@ const abrir = async (b, q) => {
   ok(/mañana todavía no hay previsión/.test(t),
     `sin dato de mañana se dice que no hay dato («${(t.match(/De mañana[^.]*\./) || [""])[0]}»)`);
   ok(!/no se espera excedente/.test(t), "y no que no vaya a sobrar");
-  ok(/separados por comas/.test(t), "con la salida: poner los dos sensores");
+  // Y con una salida que **se pueda seguir**. Antes decía «puedes poner los dos
+  // separados por comas en Ajustes → Previsión solar», y eso era imposible: ahí
+  // había un desplegable de una sola opción. Ahora el ajuste es una lista, así
+  // que se manda a añadirlo. Lo que se comprueba es que la salida exista y que
+  // no vuelva a ser la de las comas.
+  ok(/Ajustes → Previsión solar/.test(t), "con la salida: dónde ponerlo");
+  ok(!/separados por comas/.test(t),
+    "y no se manda a escribir una lista donde no hay dónde escribirla");
   // Y cuando sí hay previsión y de verdad no sobra, se dice lo que siempre.
   t = await abrir(b, "?bat=4.2&manana=0&prevmanana=1");
   ok(/no se espera excedente/.test(t),
