@@ -2,6 +2,49 @@
 
 Todas las versiones relevantes del add-on Vatia.
 
+## 0.75.0
+
+### Los sensores de previsión, en plural
+
+De una queja: en la Home salía **todos los días** el aviso «de mañana todavía no hay
+previsión; si tu integración publica el día siguiente en otro sensor, puedes poner los dos
+separados por comas en Ajustes → Previsión solar».
+
+La primera mitad era verdad —Solcast publica hoy y mañana en sensores distintos— y la
+segunda era mentira. Por dentro el servidor **sí** sabía leer una lista separada por comas,
+y `fetch_states` se baja todos los estados de Home Assistant, así que dos sensores siempre
+fueron posibles. Lo que no había era manera de escribirlos: en Ajustes había un `<select>`
+de una sola opción. El aviso mandaba a un sitio donde no se podía hacer lo que decía.
+
+Ahora el ajuste es una lista: cada sensor con su nombre y su identificador y un botón de
+quitar, y un desplegable de añadir que solo ofrece los que no están puestos. Se sigue
+guardando como una cadena con comas, así que quien ya tuviera uno configurado no nota nada
+y no hay fichero que migrar.
+
+El aviso dice lo que se puede hacer de verdad, y la nota del panel explica el caso: hoy en
+un sensor, mañana en otro, los dos puestos, una sola curva.
+
+### Por qué no se había cazado antes
+
+El Home Assistant falso de los bancos publicaba un único sensor de Solcast con **los dos
+días dentro**, en un solo atributo. Ese montaje existe y funcionaba, así que todo salía en
+verde. El montaje que falla es el otro —un sensor por día—, y no estaba simulado. Ahora el
+falso publica los tres, y el banco usa los separados.
+
+### Banco
+
+`tests/navegador/prevision.js`. La comprobación que importa no es que la lista se guarde,
+sino esta: con solo el sensor de hoy, `tomorrow_forecast` vale **false** —que es
+exactamente lo que produce el aviso de cada día— y con los dos pasa a **true**, con su
+ventana de excedente para mañana. Además, que el aviso desaparezca, y que el texto no
+vuelva a mandar a escribir una lista separada por comas.
+
+Los cinco fallos del primer intento fueron del banco y no del arreglo, y merece anotarlos:
+el `PUT` lo rechazaba el servidor con 403 porque el sensor de previsión es ajuste **de la
+casa** y el usuario del banco no era administrador, así que se medía siempre contra la
+configuración de partida sin enterarse. Con eso, la comprobación de «el aviso deja de
+salir» pasaba en verde **sin probar nada**.
+
 ## 0.74.0
 
 ### El tamaño del texto
